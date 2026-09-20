@@ -84,7 +84,7 @@ def build_lines(action: str, data: dict) -> list[str]:
         "---",
         "",
         "**本 issue 由 `.github/workflows/upstream-track.yml` 每日自动创建/更新。**",
-        "升级决策与执行**始终人工**：详见 `hk_vps_4/specs/dev-plan.md` §5 ——",
+        "升级决策与执行**始终人工**：详见 `memory.agent-mate.ai/specs/dev-plan.md` §5 ——",
         "先 `make preflight` 读准入结论，再按 §5.1 七步链路执行；回滚见 §5.6（快照覆盖不可省）。",
         "",
         "复现本地判定：`make preflight ARGS=--with-image`",

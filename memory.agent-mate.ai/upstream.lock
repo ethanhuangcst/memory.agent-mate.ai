@@ -1,0 +1,67 @@
+# ============================================================================
+# upstream.lock — 上游 ai-memory-mcp 的版本契约（单一真相源 / SSOT）
+#
+# 本文件是本部署**唯一**的版本坐标来源。其他文档、脚本、compose 一律引用本
+# 文件，不要各自再抄一遍版本号（历史上正是散落 9 个文件约 30 处才导致
+# 「文档写 0.9.0、上游实际已发 0.10.0」这类自相矛盾）。
+#
+# 格式：KEY=VALUE，值用双引号包裹 → 可被 `bash source`、可被 sed 逐行解析、
+#       可被 Makefile 读取。零外部依赖（本机 python3 为 3.9，无 tomllib）。
+#
+# 读取方：
+#   - memory.agent-mate.ai/scripts/upstream-preflight.sh   （校验 / 准入判定 / --write-lock 回写）
+#   - Makefile: make pin / make preflight / make pin-update
+#   - .github/workflows/upstream-track.yml     （每日跟踪）
+#   - 文档：memory.agent-mate.ai/specs/deployment_strategy.md、dev-plan.md、deploy/deployment-plan.md
+#
+# 纪律：本文件**不含任何凭据**（无 API key / AK / 私钥），只含公开版本坐标。
+# ============================================================================
+
+LOCK_SCHEMA="1"
+
+# ── 参考层：本地 clone 跟踪线 ────────────────────────────────────────────────
+# clone 是「参考权威」（读文档 / 查源码 / 对 CHANGELOG），**不是**制品权威。
+# 上游 main 与 release tag 的提交图**不连通**（见 NOTES），因此 clone 与
+# release 的 commit 天然是两条线上的两个值，不是「落后」。
+REFERENCE_CLONE_REF="main"
+REFERENCE_CLONE_COMMIT="96b8c69485f05086ee2b6cc759e433ba4732210a"
+
+# ── 制品层：真正部署的 release 与镜像 ───────────────────────────────────────
+UPSTREAM_REPO="alphaonedev/ai-memory-mcp"
+UPSTREAM_URL="https://github.com/alphaonedev/ai-memory-mcp"
+UPSTREAM_RELEASE_TAG="v0.10.0"
+UPSTREAM_RELEASE_TAG_OBJECT="6f41d99bdde934176d71ef9dd8a3e07ac8d2c79c"
+UPSTREAM_RELEASE_COMMIT="43c4d4103b3ab59ac7614d99f26acdbdac499043"
+UPSTREAM_RELEASE_PUBLISHED_AT="2026-07-12T13:02:27Z"
+UPSTREAM_RELEASE_CHANNEL="stable"
+
+# 该 release 的数据库 schema 版本（判据 W2 的基线）：
+#   取法 `--with-image`/预检脚本会从 `src/storage/migrations.rs` 的
+#   `CURRENT_SCHEMA_VERSION` 读取。历史值：v0.9.0=78 · v0.10.0=80 · main=81。
+#   若候选版本高于此值 → 触发前向-only 迁移，回滚**必须**用快照覆盖（耦合面清单 J3）。
+UPSTREAM_SCHEMA_VERSION="80"
+
+# 镜像坐标（标签 + 指纹双写）：
+#   - 标签（0.10.0）是给人看的、写进 compose/.env 的；标签**可被上游重推**。
+#   - 指纹（sha256）是内容指纹，用来发现「标签没变但内容变了」。
+#   - 升级预检若发现 TAG 未变而 DIGEST 变 → 判定 W4「标签被重推」，必须人工审阅。
+IMAGE_REPO="ghcr.io/alphaonedev/ai-memory"
+IMAGE_TAG="0.10.0"
+IMAGE_DIGEST_MANIFEST="sha256:507d2a5082decb786a7fd38c7b5f6a3cfb4af0e7ab9ad8fa416abdf4bce25e49"
+IMAGE_DIGEST_AMD64="sha256:7e19ae9dcd750d93151c4d4c2b19fef4854b3c8fce9702d079eb79c4520d4364"
+
+# 指纹可信度：unverified | registry-api | local-docker | ci-runner
+# 当前为 registry-api —— 由 `make preflight ARGS=--with-image` 直连 GHCR registry v2
+# 拉取 manifest 并回读 Docker-Content-Digest 校验（2026-09-20 实测通过）。
+# 更进一步的校验（可选，需服务器/CI）：
+#   docker buildx imagetools inspect ghcr.io/alphaonedev/ai-memory:0.10.0
+IMAGE_DIGEST_VERIFIED_BY="registry-api"
+
+# ── 准入判据参数（升级稳定性筛选）────────────────────────────────────────────
+# 新版本发布后至少沉淀 SOAK_DAYS_MIN 天才允许升级（判据 H2）。
+# 理由：新版本暴露缺陷需要时间窗口；本部署迁移是**前向-only**，回滚只靠快照。
+SOAK_DAYS_MIN="14"
+
+# ── 记录状态 ────────────────────────────────────────────────────────────────
+VERIFIED_AT="2026-09-20"
+NOTES="上游 main 与 release tag 提交图不连通（历史被重写，2026-09-20 核实）；升级预检**不得**依赖 git 谱系/diff，只能用 releases API + CHANGELOG + 镜像指纹"

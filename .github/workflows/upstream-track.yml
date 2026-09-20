@@ -4,9 +4,9 @@
 # 职责边界（重要）：
 #   ✅ 只做「发现 + 提醒 + 准入判定」 → 开 / 更新 issue
 #   ❌ 绝不自动升级、绝不自动改 upstream.lock、绝不碰服务器
-#      （部署决策与执行**始终人工**，见 hk_vps_4/specs/dev-plan.md §5）
+#      （部署决策与执行**始终人工**，见 memory.agent-mate.ai/specs/dev-plan.md §5）
 #
-# 判定逻辑完全复用 hk_vps_4/scripts/upstream-preflight.sh，本工作流不重复实现判据。
+# 判定逻辑完全复用 memory.agent-mate.ai/scripts/upstream-preflight.sh，本工作流不重复实现判据。
 # 退出码 → 分流：
 #   0  无新版                    → 静默（不产噪音）
 #   2  命中硬性阻断              → issue + label `upstream-unstable`
@@ -16,7 +16,7 @@
 #
 # 备注：`.github/workflows/` 必须位于仓库根（GitHub 平台强制），是资产隔离判据中
 #       继 `.gitignore` / `Makefile` 之后的第三个根目录例外，已在
-#       hk_vps_4/specs/asset_isolation_plan.md §2 显式记录。
+#       memory.agent-mate.ai/specs/asset_isolation_plan.md §2 显式记录。
 # =============================================================================
 name: upstream-track
 
@@ -55,7 +55,7 @@ jobs:
           if [ -n "${{ github.event.inputs.soak_days }}" ]; then
             ARGS+=(--soak-days "${{ github.event.inputs.soak_days }}")
           fi
-          bash hk_vps_4/scripts/upstream-preflight.sh "${ARGS[@]}" \
+          bash memory.agent-mate.ai/scripts/upstream-preflight.sh "${ARGS[@]}" \
             > "$RUNNER_TEMP/report.json" 2> "$RUNNER_TEMP/preflight.log"
           rc=$?
           set -e

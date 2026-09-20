@@ -1,0 +1,17 @@
+# link-check.sh 的允许清单：把「已知且暂不修」的悬空链接**显式化**，而非静默放宽。
+#
+# 格式（每行一条）：
+#   <源文件相对路径（相对仓库根）> <链接目标>   # 理由（必须写）
+# 目标写 `*` 表示：该文件的全部悬空链接暂允（用于「用户指定零改动」或「待移除」的文件）。
+#
+# ⚠️ 本清单是债务台账，不是垃圾桶 —— 每新增一行都要写清理由与预期清理时机；
+#    清理后请删除对应行（`make doc-links` 会持续提醒，直到债务清空）。
+
+# ── 模板文件：用户明确「将来移除；本次不改、不被引用」，内部链接随原样保留 ──────
+specs/hk_vps_4_settings.md                 *   # 模板文件，待移除；本次不改不引用（关键信息已摘编进 architecture/deployment）
+specs/vps4_new_deployment_instruction.md   *   # 同上
+
+# ── 用户指定「位置与正文不动」的两份文件：内部仍指向已合并的旧 spec ────────────
+# 预期清理时机：用户决定重写这两份文件时（映射见 sprint_plan.md 变更记录 2026-09-20 条目）。
+specs/sprint_plan.md                       *   # 用户指定零改动；内部指向 asset_isolation_plan / multiuser_isolation / mcp-test 等已合并文档
+specs/product-backlog.md                   *   # 用户指定零改动；内部指向 asset_isolation_plan 等已合并文档
