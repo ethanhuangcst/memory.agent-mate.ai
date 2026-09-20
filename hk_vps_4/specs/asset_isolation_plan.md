@@ -35,6 +35,7 @@
     │   ├── dev-plan.md                  # 部署与升级计划
     │   ├── upstream_coupling_surface.md # 耦合面清单（本部署依赖上游的每个契约点）
     │   ├── sprint_plan.md               # 短周期执行清单（ToDo / 阻塞 / 验收）
+    │   ├── multiuser_isolation.md       # 多用户隔离方案（四档 + 配方 + 坑 + 验收）
     │   ├── asset_isolation_plan.md      # 本文档
     │   ├── hk_vps_4_settings.md
     │   ├── vps4_new_deployment_instruction.md

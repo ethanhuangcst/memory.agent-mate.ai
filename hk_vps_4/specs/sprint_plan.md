@@ -18,6 +18,8 @@
 | **2** | **编写 `hk_vps_4/backup/` 备份脚本** | 交付 | 脚本可先写；端到端验证需 OSS 桶 + RAM（见「待提供输入」#3） | `backup-and-push.sh`（快照 → sha256 → ossutil 上传 → **回读比对** → 失败非零退出）与 `restore-drill.sh`（拉最新 → 校验 → restore → doctor 通过）可重复执行；`make backup` / `make restore-drill` 可用 | `dev-plan.md` §4.3、`deploy/README.md` §备份 |
 | **3** | **回填 `deploy/config.toml.tmpl` 的 `[embeddings]`** | 配置 | 待 DashScope 文档确认 model 与 dim（见「待提供输入」#2） | `model` 与 `dim` 填真实值（**不可留 `dim = 0`**）；部署后 `ai-memory doctor` 的 Embeddings Reachability 显示 `qwen:<model>` 且维度一致 | `deployment_strategy.md` §3.1、`upstream_coupling_surface.md` F1–F3 |
 | **4** | **部署执行**（`dev-plan.md` §8 第 2 步起） | 交付 | **阻塞于「待提供输入」全部 4 项** | 按 §3.2 八步落地：云资源 → 服务器（受限用户 + SSH forced-command + `/opt/ai-memory-mcp`）→ Portainer 部署 stack → §3.3 冒烟全绿 → 备份首次外迁 + 恢复演练 → 客户端双机共享验证 | `dev-plan.md` §3、`deploy/README.md` |
+| **5** | **写路径泄露探针**（去重/合成是否回显他人私有内容） | 安全 | 无 —— 可在部署前用本地库实测 | 给出明确结论：**会**或**不会**回显；若会，则方案 ② 在多用户场景下**禁用**（只允许方案 ③ 物理隔离） | `multiuser_isolation.md` §8 #1 |
+| **6** | **多用户隔离落地**（仅当确实要多人各自独立） | 交付 | 依赖 ToDo #4 完成；档位选 **方案 ③（一用户一 DB）** | 通过 `multiuser_isolation.md` §7 全部验收项：跨用户检索命中不到、`memory_get` 不可见、每库维护与备份均覆盖、吊销即时生效 | `multiuser_isolation.md` §5–§7 |
 
 > **执行 4 时必须逐次核对的三个静默失败点**（`dev-plan.md` §3.4）：embedder 降级、curator fail-open（`tagged=0`）、config 挂载路径错误（tier 退回 semantic）。
 
@@ -44,3 +46,4 @@
 | 日期 | 变更 |
 | --- | --- |
 | 2026-09-20 | 初版：登记 4 项 ToDo 与 4 项待提供输入 |
+| 2026-09-20 | 新增 ToDo #5（写路径泄露探针）与 #6（多用户隔离落地，档位定为一用户一 DB）；同步 `multiuser_isolation.md` |

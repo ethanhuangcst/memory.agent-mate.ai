@@ -87,7 +87,7 @@
 | 4 | 主机端口 | **无**（不映射） |
 | 5 | 配置文件 | `/opt/ai-memory-mcp/config.toml`（只读挂载） |
 | 6 | 环境变量文件 | `/opt/ai-memory-mcp/.env`（含 LLM/embedding API key，**不进 Git**） |
-| 7 | SSH 授权 | `/root/.ssh/authorized_keys` 追加 forced-command 条目 |
+| 7 | SSH 授权 | `/home/aimem-ssh/.ssh/authorized_keys` 追加 forced-command 条目（**受限用户 `aimem-ssh`，不用 root** —— 见 §0 决议 6；多用户 = 同账号多密钥，见 [`multiuser_isolation.md`](./multiuser_isolation.md)） |
 | 8 | 备份目录 | `/opt/ai-memory-mcp/backups`（并定期外迁） |
 
 **不需要**：域名、NPM Proxy Host、Let's Encrypt 证书、外部数据库实例、Ollama、GPU、额外端口。
@@ -247,7 +247,7 @@ networks:
 
 ### 3.3 调用者侧 SSH 配置
 
-**服务器侧** — `/root/.ssh/authorized_keys` 追加一条 forced-command 记录：
+**服务器侧** — `/home/aimem-ssh/.ssh/authorized_keys` 追加一条 forced-command 记录：
 
 ```
 command="docker exec -i ai-memory-mcp ai-memory mcp --tier smart",no-pty,no-port-forwarding,no-agent-forwarding,no-X11-forwarding ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA... cursor@laptop
@@ -263,14 +263,17 @@ command="docker exec -i ai-memory-mcp ai-memory mcp --tier smart",no-pty,no-port
 ```
 Host ai-memory
     HostName 68.64.176.124
-    User root
+    User aimem-ssh
     IdentityFile ~/.ssh/ai_memory_cursor_ed25519
     IdentitiesOnly yes
     ServerAliveInterval 30
 ```
 
 > ⚠️ 该密钥用于非交互登录，**不能有 passphrase**（Cursor 拉起进程时没有 tty 可输入）。
-> 因此必须靠 `command=` forced command 把权限限死。建议为它单建一个权限受限的用户而非 `root`。
+> 因此必须靠 `command=` forced command 把权限限死。
+> **已决（§0 决议 6）**：单建受限用户 `aimem-ssh`（docker 组），**不使用 `root`**。
+> 🔒 更稳的做法：把「加入 docker 组」换成精确 sudoers 规则（docker 组 ≈ root 等价）——
+> 见 [`multiuser_isolation.md`](./multiuser_isolation.md) §5。
 
 **Cursor 侧** — `~/.cursor/mcp.json`：
 
@@ -279,11 +282,16 @@ Host ai-memory
   "mcpServers": {
     "ai-memory": {
       "command": "ssh",
-      "args": ["ai-memory", "docker exec -i ai-memory-mcp ai-memory mcp --tier smart"]
+      "args": ["ai-memory"]
     }
   }
 }
 ```
+
+> **为什么 `args` 只有主机别名**：`authorized_keys` 里的 `command="…"` 是**强制命令（forced command）**——客户端请求的命令会被 SSH **忽略**（只留在 `$SSH_ORIGINAL_COMMAND`），实际执行的是服务器上写死的那条。
+> 所以客户端**不需要**、也**无法**指定 `docker exec …`；写了也不会被执行（早期文档里叠写的 `args: ["ai-memory", "docker exec …"]` 属冗余，已订正）。
+> 附带好处：**身份与档位完全由服务端决定**，客户端改动不了 —— 这正是多用户隔离能成立的基础（见 [`multiuser_isolation.md`](./multiuser_isolation.md) §4）。
+> 也因此：**agent_id 无法在 `mcp.json` 里配置**（本地 stdio 模式才可以，用 `env` 字段）。
 
 > `docker exec` 继承容器环境变量，所以 **LLM/embedding 的 API key 只需在服务器 `.env` 里配一次**，不需要写进每个客户端的 MCP 配置。这是本方案相对 stdio 本地启动的一个额外收益。
 

@@ -81,7 +81,7 @@ Host ai-memory
   "mcpServers": {
     "ai-memory": {
       "command": "ssh",
-      "args": ["ai-memory", "docker exec -i ai-memory-mcp ai-memory mcp --tier smart"]
+      "args": ["ai-memory"]
     }
   }
 }
