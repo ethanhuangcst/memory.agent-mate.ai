@@ -9,6 +9,9 @@ secrets.local*
 # 本地部署：真实 API key 与真实端点（由模板填充而来，永不入库）
 hk_vps_4/deploy/.env.local
 hk_vps_4/deploy/config.local.toml
+# 本地 compose 运行时派生文件（由上面两个文件复制而来，compose 固定引用 .env / config.toml）
+hk_vps_4/deploy/.env
+hk_vps_4/deploy/config.toml
 
 # IDE / 工具数据：Plan Mode 计划文件等（公开仓不入库，防 `git add .` 误带）
 .codebuddy/
