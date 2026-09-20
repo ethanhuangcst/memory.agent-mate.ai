@@ -121,6 +121,7 @@
 | H2 | **`/mcp` 与 `/sse` 端点不存在**（HTTP 路由常量全集只有 `/api/v1/*` + `/metrics`） | **高** | 若上游**新增**了这两个端点，我方"只能 stdio-over-SSH"的决议可被重新评估（机会）；若照抄上游 INSTALL/USER_GUIDE 里的地址配置 → 客户端连不上（**响亮**） | 升级后 `docker exec <c> ai-memory doctor`；`curl -sf http://127.0.0.1:9077/mcp`（期望 404） | `src/handlers/routes.rs:14-95`；`server.json:16-18` |
 | H3 | HTTP `/api/v1/health` 免认证（我方冒烟探针依赖它） | 中 | 若被改为需认证 → 冒烟脚本失败（**响亮**） | `docker exec <c> curl -sf http://127.0.0.1:9077/api/v1/health` | `src/handlers/transport.rs:779` |
 | H4 | HTTP 认证头是 **`X-API-Key`**（不是 `Authorization: Bearer`）；另兼容已弃用的 `?api_key=` query | 中 | 未来开放 HTTP 时若按 Bearer 配 → 认证失败（**响亮**） | `curl -H 'X-API-Key: <k>' …` | 头常量 `src/lib.rs:224`；中间件 `src/handlers/transport.rs:765-877`（`:828` 头、`:842-869` query） |
+| H5 | **上游不含任何管理界面**（无 Web UI / 控制台 / TUI / OpenAPI 页）。运维观测出口**只有两个**：`/metrics`（供外部看板采集）与 `ai-memory doctor`（终端） | **高** | 若上游某天加入 Web UI，则**新增一个需要评估的服务面**（认证 / 反代 / TLS / api_key 全部要重评）—— 我方「无公网入口、不需要域名/NPM/api_key」的三条决议前提被打破 | 升级后：`docker exec <c> curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:9077/`（期望非 200 或非 HTML）；`ai-memory doctor` 章节数是否变化；镜像内是否出现静态资源 | 2026-09-20 核实：`routes.rs` 无非 `/api/v1` 路由；无 `rust-embed`/`include_dir`/`ServeDir`；无 `ratatui`/`crossterm`；无 `utoipa`/`swagger`；`docs/*.html` 全为**文档站** |
 
 ### I. 备份 / 恢复 CLI 契约（备份脚本与非零退出码检测建立在此之上）
 
@@ -140,6 +141,17 @@
 | J1 | `CURRENT_SCHEMA_VERSION = 81`（SQLite 与 Postgres 锁步） | 中 | 仅作升级预检的"是否发生前向迁移"信号。**注意上游文档滞后**：`docs/CONFIG_SCHEMA.md:172` 写 78，源码是 81 | `grep -n 'CURRENT_SCHEMA_VERSION: i64' src/storage/migrations.rs` | `src/storage/migrations.rs:859`；`src/store/postgres.rs:670` |
 | J2 | 迁移**前向-only**，且 v34 / v50 / v54 三个阶梯臂**不可逆** | **高** | 不可逆迁移后无法靠"改回旧版二进制"降级 | 读 CHANGELOG + 预检报告的 W2 | `src/storage/migrations.rs:1502-1519`；`src/storage/migration_meta.rs:43` |
 | J3 | ⚠️ **旧二进制启动于"比自身更新的库"时不会报错** —— `migrate()` 在 `version >= CURRENT_SCHEMA_VERSION` 时直接 `return Ok(())`；全 `src` **无**任何"库过新则拒绝启动"的逻辑 | **高·静默** | **我方原文档（`deployment_strategy.md` §6.2 / `dev-plan.md` §5.1⑥）称"二进制会拒绝启动于更新的库，回滚会大声失败" —— 该假设已证伪。** 实际行为：回滚到旧二进制后它会照常启动，并操作一个它不认识的 schema → **静默的数据损坏风险**。**结论：回滚必须用 pre-migration 快照覆盖 DB，不能只改 `IMAGE_TAG`。** | 无法在运行时检测；只能靠流程约束（预检报告强制列出 J3 提示 + 回滚 runbook 强制含快照覆盖步骤） | `src/storage/migrations.rs:1507-1509`（`if version >= CURRENT_SCHEMA_VERSION { return Ok(()); }`）；全 `src` grep `newer than` / `downgrade` / `refuse.*schema` 无命中（2026-09-20 核实） |
+
+### K. 凭证与授权面（决定「如何向用户签发 key」）
+
+| # | 依赖什么 | 敏感度 | 错了会怎样 | 怎么检测 | 上游位置 |
+|---|---|---|---|---|---|
+| K1 | **HTTP `api_key` 是单一共享密钥，不是多用户体系**（`config.toml` 顶层 `api_key` + `AI_MEMORY_REQUIRE_API_KEY=1`；认证头 `X-API-Key`） | 中 | 本方案不开放 HTTP，暂不涉及。若未来开放：**换 key = 所有客户端同时重配**，且**无法按用户单独吊销** | 见 B9 / D9 / H4 | `src/config.rs:2793` |
+| K2 | **macaroon 能力令牌 `[capabilities]`**：v0.9.0 G10.1(#1827) 引入；**`enabled` 在 v0.10.0 默认 `false`**（GA 姿态 = 令牌层是纯恒等函数）；env `AI_MEMORY_CAPABILITIES=on\|off` 覆盖 | **高** | ⚠️ **版本敏感**：main（v1.0.0 方向）已把编译默认改为 `true` 并新增零配置 `owner` issuer。若升级到 v1.0.0，需重评「无令牌调用者行为不变」的假设（上游称该默认翻转是 *additive-only*：只放宽不放严；但「无令牌即拒绝」是**另一个**延迟翻转） | `docker exec <c> env \| grep AI_MEMORY_CAPABILITIES`；升级后查 `[capabilities].enabled` 语义 | v0.10.0 `src/config.rs:5884-5905`（`enabled` 默认 false）；main `src/governance/capability.rs:102`（`DEFAULT_CAPABILITIES_ENABLED = true`） |
+| K3 | **CLI 签发链路（v0.10.0 已有）**：`capability keygen <issuer>` / `mint <issuer>` / `attenuate --token` / `inspect --token` / `verify --token --action --namespace --agent`。caveat **只能收窄**（AND 语义）：`--namespace-prefix`、`--op-ceiling`(none/read/write/admin)、`--action`(Store/Delete/Promote/Reflect)、`--agent`、`--expires-at`、`--expires-in-secs`、`--not-before`。令牌展示通道：MCP 工具参数 `capability` / HTTP 头 `X-AI-Memory-Capability` / CLI | **高** | flag 或子命令改名 → 我方「无 UI 签发 key」的 runbook 断裂（**响亮**，命令直接报错）。⚠️ **v0.10.0 没有 `capability init`**（零配置 owner 是 v1.0.0 特性）—— 照搬运维文档会失败 | `ai-memory capability --help` / `mint --help`；用 `inspect` + `verify` 做本地自查 | v0.10.0 `src/cli/capability.rs:117-171`；展示通道 `src/daemon_runtime.rs:280,1017` |
+| K4 | **`issuers` 是封闭白名单**：无隐式 issuer，解析器**永不**回退到宽松的 `db::agent_pubkey` 注册表；每项需 `<id>.caproot` 铸造密钥（mode 0600）+ 归因公钥 `<id>.pub`；`max_op` **必填**，解析失败即**整个跳过该 issuer**（fail-closed，绝不默认放大） | **高** | 若以为有隐式 issuer 或 `max_op` 可省 → 令牌校验全部失败（**响亮**，但只在运行时暴露） | 核对 `config.toml` 的 `[capabilities.issuers.*]` 与 key dir 实际文件一致；用 `capability verify` 按具体请求元组复现 | v0.10.0 `src/config.rs:5898-5912` |
+| K5 | **Ed25519 身份（`ai-memory identity`）是「出处证明」，不是授权**。上游明确警告：`metadata.agent_id` 是**自述值**，可被任意调用者填写，**不得单独作授权闸门** | **高** | 若把 `agent_id` 当权限依据 → 任何人都能自称任意 id → **静默越权** | 只用它做溯源 / 审计 / 过滤；授权一律走 K2–K4 | `docs/ADMIN_GUIDE.md:996-1010`（Trust model） |
+| K6 | 密钥目录解析：`--key-dir` > `AI_MEMORY_KEY_DIR` > `$HOME/.config/ai-memory/keys`；私钥 0600 | 中 | 因我方 `HOME=/data`，密钥与 `.caproot` 随持久卷留存（recreate 不丢）——这是**收益**；若改到卷外则可能丢失，导致既有令牌全部不可验证 | `docker exec <c> ls -l /data/.config/ai-memory/keys` | `src/cli/capability.rs`（`resolve_key_dir`）；`src/identity/keypair.rs:170` |
 
 ---
 
