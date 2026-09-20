@@ -3,3 +3,6 @@ tmp-memory.md
 .DS_Store
 .env
 *.key
+
+# IDE / 工具数据：Plan Mode 计划文件等（公开仓不入库，防 `git add .` 误带）
+.codebuddy/
