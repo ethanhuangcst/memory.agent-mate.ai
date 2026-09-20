@@ -18,6 +18,8 @@ ai-memory 的**薄部署资产**（公开父仓 `ethanhuangcst/memory.agent-mate
 | `.env.prod.example` | 复制为 `.env` 后填入真实值 |
 | `.env.local` / `config.local.toml` | **本地**部署用（已填真实值，`gitignored`，不入库） |
 | `../scripts/qwen-verify.sh` | qwen 模型探针：实测端点 `/models`、chat、`json_object`、embeddings 与向量维度 |
+| `../scripts/local-up.sh` | **本地常驻启动**（生产同一份 compose：serve + curator；后续方案验证的对照基线） |
+| `../scripts/mcp-smoke.sh` | **MCP stdio 冒烟**：initialize 握手 / core 档 8 工具断言 / 唯一标记写入 / 跨进程语义召回 + 关键词检索 |
 | `deployment-plan.md` | release-bot 主输入 + §3.1 IMAGE_TAG ↔ 上游 tag/commit/digest 映射表 |
 | `../upstream.lock` | ★ **版本坐标唯一真相源**（在 `hk_vps_4/`，不在本目录） |
 | `../scripts/upstream-preflight.sh` | 升级预检 / 准入判定脚本 |
@@ -108,6 +110,16 @@ docker run --rm --platform linux/amd64 \
   -v "$(pwd)/hk_vps_4/deploy/config.local.toml:/data/.config/ai-memory/config.toml:ro" \
   -v ai_memory_local_data:/data \
   ghcr.io/alphaonedev/ai-memory:0.10.0 doctor
+
+# 3) 常驻启动本地基线（生产同一份 compose：serve + curator 常驻；对照基线）
+#    自动派生 gitignored 的 deploy/.env 与 deploy/config.toml；就绪以 serve 监听日志为准
+./hk_vps_4/scripts/local-up.sh
+
+# 4) MCP 通路冒烟（docker exec -i，与生产 SSH forced command 逐字同构）
+#    断言：握手 / core 档 8 工具 / 唯一标记写入 / 跨进程语义召回 + 关键词检索
+./hk_vps_4/scripts/mcp-smoke.sh
+
+# 停止本地基线（保留数据卷）：docker-compose -f hk_vps_4/deploy/docker-compose.prod.yml down
 ```
 
 > ⚠️ 挂载点必须是 `$HOME/.config/ai-memory/config.toml`：配置路径由 `$HOME` 推导，
@@ -117,8 +129,8 @@ docker run --rm --platform linux/amd64 \
 
 ```bash
 docker ps --filter name=ai-memory-mcp --format '{{.Status}}'
-docker exec ai-memory-mcp curl -sf http://127.0.0.1:9077/api/v1/health
 docker exec ai-memory-mcp ai-memory doctor     # 核对 LLM / Embeddings Reachability 两节
+# （镜像内无 curl/wget，HTTP 健康端点不可 exec 探测：以 doctor + serve 监听日志为准）
 
 # 预演 curator（零写入）
 docker exec ai-memory-mcp-curator ai-memory curator --once --dry-run --json

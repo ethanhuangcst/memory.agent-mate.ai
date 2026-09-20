@@ -68,6 +68,17 @@ src/storage/migrations.rs:1507
 - 清单 digest `sha256:507d2a50…`，amd64 digest `sha256:7e19ae9d…`（经 registry v2 直连校验，与包页面一致）。
 - `release.yml`：`docker` job `if: is_prerelease == 'false'` → **预发布版不产出镜像**（升了也拉不到）。
 
+**MCP 工具行为（2026-09-20 实测，v0.10.0，core 档）**
+
+| 行为 | 实测结论 | 证据 |
+| --- | --- | --- |
+| 默认档位 | 不写 `--profile` 时是 **core**，工具恰 **8 个**（core 7 + always-on `memory_capabilities`）；不是 full | `tools/list` 回包计数 |
+| `memory_store.source` | **枚举字段**：`user / nhi / claude / hook / api / cli / import / consolidation / system / chaos / notify`；传其他值被**明确拒绝**并列出合法值（响亮，不静默） | 传 `codebuddy` → 报错，改 `user` 成功 |
+| 近重复写入 | 语义相近的写入返回 **CONFLICT（near-duplicate 去重）**，非 bug | 冒烟二次运行命中；`mcp-smoke.sh` 按「改验既有标记」容忍 |
+| `memory_search` | **ASCII 子串精确匹配**：ASCII 标记可靠命中；**中文查询一律 count=0**（FTS 分词不吃 CJK），即使该串在 title/content 中连续存在 | 「三层全绿」（content 连续子串）count=0；对照 `l2-client-20260920` count=2 |
+| `memory_recall` | 语义/hybrid 检索，中文查询质量高（实测 score 0.887 / 0.893 居首），`mode:hybrid` | 查询词不含标记字面量仍命中 |
+| 传输 | 服务端**无** `/mcp`、`/sse` HTTP 端点；`serve` 的 9077 仅绑容器内回环 → 客户端只能走 stdio（`docker exec -i`，**不加 `-t`**） | `mcp-test.md` §0；`-t` 会破坏 stdio 帧 |
+
 ## Lesson / guidance
 
 1. **不要用 git 谱系判断上游版本差异**。上游会重写历史；`git log <tag>..main` 与 `git diff` 会直接失效。
@@ -89,6 +100,13 @@ src/storage/migrations.rs:1507
    `qwen-plus` / `qwen-turbo` / `qwen-flash` 的 chat 均可用，`qwen-turbo` 支持 `response_format=json_object`；
    `qwen3.7-text-embedding` 与 `qwen3.7-text-embedding-flash` 实测都是 **1024 维**。
    可重复探针：`hk_vps_4/scripts/qwen-verify.sh`（决策见 ADR-007）。
+9. **MCP 默认档位是 core，工具恰 8 个**：档位不会在输出里自证，唯一可靠判据是 `tools/list` 回包的工具**计数**；
+   把「= 8」写死进冒烟脚本，档位一旦漂移就响亮失败（否则只表现为"某个高级工具不见了"的困惑）。
+10. **中文检索只能走 `memory_recall`，`memory_search` 只认 ASCII 子串**：写断言时标记一律用 ASCII
+    （如 `mcp-smoke-<epoch>`），语义验证用 recall 的中文查询词；两者职责对调会出现「明明存进去了却搜不到」的假故障。
+11. **写元数据前先按 `inputSchema` 构造参数**：`source` 等是枚举字段，凭字段名猜值会被响亮拒绝（好）但白耗一轮往返。
+12. **批量/重复写入必须容忍 CONFLICT**：near-duplicate 去重让语义相近的写入返回 CONFLICT，
+    脚本若不处理，第二次运行就会假失败（正解：改验既有标记，见 `mcp-test.md` §1 原则）。
 
 ## Links
 
@@ -96,4 +114,5 @@ src/storage/migrations.rs:1507
 - 版本坐标唯一真相源：`hk_vps_4/upstream.lock`
 - 升级策略（含准入判据规格）：`hk_vps_4/specs/dev-plan.md` §5
 - 决议真相源：`hk_vps_4/specs/deployment_strategy.md` §6/§7/§9
-- 相关 ADR：`adr/ADR-004-version-contract-single-source-of-truth.md`、`adr/ADR-005-upgrade-admission-gate-layering.md`
+- MCP 测试策略 / 计划 / 用例（L0–L3 分层、客户端接入配置、工具行为原则）：`hk_vps_4/specs/mcp-test.md`
+- 相关 ADR：`adr/ADR-004-version-contract-single-source-of-truth.md`、`adr/ADR-005-upgrade-admission-gate-layering.md`、`adr/ADR-008-local-baseline-reuses-production-compose.md`

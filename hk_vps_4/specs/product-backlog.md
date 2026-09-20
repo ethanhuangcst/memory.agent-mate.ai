@@ -123,7 +123,7 @@
 
 | # | 分类 | 父项 | 标题 | 描述 | 验收条件 | 关联 | Sprint | 状态 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | [本地启动] | 本地启动产品 | 开发环境默认启动 | 按默认配置在本机启动 ai-memory-mcp，作为后续方案验证的对照基线。 | 本机启动成功，并通过 MCP 完成一次写入 + 召回。 | `dev-plan.md` §3 · `deploy/README.md` | Sprint 2 | ToDo |
+| 1 | [本地启动] | 本地启动产品 | 开发环境默认启动 | 按默认配置在本机启动 ai-memory-mcp，作为后续方案验证的对照基线。 | 本机启动成功，并通过 MCP 完成一次写入 + 召回。 | `dev-plan.md` §3 · `deploy/README.md` | Sprint 2 | Done |
 | 2 | [产品化-web] | web portal | admin portal — 登录与访问控制 | 管理面走 **Cloudflare Access**（浏览器 SSO）；**仅管理域名**受保护，MCP 域名须**显式绕过**（命令行客户端无法完成 SSO 重定向，否则表现为「连不上」）。 | 仅持有效 CF Access 身份者可访问管理域名；在 MCP 域名上请求管理 API 被**拒绝**。 | [`admin_portal_design.md`](./admin_portal_design.md) §7 | Sprint 4 | ToDo |
 | 3 | [产品化-web] | web portal | admin portal — key 生命周期 | 操作 = 签发 / 列出元信息 / 修改 / 轮换 / 删除。「列出元信息」= 前缀 + 标签 + 创建时间 + 最后使用时间（**明文不可取回**，库内只存 `sha256(token)`）；「轮换」= **吊销旧 + 签发新**（旧 key 不可复活）；「删除」= **软吊销**（置 `revoked_at`，立即失效但保留审计链条，**不做**物理删除）。格式 = `memo_` + 32 字节 CSPRNG（base64url 无填充）；请求头 `Authorization: Bearer memo_…`；明文**仅创建时显示一次**。 | 5 个操作均可用；明文仅在创建响应中出现一次；吊销后新建会话被拒、既有会话被终止。 | [`admin_portal_design.md`](./admin_portal_design.md) §5.1 | Sprint 4 | ToDo |
 | 4 | [产品化-web] | web portal | admin portal — 记忆身份与数据隔离 | 每用户 `AI_MEMORY_AGENT_ID=human:<handle>` + 独立库 `/data/users/<handle>/ai-memory.db`（**一用户一库**，读写双向物理隔离）。**不做**服务器 OS 账号同步（单账号 `aimem-ssh` + N 把密钥 + N 条 forced command）。建用户时创建其库目录（属主对齐容器内 `aimem`）；签发 key 时**幂等确保**目录存在；**库文件由 ai-memory 首次使用时自动创建**。 | 跨用户检索**命中不到**；`memory_get` 他用户记忆返回不可见；每个库文件属主为 `aimem`。 | [`multiuser_isolation.md`](./multiuser_isolation.md) §5 · [`admin_portal_design.md`](./admin_portal_design.md) §5.2 | Sprint 4 | ToDo |
