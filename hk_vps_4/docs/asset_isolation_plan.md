@@ -117,18 +117,18 @@ up: / down:          ## 本地栈起停（见 dev-plan.md §3）
 
 | # | 资产 | 迁移动作 | 状态 |
 | --- | --- | --- | --- |
-| 1 | 上游 clone 整体 | → `ai-memory-mcp/`（保留 .git） | ☐ |
-| 2 | `deployment_strategy.md` | → `hk_vps_4/docs/` | ☐ |
-| 3 | `dev-plan.md` | → `hk_vps_4/docs/` | ☐ |
-| 4 | 本文档 | → `hk_vps_4/docs/` | ☐ |
-| 5 | `hk_vps_4_settings.md` | → `hk_vps_4/docs/` | ☐ |
-| 6 | `vps4_new_deployment_instruction.md` | → `hk_vps_4/docs/` | ☐ |
-| 7 | `mcp_oss_bak_com_requirements.md` | → `hk_vps_4/docs/` | ☐ |
-| 8 | `deploy/`（5 文件） | → `hk_vps_4/deploy/` | ☐ |
+| 1 | 上游 clone 整体 | → `ai-memory-mcp/`（保留 .git） | ✅ |
+| 2 | `deployment_strategy.md` | → `hk_vps_4/docs/` | ✅ |
+| 3 | `dev-plan.md` | → `hk_vps_4/docs/` | ✅ |
+| 4 | 本文档 | → `hk_vps_4/docs/` | ✅ |
+| 5 | `hk_vps_4_settings.md` | → `hk_vps_4/docs/` | ✅ |
+| 6 | `vps4_new_deployment_instruction.md` | → `hk_vps_4/docs/` | ✅ |
+| 7 | `mcp_oss_bak_com_requirements.md` | → `hk_vps_4/docs/` | ✅ |
+| 8 | `deploy/`（5 文件） | → `hk_vps_4/deploy/` | ✅ |
 | 9 | `backup/` 脚本 | → `hk_vps_4/backup/`（dev-plan.md §4 落地时创建） | ☐ |
-| 10 | `.gitignore` + Makefile | 父仓根（先于 git add） | ☐ |
-| 11 | 相对引用修正 | 上游 → URL + tag；仓内 → hk_vps_4 路径 | ☐ |
-| 12 | 验证 | 两仓 status / pull / push / GitHub 无上游代码 | ☐ |
+| 10 | `.gitignore` + Makefile | 父仓根（先于 git add） | ✅ |
+| 11 | 相对引用修正 | 上游 → URL + tag；仓内 → hk_vps_4 路径 | ✅ |
+| 12 | 验证 | 两仓 status / pull / push / GitHub 无上游代码 | ✅ |
 
 ## 10. 公开仓库脱敏规则
 
@@ -160,4 +160,4 @@ up: / down:          ## 本地栈起停（见 dev-plan.md §3）
 
 | 日期 | 决策 |
 | --- | --- |
-| 2026-09-20 | 确立资产隔离：初版为物理分仓；同日改采**协同布局**（父仓 `memory.agent-mate.ai` 公开仓 + 嵌套 gitignored 上游 clone + `hk_vps_4/` 自有资产）。**迁移待批**。 |
+| 2026-09-20 | 确立资产隔离：初版为物理分仓；同日改采**协同布局**（父仓 `memory.agent-mate.ai` 公开仓 + 嵌套 gitignored 上游 clone + `hk_vps_4/` 自有资产）。**迁移已执行（同日，见 §9 清单）。** |

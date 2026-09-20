@@ -510,7 +510,8 @@ SHOW shared_preload_libraries;
 | 2026-09-19 | 更名：项目更名为 **`aliyun-oss-bak-mcp`**（曾短暂改为「产品内置」后撤回，回归自研独立项目）；规格文件更名为 `aliyun_oss_bak_mcp_spec.md`，内容不变（含官方 OSS MCP alpha 替代评估：不可用，覆盖率 0/4） |
 | 2026-09-20 | **备份方案裁决**：mcp.oss-bak.com 从本计划**取消**，另建项目单独建设；研究整理为独立自洽需求规格 [`mcp_oss_bak_com_requirements.md`](./mcp_oss_bak_com_requirements.md)（移交物，旧规格文件删除、轨迹保留于此）。备份回归**默认方案**（本地快照 + cron/ossutil 外迁 OSS 香港 + 季度恢复演练），落地细节见 [`dev-plan.md`](./dev-plan.md) §4–5 |
 | 2026-09-20 | 新增：上游升级策略（7 步链路 + 三类破坏性变更审查 + 升级门禁「无新鲜外迁备份不升级」+ 升级后备份管线探针 + 半自动版本跟踪）——见 [`dev-plan.md`](./dev-plan.md) §5；资产隔离计划——见 [`asset_isolation_plan.md`](./asset_isolation_plan.md)（迁移待批） |
-| 2026-09-20 | 资产隔离布局定稿：**协同布局** —— 工程目录更名 `memory.agent-mate.ai`（公开仓 `ethanhuangcst/memory.agent-mate.ai`），上游 clone 嵌套为 `ai-memory-mcp/`（gitignored，只读约定），自有资产集中 `hk_vps_4/`；`.gitignore` 防 gitlink 陷阱 + `make pin` 回填版本映射；物理分仓降级为备选（见 asset_isolation_plan.md §6）。迁移待批 |
+| 2026-09-20 | 资产隔离布局定稿：**协同布局** —— 工程目录更名 `memory.agent-mate.ai`（公开仓 `ethanhuangcst/memory.agent-mate.ai`），上游 clone 嵌套为 `ai-memory-mcp/`（gitignored，只读约定），自有资产集中 `hk_vps_4/`；`.gitignore` 防 gitlink 陷阱 + `make pin` 回填版本映射；物理分仓降级为备选（见 asset_isolation_plan.md §6）。迁移已执行 |
+| 2026-09-20 | **资产迁移已执行**：自有资产入父仓 `hk_vps_4/`、上游重新 clone 为嵌套 gitignored 目录、断链修正、首提交 `4dbff84` 推送 GitHub；旧目录改名备份未删除（含 CodeBuddy 会话数据） |
 
 ---
 
