@@ -14,8 +14,10 @@ ai-memory 的**薄部署资产**（公开父仓 `ethanhuangcst/memory.agent-mate
 | 文件 | 用途 |
 |---|---|
 | `docker-compose.prod.yml` | Portainer Stack 定义（serve + curator 两个 service） |
-| `config.toml.tmpl` | 复制为 `config.toml` 后填入真实值 |
+| `config.toml.tmpl` | 复制为 `config.toml` 后填入真实值（含 `<QWEN_BASE_URL>` 占位符） |
 | `.env.prod.example` | 复制为 `.env` 后填入真实值 |
+| `.env.local` / `config.local.toml` | **本地**部署用（已填真实值，`gitignored`，不入库） |
+| `../scripts/qwen-verify.sh` | qwen 模型探针：实测端点 `/models`、chat、`json_object`、embeddings 与向量维度 |
 | `deployment-plan.md` | release-bot 主输入 + §3.1 IMAGE_TAG ↔ 上游 tag/commit/digest 映射表 |
 | `../upstream.lock` | ★ **版本坐标唯一真相源**（在 `hk_vps_4/`，不在本目录） |
 | `../scripts/upstream-preflight.sh` | 升级预检 / 准入判定脚本 |
@@ -38,6 +40,7 @@ ai-memory 的**薄部署资产**（公开父仓 `ethanhuangcst/memory.agent-mate
 - **无公网端口映射**：`serve` 只绑容器内回环，仅供后台 GC / WAL checkpoint。
 - **配置路径由 `$HOME` 推导且无法改写**：compose 设 `HOME=/data`，配置、密钥、HF 模型缓存全部落入持久卷。挂错位置会被**静默忽略**。
 - **`AI_MEMORY_REQUIRE_AGENT_ATTESTATION=0`**：v0.9 默认开启会 403 拒绝无签名写入——这是可用性前提。
+- **端点必须显式覆盖**：`qwen` 别名默认指向公网 `dashscope.aliyuncs.com`，本项目用**私有 MaaS workspace**，故 `[llm].base_url` 与 `[embeddings].base_url` 都要写；workspace 级 key 在公网端点不通。公开仓中用占位符 `<QWEN_BASE_URL>`，真实值在 `hk_vps_4/secrets.local.hk_vps_4.md`。
 
 ## 首次部署
 
@@ -45,7 +48,7 @@ ai-memory 的**薄部署资产**（公开父仓 `ethanhuangcst/memory.agent-mate
 # 1. 服务器侧准备
 ssh <vps4>
 mkdir -p /opt/ai-memory-mcp && cd /opt/ai-memory-mcp
-# 放入 compose / config.toml / .env（真实值）
+# 放入 compose / config.toml / .env（真实值；config.toml 里的 <QWEN_BASE_URL> 替换为私有 MaaS 端点）
 
 # 2. 建权限受限用户（不用 root）
 useradd -m -s /bin/bash aimem-ssh
@@ -88,6 +91,27 @@ Host ai-memory
 ```
 
 > API key 只需在服务器 `.env` 配一次（`docker exec` 继承容器环境），无需写进每个客户端。
+
+## 本地部署（本机验证用，不入库）
+
+本地跑**同一个官方镜像**；env 与 config 用 gitignored 的本地副本，结构与服务器侧一致（差别只有「真实值 vs 占位符」）。
+
+```bash
+# 1) 模型探针：实测 /models、chat、response_format=json_object、embeddings 与向量维度
+./hk_vps_4/scripts/qwen-verify.sh
+
+# 2) doctor（镜像仅 amd64；Apple Silicon 需显式 --platform linux/amd64）
+docker run --rm --platform linux/amd64 \
+  --env-file hk_vps_4/deploy/.env.local \
+  -e HOME=/data -e AI_MEMORY_DB=/data/ai-memory.db \
+  -e AI_MEMORY_REQUIRE_AGENT_ATTESTATION=0 \
+  -v "$(pwd)/hk_vps_4/deploy/config.local.toml:/data/.config/ai-memory/config.toml:ro" \
+  -v ai_memory_local_data:/data \
+  ghcr.io/alphaonedev/ai-memory:0.10.0 doctor
+```
+
+> ⚠️ 挂载点必须是 `$HOME/.config/ai-memory/config.toml`：配置路径由 `$HOME` 推导，
+> **没有任何环境变量能改写它**；挂错位置会被**静默忽略**（tier 退回 semantic）。
 
 ## 冒烟与验收
 
@@ -173,7 +197,7 @@ make preflight-test # 脚本离线自测（无网络）
 
 - `docs/INSTALL.md` / `docs/USER_GUIDE.md` 描述的 `/mcp`、`/sse` 端点**不存在**（路由 SSOT 与源码均已核实）——不要按那两节配置远程直连
 - `docs/CONFIG_SCHEMA.md` 样例的 `[llm.auto_tag] backend = "ollama"` 在无 Ollama 机器上会打挂 LLM 类功能
-- DashScope embedding 模型不在 `KNOWN_EMBEDDING_DIMS` 表内，`dim` 必须手工核对
+- qwen embedding 模型不在 `KNOWN_EMBEDDING_DIMS` 表内，`dim` 必须手工填写——本项目实测 `qwen3.7-text-embedding` = **1024**；`dim = 0` 会被忽略并静默回落 768
 - **上游 `main` 与 release tag 的提交图不连通**（历史被重写）→ 禁用 `git diff/log` 做版本差异；文档引用一律用 release tag URL（`deployment_strategy.md` §7.2）
 - **上游镜像 tag 可被重推**（同 tag 内容变）→ 靠锁文件 digest + `make preflight ARGS=--with-image` 的 W4 检出
 - **`ai-memory restore` 是 in-place**（会把当前库改名为 `pre-restore-<ts>.db` 再覆盖）——与"恢复到 staging"的直觉相反，见耦合面清单 I5

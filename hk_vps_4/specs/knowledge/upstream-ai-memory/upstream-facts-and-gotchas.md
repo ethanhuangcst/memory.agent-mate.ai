@@ -82,7 +82,13 @@ src/storage/migrations.rs:1507
 6. **升级闸门必须"可通过"**：判据里若混入与本部署无关的条件（如上游 npm 发布 job 失败），闸门会永久卡死。
    客观且决定能否运行的条件才做硬性阻断，其余归人工确认（见 ADR-005）。
 7. **上游文档缺陷清单**（照抄会踩坑）：`/mcp` 与 `/sse` 端点不存在；`[llm.auto_tag]` 样例写 `backend = "ollama"`；
-   DashScope embedding 模型不在 `KNOWN_EMBEDDING_DIMS` 表内（`dim` 必须显式设）；schema 版本文档滞后。
+   qwen（DashScope）embedding 模型不在 `KNOWN_EMBEDDING_DIMS` 表内（`dim` 必须显式设，填 0 会被**静默**忽略并回落 768）；
+   `qwen` 别名的默认端点是**公网** dashscope，走私有 MaaS 必须显式覆盖 `[llm].base_url` / `[embeddings].base_url`；
+   schema 版本文档滞后。
+8. **可用模型与维度只能实测**（2026-09-20 于私有 MaaS 端点）：`/models` 列出 256 个模型；
+   `qwen-plus` / `qwen-turbo` / `qwen-flash` 的 chat 均可用，`qwen-turbo` 支持 `response_format=json_object`；
+   `qwen3.7-text-embedding` 与 `qwen3.7-text-embedding-flash` 实测都是 **1024 维**。
+   可重复探针：`hk_vps_4/scripts/qwen-verify.sh`（决策见 ADR-007）。
 
 ## Links
 

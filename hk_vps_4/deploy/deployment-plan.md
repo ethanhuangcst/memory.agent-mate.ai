@@ -17,7 +17,7 @@
 - 调用者 Cursor → **ssh（密钥 + forced command）** → 节点 → `docker exec -i ai-memory-mcp ai-memory mcp --tier smart`
 - 容器内：`serve`（绑 127.0.0.1:9077，仅后台 GC / WAL checkpoint，不对外）+ 独立 curator service
 - 持久化：命名卷 `ai_memory_data` → `/data`（SQLite DB、config、密钥、HF 模型缓存）
-- 外部依赖：仅 DashScope（qwen）API
+- 外部依赖：仅 qwen API（**私有 MaaS 端点**，公开仓用占位符 `<QWEN_BASE_URL>`；真实值见 `hk_vps_4/secrets.local.hk_vps_4.md`）
 
 ## 2. 服务表
 
@@ -69,6 +69,11 @@
 | `AI_MEMORY_DB` | yes（固定 `/data/ai-memory.db`） | — |
 | `APP_URL` | **N/A** | 本应用无公网 HTTP 入口 |
 
+> ⚠️ **端点与模型不在环境变量里**：私有 MaaS 端点写 `config.toml` 的 `[llm].base_url`
+> 与 `[embeddings].base_url`，嵌入维度写 `[embeddings].dim` —— **`dim` 不存在任何
+> 环境变量**，只能落配置文件（见 `config.toml.tmpl`）。这也是「模型设置」以 config
+> 为单一真相源的原因。
+
 ## 6. 数据库
 
 - 引擎：**SQLite**（容器内 `/data/ai-memory.db`，WAL 模式），命名卷 `ai_memory_data`
@@ -91,7 +96,7 @@
 
 - [ ] `docker ps --filter name=ai-memory-mcp` 两容器 running
 - [ ] `docker exec ai-memory-mcp curl -sf http://127.0.0.1:9077/api/v1/health`
-- [ ] `ai-memory doctor`：LLM Reachability 显示 `qwen`；Embeddings Reachability 显示 `qwen` + 维度正确
+- [ ] `ai-memory doctor`：LLM Reachability 显示 `qwen` / `qwen-plus` / base_url 为私有 MaaS；Embeddings Reachability 显示 `qwen` / `qwen3.7-text-embedding`，且嵌入器加载为 **1024-dim**
 - [ ] `curator --once --dry-run --json`：报告 `tagged > 0`
 - [ ] 调用者模拟：`echo '<initialize>' | ssh ai-memory` 返回 JSON-RPC 响应
 - [ ] 机器 A 写入记忆 → 机器 B 检索命中（跨客户端共享）
@@ -104,7 +109,7 @@
 - [ ] **不重建 `portainer_network`**
 - [ ] **不新增** Cloudflare / NPM 记录（本方案无公网入口）
 - [ ] 不编辑其他 NPM Host；不改 `portainer4` / `nginx4` 记录
-- [ ] 不触碰野草云3（`38.55.192.140`）
+- [ ] 不触碰野草云3（`<VPS3_IP>`）
 - [ ] SSH 使用单建受限用户 + forced-command 密钥，不使用 root
 
 ## 11. 运维注意（应用特有）

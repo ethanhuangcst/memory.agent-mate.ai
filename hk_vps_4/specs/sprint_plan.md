@@ -67,19 +67,21 @@ Sprint Goal: 本地启动 + 探针明确方案
 
 ### ToDo
 
+> **执行顺序**：按本表**编号顺序**执行 —— 先做仓库治理与环境配置（#1–#3），再做本地启动（#4），随后逐项收敛方案（#5–#11）。
+
 | # | 事项 | 类别 | 模块 | 验收条件 | 关联文档 | 状态 |
 | --- | --- | --- | --- | --- | --- | --- |
-| 1 | **本地启动 ai-memory-mcp（按默认配置）** —— **本 Sprint 首先做** | 任务 | 开发环境 | 本机按默认配置启动成功，并通过 MCP 完成一次写入 + 召回，作为后续方案对照的基线 | `product-backlog.md` #1 · `dev-plan.md` §3 | ☐未开始 |
-| 2 | DashScope API key —— **用户已备好**，待填入配置 | 阻塞 | 配置 | `.env` 中 `DASHSCOPE_API_KEY` 非空且可调通 | [`../deploy/.env.prod.example`](../deploy/.env.prod.example) | ⛔待提供 |
-| 3 | DashScope embedding 的 **model + dim** | 阻塞 | 配置 | `[embeddings]` 填真实值（**不可留 `dim = 0`**）；`ai-memory doctor` 的 Embeddings Reachability 显示 `qwen:<model>` 且维度一致 | [`../deploy/config.toml.tmpl`](../deploy/config.toml.tmpl) · [`upstream_coupling_surface.md`](./upstream_coupling_surface.md) F1–F3 | ⛔待提供 |
-| 4 | **探针：上游保存 memory 时是否支持多语言** | 研究 | MCP | 给出明确结论（是否支持多语言存储 / 检索、有无相关配置项、有无已知限制）；结论回写 `product-backlog.md` 的「记忆内容的多语言支持」条目 | `product-backlog.md` #10 · 上游源码 | ☐未开始 |
-| 5 | **`--profile` 定档**：对外暴露哪一档；SSH / 门户模板是否补写 `--profile` | 研究 | MCP | 实测 `v0.10.0` 各档工具数（本地 clone 实测：core 7 / graph 19 / admin 21 / power 56 / **full 101**；`memory_capabilities` 所有档位 always-on，故实际注册数 +1）；决议写入门户模板、SSH 模板与公开文档 | [`mcp_tool_inventory.md`](./mcp_tool_inventory.md) §5 · `product-backlog.md` #12 | ⏸待决策 |
-| 6 | **MCP 对外能力清单定稿**（档位 / i18n 范围 / LLM 与备份选择的最终决议） | 任务 | MCP | 清单定稿并落入公开文档；档位与 #5 的决议一致 | [`mcp_tool_inventory.md`](./mcp_tool_inventory.md) · `product-backlog.md` #19 | ☐未开始 |
-| 7 | **D1 确认**：门户启动机制 **β′**（镜像内带二进制 + 子进程）vs **α**（`docker exec` + docker socket） | 任务 | Web App | 决议写入 `deployment_strategy.md` §0；若选 α 须书面接受「公网门户持 root 等价权限」并补 socket 加固 | [`admin_portal_design.md`](./admin_portal_design.md) §4 与附录 A | ⏸待决策 |
-| 8 | **`tmp_user_key_option1.md` 处置**（移入 `specs/` 或加 `.gitignore`） | 任务 | 安全 | 仓根目录不再有未跟踪的留档文件 | [`asset_isolation_plan.md`](./asset_isolation_plan.md) §10 · `tmp_user_key_option1.md` | ⏸待决策 |
-| 9 | **把本仓改为私有**（GitHub 仓库设置） | 任务 | 安全 | 仓库改为私有；同步修订文档中所有「公开仓」表述；核对私有仓 Actions 额度 | `deployment_strategy.md` §8.1 #1 · [`admin_portal_design.md`](./admin_portal_design.md) §12 | ☐未开始 |
-| 10 | **更新 `hk_vps_4/specs/` 相关技术方案（明确方案部分）** | 任务 | 文档 | 受本次重排影响的技术 spec 全部同步（编号引用去耦合、排期指向正确）；各文件追加变更记录 | `hk_vps_4/specs/` 全目录 | ☐未开始 |
-| 11 | **给出「多用户隔离是否可实现」的明确结论** | 研究 | 安全 | 结论落盘（可实现 / 不可实现 / 有条件可实现），并指明所依赖的防线（D1–D5）与验证项（V1–V4）、以及未决前提 | [`multiuser_isolation.md`](./multiuser_isolation.md) · 本文件「阻断级风险」 | ☐未开始 |
+| 1 | **仓库 IP 脱敏 + 防复发护栏**（保持公开仓） | 任务 | 安全 | 4 个真实公网 IP 从文档迁出到 gitignored 的 `hk_vps_4/secrets.local.hk_vps_4.md`，文档改用具名占位符（`<VPS4_IP>` / `<VPS3_IP>` / `<PG_HOST>` / `<MYSQL_HOST>`）；`secret-check.sh` + pre-commit 钩子（`make hooks-install`）就位，`make secret-check` 可跑且干净仓零命中 | [`asset_isolation_plan.md`](./asset_isolation_plan.md) §10 · [`../scripts/secret-check.sh`](../scripts/secret-check.sh) | ✅已完成 |
+| 2 | qwen API key —— **用户已备好** | 阻塞 | 配置 | `.env` 中 `DASHSCOPE_API_KEY` 非空且可调通 | [`../deploy/.env.prod.example`](../deploy/.env.prod.example) · [`../deploy/.env.local`](../deploy/.env.local)（本地，gitignored） | ✅已完成（2026-09-20：secrets 的 `QWEN_API_KEY` 已回填本地 `.env.local`；`scripts/qwen-verify.sh` 与 `ai-memory doctor` 均实测调通） |
+| 3 | qwen embedding 的 **model + dim**（**针对本地部署**写入环境配置；并在**部署文档**中说明未来生产环境的配置） | 阻塞 | 配置 | ① 本地环境配置的 `[embeddings]` 填真实值（**不可留 `dim = 0`**）并本地调通 —— `ai-memory doctor` 的 Embeddings Reachability 显示 `qwen:<model>` 且维度一致 ② **部署文档已说明未来生产环境**（服务器 `/opt/ai-memory-mcp`）的对应配置与差异 | [`../deploy/config.toml.tmpl`](../deploy/config.toml.tmpl) · [`../deploy/config.local.toml`](../deploy/config.local.toml)（本地，gitignored）· [`../deploy/README.md`](../deploy/README.md) · [`../deploy/deployment-plan.md`](../deploy/deployment-plan.md) · [`../scripts/qwen-verify.sh`](../scripts/qwen-verify.sh) · [`upstream_coupling_surface.md`](./upstream_coupling_surface.md) F1–F3 | ✅已完成（2026-09-20：`qwen3.7-text-embedding` / `dim = 1024`；doctor 显示 1024-dim，写入 + 召回 + curator `auto_tagged = 1` 端到端通过；生产侧 `config.toml.tmpl` 同结构，端点用 `<QWEN_BASE_URL>` 占位符） |
+| 4 | **本地启动 ai-memory-mcp（按默认配置）** | 任务 | 开发环境 | 本机按默认配置启动成功，并通过 MCP 完成一次写入 + 召回，作为后续方案对照的基线 | `product-backlog.md` #1 · `dev-plan.md` §3 | ☐未开始 |
+| 5 | **给出「多用户隔离是否可实现」的明确结论** | 研究 | 功能 | 结论落盘（可实现 / 不可实现 / 有条件可实现），并指明所依赖的防线（D1–D5）与验证项（V1–V4）、以及未决前提 | [`multiuser_isolation.md`](./multiuser_isolation.md) · 本文件「阻断级风险」 | ☐未开始 |
+| 6 | **D1 确认**：门户启动机制 **β′**（镜像内带二进制 + 子进程）vs **α**（`docker exec` + docker socket） | 任务 | Web App | 决议写入 `deployment_strategy.md` §0；若选 α 须书面接受「公网门户持 root 等价权限」并补 socket 加固 | [`admin_portal_design.md`](./admin_portal_design.md) §4 与附录 A | ⏸待决策 |
+| 7 | **`tmp_user_key_option1.md` 处置**（移入 `specs/` 或加 `.gitignore`） | 任务 | 安全 | 仓根目录不再有未跟踪的留档文件 | [`asset_isolation_plan.md`](./asset_isolation_plan.md) §10 · `tmp_user_key_option1.md` | ⏸待决策 |
+| 8 | **探针：上游保存 memory 时是否支持多语言** | 研究 | MCP | 给出明确结论（是否支持多语言存储 / 检索、有无相关配置项、有无已知限制）；结论回写 `product-backlog.md` 的「记忆内容的多语言支持」条目 | `product-backlog.md` #10 · 上游源码 | ☐未开始 |
+| 9 | **`--profile` 定档**：对外暴露哪一档；SSH / 门户模板是否补写 `--profile` | 研究 | MCP | 实测 `v0.10.0` 各档工具数（本地 clone 实测：core 7 / graph 19 / admin 21 / power 56 / **full 101**；`memory_capabilities` 所有档位 always-on，故实际注册数 +1）；决议写入门户模板、SSH 模板与公开文档 | [`mcp_tool_inventory.md`](./mcp_tool_inventory.md) §5 · `product-backlog.md` #12 | ⏸待决策 |
+| 10 | **MCP 对外能力清单定稿**（档位 / i18n 范围 / LLM 与备份选择的最终决议） | 任务 | MCP | 清单定稿并落入公开文档；档位与 **#9** 的决议一致 | [`mcp_tool_inventory.md`](./mcp_tool_inventory.md) · `product-backlog.md` #19 | ☐未开始 |
+| 11 | **更新 `hk_vps_4/specs/` 相关技术方案（明确方案部分）** | 任务 | 文档 | 受本次重排影响的技术 spec 全部同步（编号引用去耦合、排期指向正确）；各文件追加变更记录 | `hk_vps_4/specs/` 全目录 | ☐未开始 |
 
 > **执行本 Sprint 时须核对的静默失败点**：`dev-plan.md` §3.4 的三个（embedder 降级、curator fail-open `tagged=0`、config 挂载路径错误导致 tier 退回 semantic）+ 本文件「**阻断级风险**」的 **R1**（会话漏设/写错 `AI_MEMORY_DB` → 所有用户静默共用同一库）。**R1 是其中唯一不报错、且后果是数据串号的一项。**
 
@@ -93,7 +95,7 @@ Sprint Goal: MCP 本地实现并验证
 
 | # | 事项 | 类别 | 模块 | 验收条件 | 关联文档 | 状态 |
 | --- | --- | --- | --- | --- | --- | --- |
-| 1 | 定制 — **LLM 选择**落地 | 配置 | 配置 | `tier = "smart"`、`[llm]` qwen/qwen-plus、`[llm.auto_tag]` 只写 model；`ai-memory doctor` 通过；Embeddings Reachability 显示 `qwen:<model>` 且维度一致 | `product-backlog.md` #8 · [`../deploy/config.toml.tmpl`](../deploy/config.toml.tmpl) | ☐未开始 |
+| 1 | 定制 — **LLM 选择**落地 | 配置 | 配置 | `tier = "smart"`、`[llm]` qwen/qwen-plus、`[llm.auto_tag]` 只写 model；`ai-memory doctor` 通过；Embeddings Reachability 显示 `qwen:qwen3.7-text-embedding` 且维度为 **1024**；端点为私有 MaaS（`base_url` 显式覆盖，公开仓写 `<QWEN_BASE_URL>`） | `product-backlog.md` #8 · [`../deploy/config.toml.tmpl`](../deploy/config.toml.tmpl) · [`../scripts/qwen-verify.sh`](../scripts/qwen-verify.sh) | ☐未开始（模型与维度已定并本地验证，待生产侧落地复核） |
 | 2 | 定制 — **工具档位**落地 | 配置 | MCP | 按 Sprint 2 的定档决议，把 `--profile` 写入门户模板与 SSH 模板；用 `initialize` 回包核对实际暴露的工具数与清单一致 | `product-backlog.md` #12 · [`mcp_tool_inventory.md`](./mcp_tool_inventory.md) | ☐未开始 |
 | 3 | 定制 — **可用性前提（agent attestation）** | 配置 | 配置 | `AI_MEMORY_REQUIRE_AGENT_ATTESTATION=0` 落到**所有** spawn 路径（门户模板 / forced command / compose / cron）；漏设时显式报错而非静默失败 | `product-backlog.md` #15 · [`../deploy/docker-compose.prod.yml`](../deploy/docker-compose.prod.yml) | ☐未开始 |
 | 4 | 定制 — **审计与限流（上游 `[limits]`）** | 配置 | 配置 | `[limits]` 段落地（`max_memories_per_day` / `max_storage_bytes` / `max_links_per_day` / `max_page_size` / `max_inflight_requests` 等）；改配置后超限写入被拒且报错可读；`memory_quota_status` 可读到配额与用量；**实测给出 `max_inflight_requests` 对 stdio 会话是否生效的结论** | `product-backlog.md` #17 · `src/config.rs:3703-3760` | ☐未开始 |
@@ -143,8 +145,7 @@ Sprint Goal: 生产上线与备份闭环
 | 5 | **admin portal 部署 + 多用户隔离落地** | 功能 | 部署 | 走通「签发 key → 建立会话 → 隔离生效」；通过 [`multiuser_isolation.md`](./multiuser_isolation.md) §7 与 [`admin_portal_design.md`](./admin_portal_design.md) §13；**且必须先通过 Sprint 3 的隔离端到端验证（含负向 V1）** | `product-backlog.md` #4 / #26 · 本文件 Sprint 3 #6 | ☐未开始 |
 | 6 | 定制 — **接入面**落地（HTTP MCP + SSH stdio） | 功能 | 部署 | 两条路径都能完成 MCP 握手并成功读写；**停掉门户后 SSH 路径仍可用**（降级不失效） | `product-backlog.md` #14 · [`admin_portal_design.md`](./admin_portal_design.md) §3.1 | ☐未开始 |
 | 7 | 定制 — **备份与恢复**落地（含门户自身库）+ 首次外迁 + 恢复演练 | 功能 | 部署 | 每用户库逐一快照 + manifest；**门户自身库**（与用户记忆库分离存放）纳入同一外迁流程；按 RPO ≤ 24h / RTO ≤ 2h / 日备 30 代 + 月备 12 代 落地；恢复演练可重复执行且通过 | `product-backlog.md` #9 · [`multiuser_isolation.md`](./multiuser_isolation.md) §5.4 | ☐未开始 |
-| 8 | **仓库真实 IP 脱敏**（26 处） | 安全 | 安全 | 全仓 grep 无真实 IP（4 号机 / 阿里云 PG / 野草云3）；`<VPS4_IP>` 等占位符到位；真实值仅存服务器侧或密码管理器。（仓库转私有后紧迫性下降，但仍建议执行） | [`asset_isolation_plan.md`](./asset_isolation_plan.md) §10 | ☐未开始 |
-| 9 | **上线验收** | 任务 | 部署 | 三份验收清单全部通过：`dev-plan.md` §3.3 冒烟 + [`multiuser_isolation.md`](./multiuser_isolation.md) §7 + [`admin_portal_design.md`](./admin_portal_design.md) §13 | `product-backlog.md` #26 | ☐未开始 |
+| 8 | **上线验收** | 任务 | 部署 | 三份验收清单全部通过：`dev-plan.md` §3.3 冒烟 + [`multiuser_isolation.md`](./multiuser_isolation.md) §7 + [`admin_portal_design.md`](./admin_portal_design.md) §13 | `product-backlog.md` #26 | ☐未开始 |
 
 > **执行本 Sprint 时须核对的静默失败点**：`dev-plan.md` §3.4 的三个（embedder 降级、curator fail-open `tagged=0`、config 挂载路径错误导致 tier 退回 semantic）+ 本文件「**阻断级风险**」的 **R1**。**上线前 D5 必须关闭**：Sprint 3 的负向验证未通过则不得上线。
 
@@ -176,3 +177,6 @@ Sprint Goal: 升级治理闭环
 | 2026-09-20 | 新增「多语言探针」（源自 `product-backlog.md` i18n 评审）与「本仓转私有」；「仓库真实 IP 脱敏」标注优先级变化（**重排前编号**：Sprint 1 #14 / #15、Sprint 2 #1） |
 | 2026-09-20 | 新增「**阻断级风险**」独立登记节：R1（漏设/写错 `AI_MEMORY_DB` → 所有用户静默共用同一库，含 `effective_db()` 优先级陷阱的源码依据）、R2（隔离无纵深）、R3（SSH forced command 同类风险）；补防线 D1–D5 与验证方法 V1–V4；新增「固化失败模式与防线」（含移除 `config.toml.tmpl` 的 `db` 键）与「多用户隔离端到端验证（含负向，不过即阻断后续上线）」两项；「admin portal 部署 + 多用户隔离落地」增加前置依赖（**重排前编号**：Sprint 1 #16、Sprint 2 #14、Sprint 2 #10） |
 | 2026-09-20 | **重排为 6 个 Sprint**：Sprint 1 定稿为已完成（Goal 改为「制定产品化计划」，7 项全标完成）；Sprint 2「本地启动 + 探针明确方案」与 Sprint 3「MCP 本地实现并验证」承接原 Sprint 1 的 #8–#16 与隔离验证、技术方案更新；Sprint 4「门户开发并与 MCP 集成」、Sprint 5「生产上线与备份闭环」、Sprint 6「升级治理闭环」承接 `product-backlog.md` 的 26 条待办。新增**编号口径**说明（`#N` = 所在 Sprint 的条目编号）；跨文档 Sprint 编号引用改为按条目名称指向，避免重排后失效 |
+| 2026-09-20 | **Sprint 2 顺序调整并重编号（1–11）**：私有化 → DashScope key → embedding model+dim → 本地启动 → 隔离可行性结论 → D1 确认 → 临时文件处置 → 多语言探针 → `--profile` 定档 → 对外能力清单定稿 → 技术方案更新。其中 **#3 补充约束**：embedding 配置**针对本地部署写入环境配置**，并在**部署文档中说明未来生产环境的配置**。移除原「本地启动 = 本 Sprint 首先做」标注，改为表头声明「按编号顺序执行」 |
+| 2026-09-20 | **决议反转：取消「本仓转私有」，保持公开仓**。Sprint 2 #1 由「把本仓改为私有」改写为「仓库 IP 脱敏 + 防复发护栏」（真实值迁入 gitignored 的 `hk_vps_4/secrets.local.hk_vps_4.md`，文档用具名占位符 `<VPS4_IP>` / `<VPS3_IP>` / `<PG_HOST>` / `<MYSQL_HOST>`）；Sprint 5 #8「仓库真实 IP 脱敏」删除（已前移并入 Sprint 2 #1 并标记完成），原 #9「上线验收」重编号为 #8；Sprint 5 现 #1–#8。理由：野草云4 IP 已由公开 DNS 解析，重写历史零收益且需 force push |
+| 2026-09-20 | **Sprint 2 #2 / #3 完成（qwen 模型确定并实测可用）**：#2 key 已回填本地 `.env.local`（gitignored）并调通；#3 嵌入模型定为 `qwen3.7-text-embedding` / `dim = 1024`，由新增的 [`../scripts/qwen-verify.sh`](../scripts/qwen-verify.sh) 在私有 MaaS 端点实测取得（`/models` 探测 + 真实 embeddings 调用取向量长度），本地 `config.local.toml` 与生产 `config.toml.tmpl` 同步。端到端证据：doctor 显示 1024-dim、写入 + 召回成功、curator `auto_tagged = 1`。连带订正：`[llm.auto_tag]` 由「不声明该段」改为「只写 model」（与 §0 决议一致且已实测）；`secret-check.sh` 扩为同时拦截 `*.maas.aliyuncs.com`；新增占位符 `<QWEN_BASE_URL>`（`deployment_strategy.md` / `asset_isolation_plan.md` / `product-backlog.md` / `upstream_coupling_surface.md` 同步） |

@@ -20,7 +20,7 @@
 ~/code/memory.agent-mate.ai/            # 父仓（公开）
 │                                         remote = https://github.com/ethanhuangcst/memory.agent-mate.ai.git
 ├── .gitignore                           # 第一行：ai-memory-mcp/
-├── Makefile                             # upstream / pin / pin-update / preflight / preflight-test / backup / restore-drill
+├── Makefile                             # upstream / pin / pin-update / preflight / preflight-test / backup / restore-drill / secret-check / hooks-install
 ├── .github/workflows/                   # 平台强制路径（根目录例外，见下方说明）
 ├── .github/scripts/                     # 平台强制路径下的辅助脚本（render-preflight.py）
 ├── ai-memory-mcp/                       # 嵌套 clone（gitignored）—— 上游，只读约定
@@ -74,7 +74,7 @@
 | # | 护栏 | 实现 |
 | --- | --- | --- |
 | 1 | 父仓 `.gitignore` 第一行 `ai-memory-mcp/` | 迁移时立即写入，先于任何 `git add` |
-| 2 | pre-commit 守卫拒绝 stage `ai-memory-mcp/` | 一行脚本（防 `git add -f` 手滑）；可选但成本低 |
+| 2 | pre-commit 守卫：扫描暂存区公网 IP（`secret-check.sh` via `make hooks-install`，已实现）；拒绝 stage `ai-memory-mcp/` 由护栏 1 gitignored 天然阻挡 | 已实现（`hk_vps_4/scripts/secret-check.sh` + `.git/hooks/pre-commit`；可用 `git commit --no-verify` 绕过，纪律靠评审） |
 | 3 | 上游 remote 非本方所有 → **天然无推送权** | 无需额外机制 |
 | 4 | 每次上游升级后，父仓 `git status` 必须仍然干净 | 写入 dev-plan.md §5 升级预检清单 |
 | 5 | 父仓记录上游对应版本 | **`hk_vps_4/upstream.lock` 为唯一真相源**（上游 tag / commit / 镜像 digest / schema / 沉淀期阈值）；`deployment-plan.md` §3.1 提供人读映射表；`make pin` 打印、`make pin-update` 回写 |
@@ -155,19 +155,26 @@ up: / down:          ## 本地栈起停（见 dev-plan.md §3）
 | 类别 | 处理 |
 | --- | --- |
 | API key / AK/SK / SSH 私钥 / 密码 | 永不入仓；模板只含占位符，真实值在服务器 `.env` / 密码管理器 |
-| 节点公网 IP | 写作 `<VPS4_IP>`；真实值在服务器侧 `secrets.local.*`（不入仓） |
+| 节点公网 IP（野草云4） | 写作 `<VPS4_IP>` |
+| 节点公网 IP（野草云3，仅作「不得触碰」约束） | 写作 `<VPS3_IP>` |
+| 阿里云自建 PostgreSQL | 写作 `<PG_HOST>` |
+| 阿里云 MySQL | 写作 `<MYSQL_HOST>` |
+| 私有 MaaS 端点主机名（qwen 的 LLM 与 embedding） | 写作 `<QWEN_BASE_URL>` —— 主机名含 workspace 标识，同属可被探测的信息 |
+| 真实值归属 | 以上 4 个 IP 与 `<OSS_BUCKET>` / `<QWEN_BASE_URL>` 真实值统一写入 `hk_vps_4/secrets.local.hk_vps_4.md`（被 `.gitignore` 的 `secrets.local*` 忽略，**永不入仓**）；仓库内一律用占位符 |
 | 运维入口完整 URL | 可保留（DNS 公开可解析）；求稳可写 `<PORTAINER_URL>` |
 | 备份桶名 | 写作 `<OSS_BUCKET>`（避免为攻击者提供探测目标） |
-| 长期防线 | pre-commit secret 扫描（如 gitleaks） |
+| 长期防线 | pre-commit secret 扫描（`secret-check.sh` + `make hooks-install`；零外部依赖、可离线，不引入 gitleaks） |
 
 > 本文档自身也将进入公开仓库，已按以上规则使用占位符。
+
+> **历史处理说明（2026-09-20）：** 野草云4 的 `<VPS4_IP>` 已由公开 DNS 解析（`portainer4.agent-mate.ai` / `nginx4.agent-mate.ai` 均指向它），属「卫生」级别；故**不重写历史**，仅在工作区将真实值迁出到 `hk_vps_4/secrets.local.hk_vps_4.md` 并改用具名占位符。另 3 个 IP（`<VPS3_IP>` / `<PG_HOST>` / `<MYSQL_HOST>`）未公开解析，是真正有保密价值的，现已从仓库文档移除。
 
 ## 11. 风险与缓解
 
 | 风险 | 缓解 |
 | --- | --- |
 | 迁移遗漏文件 | §9 清单逐项勾选；以两仓 `git status` 干净为完成判据 |
-| 公开仓意外提交 secrets | 迁移前逐文件检索；gitleaks 长期防线 |
+| 公开仓意外提交 secrets / 真实 IP | 迁移前逐文件检索；`secret-check.sh`（pre-commit 钩子 + `make secret-check` 手动）长期防线；真实值只在 `hk_vps_4/secrets.local.hk_vps_4.md` |
 | 文档断链 | 隔离规则第 2 条（URL + tag）；迁移步骤 6 全量检索 |
 | 父仓误吞上游代码（gitlink） | §3 护栏 1–2 |
 | 上游 clone 纪律失守（有人改了它） | §3 护栏 4（git status 校验）+ §4 约定；极端情况退回物理分仓 |
@@ -181,3 +188,4 @@ up: / down:          ## 本地栈起停（见 dev-plan.md §3）
 | 2026-09-20 | 确立资产隔离：初版为物理分仓；同日改采**协同布局**（父仓 `memory.agent-mate.ai` 公开仓 + 嵌套 gitignored 上游 clone + `hk_vps_4/` 自有资产）。**迁移已执行（同日，见 §9 清单）。** |
 | 2026-09-20 | 新增**版本契约层**：`hk_vps_4/upstream.lock`（单一真相源）+ `specs/upstream_coupling_surface.md`（耦合面清单）+ `scripts/upstream-preflight.sh`（升级准入判定）+ `.github/workflows/upstream-track.yml`（每日跟踪）。§3 护栏 5 与 §5 规则 3 的映射载体由 `deployment-plan.md` 正文改为锁文件；§2 判据补充根目录例外（`.github/workflows/`，平台强制）。 |
 | 2026-09-20 | **目录更名**：`hk_vps_4/docs/` → **`hk_vps_4/specs/`**；仓根 `specs/`（ADR / knowledge）并入 `hk_vps_4/specs/`。理由：自有资产（含决议与知识）全部集中在 `hk_vps_4/` 之下，根目录只余基础设施与平台强制路径，§2 判据回到「只有两种归属」。同步清扫全仓路径引用（Makefile / upstream.lock / 预检脚本 / Actions / deploy 文档 / ADR / knowledge）。 |
+| 2026-09-20 | **取消「转私有仓」决议，保持公开仓**：把 4 个真实公网 IP（真实值见 `hk_vps_4/secrets.local.hk_vps_4.md`）从仓库文档迁出到该 gitignored 文件，文档内改用具名占位符（`<VPS4_IP>` / `<VPS3_IP>` / `<PG_HOST>` / `<MYSQL_HOST>`）。新增 `secret-check.sh` 扫描已跟踪/暂存文件公网 IP + pre-commit 钩子（`make hooks-install`）防复发。理由：野草云4 IP 已由公开 DNS 解析，重写历史零收益且需 force push；详见 deployment_strategy.md §0 决议 10 与本文档 §10。 |

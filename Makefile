@@ -6,8 +6,10 @@
 UPSTREAM_URL := https://github.com/alphaonedev/ai-memory-mcp.git
 LOCK := hk_vps_4/upstream.lock
 PREFLIGHT := hk_vps_4/scripts/upstream-preflight.sh
+SECRET_CHECK := hk_vps_4/scripts/secret-check.sh
+PRE_COMMIT_HOOK := hk_vps_4/scripts/git-hooks/pre-commit
 
-.PHONY: help upstream pin pin-update preflight preflight-test backup restore-drill
+.PHONY: help upstream pin pin-update preflight preflight-test backup restore-drill secret-check hooks-install
 
 help:
 	@grep -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*## "} {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
@@ -32,3 +34,10 @@ backup: ## 备份并外迁：快照 → sha256 → ossutil 上传 → 回读比�
 
 restore-drill: ## 季度恢复演练（硬验收，可重复执行）
 	bash hk_vps_4/backup/restore-drill.sh
+
+secret-check: ## 扫描已跟踪文件中的公网 IP（真实值应放 secrets.local）
+	bash $(SECRET_CHECK)
+
+hooks-install: ## 安装 pre-commit 钩子到 .git/hooks/（不改 git config）
+	install -m 0755 $(PRE_COMMIT_HOOK) .git/hooks/pre-commit
+	@echo "已安装 pre-commit 钩子（扫描暂存区公网 IP）；可用 git commit --no-verify 绕过"

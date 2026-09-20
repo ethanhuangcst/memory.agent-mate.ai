@@ -1,9 +1,9 @@
-# ai-memory 部署方案 — 野草云4（`68.64.176.124`）
+# ai-memory 部署方案 — 野草云4（`<VPS4_IP>`）
 
 > **状态：** 决议完成，待执行
-> **节点：** 野草云4 · `68.64.176.124` · Debian 13 · 4 vCPU / 7.8 GiB / `/` 89G
+> **节点：** 野草云4 · `<VPS4_IP>` · Debian 13 · 4 vCPU / 7.8 GiB / `/` 89G
 > **对齐基准：** [`hk_vps_4_settings.md`](./hk_vps_4_settings.md) · [`vps4_new_deployment_instruction.md`](./vps4_new_deployment_instruction.md)
-> **原则：** 本文件不写密码 / Token / API key。密钥见本机 `secrets.local.hk_vps_4.md`（gitignore）。
+> **原则：** 本文件不写密码 / Token / API key。密钥见本机 `hk_vps_4/secrets.local.hk_vps_4.md`（gitignore，不入仓，故不写为链接）。
 > **as_of：** 2026-09-20（参考层 clone HEAD `96b8c694`；**制品层版本坐标以 [`../upstream.lock`](../upstream.lock) 为唯一真相源**——当前 release `v0.10.0` / `IMAGE_TAG=0.10.0` / schema 80）
 
 ---
@@ -15,8 +15,8 @@
 | 1 | **存储后端** | **SQLite 命名卷**（非 Postgres） | 官方 GHCR 镜像用 `cargo build --release` 默认特性构建，**不含 `sal-postgres`**；用官方镜像即零定制、零 CI 改动 | DB 绑死 4 号机，节点挂则数据停在最近快照；不可横向扩。官方定位 <5 agent / <10GB |
 | 2 | **镜像** | `ghcr.io/alphaonedev/ai-memory:0.10.0`（**固定版本号，禁用 `latest`**；**标签 + 指纹双写**——指纹记在 [`../upstream.lock`](../upstream.lock)，防标签被重推） | 上游 release workflow 已发布；符合「边缘只 pull，不 build」；0.10.0 修正了 0.9.0 的 attestation 默认值缺陷 | 无（属 §4 已批准例外：本仓库无构建工作流） |
 | 3 | **tier** | **`smart`** | 需要自动打标 / 归并 / 查询扩展 / 矛盾检测 | 每写一次触发 LLM 调用（费用）；需常驻 curator |
-| 4 | **LLM** | **云端 qwen（DashScope）便宜档** | LLM 跑在云端，服务器不承载模型权重 | 每写一次的 API 费用；`qwen-turbo`/`plus` 档质量弱于旗舰档 |
-| 5 | **Embedder** | **走云端 API**（非本地 Ollama） | 避免在 4 vCPU / 7.8 GiB 上再跑 Ollama | **必须显式设 `dim`**（见 §3.1） |
+| 4 | **LLM** | **云端 qwen 便宜档** —— 主 `qwen-plus`，`[llm.auto_tag]` **只写** `model = "qwen-turbo"`；**走私有 MaaS 端点**，必须显式 `[llm].base_url` 覆盖（公开仓用占位符 `<QWEN_BASE_URL>`） | LLM 跑在云端，服务器不承载模型权重；同一个 workspace key 可同时供 LLM 与 embedding | 每写一次的 API 费用；`qwen-turbo`/`plus` 档质量弱于旗舰档；workspace 级 key 在**公网** dashscope 端点不通 —— 漏配 `base_url` 会直接鉴权失败 |
+| 5 | **Embedder** | **走云端 API**（非本地 Ollama）—— `qwen3.7-text-embedding`，**实测 `dim = 1024`**（2026-09-20 由 `../scripts/qwen-verify.sh` 实测；端点 `/models` 中另有同维度的 `qwen3.7-text-embedding-flash` 可选） | 避免在 4 vCPU / 7.8 GiB 上再跑 Ollama | **必须显式设 `dim`**（见 §3.1）；维度定下即绑定已写入向量，换模型须重跑 `reembed` 回填 —— 同为 1024 维也不等于向量可比 |
 | 6 | **客户端接入** | **stdio-over-SSH**（方案 A） | 唯一「调用者零依赖」方案；零公网暴露；读写同一个 DB，无裂脑；零新代码 | 每次启动一次 SSH 握手延迟 |
 | 7 | **域名 / NPM / HTTPS** | **不需要** | 无公网 HTTP 入口 | 无法用 REST/curl 从外部访问（如需要，见 §8 待办） |
 | 8 | **HTTP api_key** | **不设置** | HTTP 面不对外暴露，且 stdio MCP 按设计无 key 机制 | 无 |
@@ -27,7 +27,7 @@
 
 | 方案 | 排除原因 |
 |---|---|
-| 直接复用阿里云自建 PostgreSQL | 官方镜像不含 `sal-postgres`，需自建镜像 + CI；且 `101.132.156.250` 类跨境公网访问引入额外延迟与故障面。**作为 Phase 1 升级路径保留**（见 §8） |
+| 直接复用阿里云自建 PostgreSQL | 官方镜像不含 `sal-postgres`，需自建镜像 + CI；且 `<PG_HOST>` 类跨境公网访问引入额外延迟与故障面。**作为 Phase 1 升级路径保留**（见 §8） |
 | 客户端「远程 MCP 直连 `https://.../mcp`」 | **上游未实现该端点**（证据见 §7）。协议本身可行，但本产品未实现服务端 HTTP 传输 |
 | federation 各机本地复制 | 官方将 federation 标记为 **beta**，不建议无人值守生产；需维护密钥对与 allowlist；最终一致性而非实时 |
 | stdio→HTTP 转换网关 | 违反「调用者零依赖」偏好（需服务器侧引入第三方组件） |
@@ -118,17 +118,21 @@ db = "/data/ai-memory.db"
 
 # ---------------------------------------------------------------------------
 # [llm] —— smart 档的整理能力后端。
-# qwen 是官方一等别名（等价 dashscope），默认 base_url:
+# qwen 是官方一等别名（等价 dashscope），但其默认 base_url 是**公网**端点：
 #   https://dashscope.aliyuncs.com/compatible-mode/v1
+# 本项目走**私有 MaaS workspace**，必须显式覆盖 base_url —— workspace 级 key
+# 在公网端点不通。公开仓用占位符 <QWEN_BASE_URL>，真实值见
+# hk_vps_4/secrets.local.hk_vps_4.md 的 QWEN_BASE_URL（含 /compatible-mode/v1）。
 # ---------------------------------------------------------------------------
 [llm]
 backend     = "qwen"
-model       = "qwen-plus"          # 便宜档；更省可用 qwen-turbo
+model       = "qwen-plus"          # 便宜档（2026-09-20 实测 chat OK）
+base_url    = "<QWEN_BASE_URL>"
 api_key_env = "DASHSCOPE_API_KEY"  # 指向环境变量名，不是 key 本身
 
-# ⚠️ 关键：**不要**声明 [llm.auto_tag] 段。
+# ⚠️ 关键：声明 [llm.auto_tag] 时**只写 model，绝不写 backend**。
 #
-# 源码证据（src/config.rs::resolve_llm_auto_tag）：省略该段时逐字段继承 [llm]
+# 源码证据（src/config.rs::resolve_llm_auto_tag）：该段省略的字段逐字段继承 [llm]
 #   - backend 未设 → 继承 [llm].backend（qwen）
 #   - model   未设且 backend != ollama → 继承 [llm].model
 # 而官方样例文档（docs/CONFIG_SCHEMA.md）把该段写成：
@@ -136,6 +140,9 @@ api_key_env = "DASHSCOPE_API_KEY"  # 指向环境变量名，不是 key 本身
 #   backend = "ollama"
 #   model   = "gemma3:4b"
 # 照抄这段会在没有 Ollama 的机器上把 auto_tag / 查询扩展 / 矛盾检测全部打挂。
+# （只写 model 的写法已于 2026-09-20 本地实测：curator `auto_tagged = 1`）
+[llm.auto_tag]
+model = "qwen-turbo"
 
 # ---------------------------------------------------------------------------
 # [embeddings] —— 必须显式指向 API。
@@ -143,21 +150,24 @@ api_key_env = "DASHSCOPE_API_KEY"  # 指向环境变量名，不是 key 本身
 # Ollama；本机无 Ollama，因此必须覆盖。
 # ---------------------------------------------------------------------------
 [embeddings]
-backend  = "qwen"
-model    = "<按 DashScope 文档确认，例如 text-embedding-v3 系列>"
-dim      = 0    # ⚠️ 必须显式填写与该模型一致的维度，见下方说明
+backend        = "qwen"
+model          = "qwen3.7-text-embedding"   # 2026-09-20 实测可用
+dim            = 1024                        # 实测返回的向量长度
+base_url       = "<QWEN_BASE_URL>"           # 与 [llm] 同一私有 MaaS 端点
+backfill_batch = 100
 
-# dim 为什么必须显式设：
+# 以上数值由 ../scripts/qwen-verify.sh 实测确定。dim 为什么必须显式设：
 #   - src/config.rs::KNOWN_EMBEDDING_DIMS 只覆盖 nomic / MiniLM / BGE /
-#     gemini-embedding-2 / granite / snowflake-arctic，**不含任何 DashScope 模型**
+#     gemini-embedding-2 / granite / snowflake-arctic，**不含任何 qwen 模型**
 #   - 未命中表且未设 dim 时，会退回 tier preset 的维度（smart = 768），
-#     可能与该模型实际输出维度不符 → 写入失败或检索质量异常
+#     与实际的 1024 不符 → 写入失败或检索质量异常
 #   - **不存在 AI_MEMORY_EMBED_DIM 环境变量**，dim 只能写在配置文件的这一段
+#   - dim 填 0 / 负数（非正值）会被**静默忽略**并回落 768 —— 模板里曾经的
+#     dim = 0 只是占位符，绝不可原样上线
 #   - 维度一旦定下即绑定到已写入的向量；后续换模型需执行 `ai-memory reembed`
 #     回填（批大小由 [embeddings].backfill_batch 或
 #     AI_MEMORY_EMBED_BACKFILL_BATCH 控制）
-
-backfill_batch = 100
+#   - 同为 1024 维的 qwen3.7-text-embedding-flash 也**不等于**向量可比
 
 # ---------------------------------------------------------------------------
 # 说明：本部署不对外开放 HTTP，故不设置顶层 `api_key`。
@@ -262,7 +272,7 @@ command="docker exec -i ai-memory-mcp ai-memory mcp --tier smart",no-pty,no-port
 
 ```
 Host ai-memory
-    HostName 68.64.176.124
+    HostName <VPS4_IP>
     User aimem-ssh
     IdentityFile ~/.ssh/ai_memory_cursor_ed25519
     IdentitiesOnly yes
@@ -484,7 +494,7 @@ docker exec ai-memory-mcp ai-memory doctor
 |---|---|---|
 | 1 | 部署制品仓库 | ✅ 已决：**公开**仓 `ethanhuangcst/memory.agent-mate.ai`（名与域名同名；注意本方案不含该域名，见 §9 变更记录） |
 | 2 | qwen 模型档位 | ✅ 已决：主 `qwen-plus`，`[llm.auto_tag]` 用 `qwen-turbo`（**只写 model，不写 backend**） |
-| 3 | DashScope embedding 的具体 `model` 与 `dim` | ⏳ **待你提供**（从 DashScope 文档/控制台取）。`KNOWN_EMBEDDING_DIMS` 不含 DashScope 模型，`dim` 必须手工填且必须一致；填错不报错，只会召回异常。**回填后必须跑 §5.1 的 doctor 探针验证** |
+| 3 | qwen embedding 的具体 `model` 与 `dim` | ✅ **已实测确定**（2026-09-20）：`qwen3.7-text-embedding` / **1024 维**，由 `../scripts/qwen-verify.sh` 在私有 MaaS 端点上实测（`/models` 探测 + 真实 embeddings 调用取向量长度）；已回写 `config.toml.tmpl` 与本地 `config.local.toml`，并通过 doctor + 写入/召回 + curator `auto_tagged=1` 端到端验证。备选 `qwen3.7-text-embedding-flash`（同为 1024 维）|
 | 4 | curator | ✅ 已决：**常驻**（独立 compose service；先 `--once --dry-run` 预演审阅；`--max-ops 50`；Phase 0 核对 `tagged > 0`） |
 | 5 | 备份外迁 | ✅ 已决（2026-09-20 更新）：**默认方案** —— `ai-memory backup` 本地快照 + cron + ossutil 外迁 OSS 香港 region 私有桶（RAM 最小权限）+ 季度恢复演练；升级门禁「无新鲜外迁备份，不升级」。多租户备份 MCP（mcp.oss-bak.com）**移出本计划、另建项目**，其独立需求规格见 [`mcp_oss_bak_com_requirements.md`](./mcp_oss_bak_com_requirements.md)（移交物）。详见 [`dev-plan.md`](./dev-plan.md) §4–5 |
 | 6 | SSH 身份 | ✅ 已决：**单建权限受限用户** + docker 组 + forced-command 密钥（不用 root） |
@@ -492,7 +502,7 @@ docker exec ai-memory-mcp ai-memory doctor
 
 ### 8.2 Phase 1 前置：PG 扩展核查（若考虑迁移）
 
-在自建 PostgreSQL（`101.132.156.250`）上执行以下**只读** SQL 并回填：
+在自建 PostgreSQL（`<PG_HOST>`）上执行以下**只读** SQL 并回填：
 
 ```sql
 -- 1. 版本
@@ -551,6 +561,8 @@ SHOW shared_preload_libraries;
 | 2026-09-20 | **建立版本契约层（单一真相源）**：新增 `hk_vps_4/upstream.lock`（tag + commit + schema + **镜像指纹**）、`specs/upstream_coupling_surface.md`（耦合面清单）、`scripts/upstream-preflight.sh`（升级准入判定，含「该版本尚不稳定，不适合更新」话术）、`.github/workflows/upstream-track.yml`（每日跟踪）。镜像固定粒度定为**标签 + 指纹双写**（防标签被重推） |
 | 2026-09-20 | 订正：§0 决议 10「命名待定」与 §8.1 #1「私有」改为实际状态（公开仓 `ethanhuangcst/memory.agent-mate.ai`）；上游文档引用由 4 处 `blob/96b8c694/…` 改为 `blob/v0.10.0/…`；制品路径 `docs/ye_cao_yun_production/deploy/` 订正为 `hk_vps_4/deploy/` |
 | 2026-09-20 | 本次复核（`sprint_plan.md` 重排为 6 个 Sprint）：文档内**无 Sprint 编号引用**（§8.1 的待办项与 Sprint 2 的 DashScope key / embedding model+dim 一致），**无需改动**。注：§0「无域名 / 无 HTTPS / 无公网入口」将被门户引入的入口修订 —— 按 Sprint 3「同步既有文档 9 处矛盾」与 Sprint 4「公网入口与认证边界」处理 |
+| 2026-09-20 | **qwen 模型确定并实测可用（本地 + 生产同一端点）**：端点为**私有 MaaS workspace** —— `qwen` 别名默认指向公网 dashscope，故 `[llm].base_url` 与 `[embeddings].base_url` 必须显式覆盖，workspace 级 key 在公网端点不通；公开仓用占位符 `<QWEN_BASE_URL>`，真实值仅存 `hk_vps_4/secrets.local.hk_vps_4.md`。模型定为：对话 `qwen-plus`（降级 `qwen-flash`）、结构化/JSON `[llm.auto_tag] model = "qwen-turbo"`（实测支持 `response_format=json_object`）、嵌入 `qwen3.7-text-embedding` **dim = 1024**（端点另有同为 1024 维的 `qwen3.7-text-embedding-flash` 可选）。新增 `../scripts/qwen-verify.sh` 作为可重复探针；新增 gitignored 的 `../deploy/.env.local` 与 `../deploy/config.local.toml` 供本地部署。`secret-check.sh` 扩为同时拦截 `*.maas.aliyuncs.com` 主机名（模式不含具体 workspace 值）。**订正 §3.1 旧文案**「不要声明 `[llm.auto_tag]` 段」→ 改为「只写 model，绝不写 backend」（与 §0 决议 4 一致；只写 model 的写法已本地实测 `auto_tagged = 1`） |
+| 2026-09-20 | **IP 脱敏 + 防复发护栏（保持公开仓）**：取消「本仓转私有」决议；4 个真实公网 IP（真实值见 `hk_vps_4/secrets.local.hk_vps_4.md`）从文档迁出，改用具名占位符 `<VPS4_IP>` / `<VPS3_IP>` / `<PG_HOST>` / `<MYSQL_HOST>`；新增 `secret-check.sh`（`make secret-check`）扫描已跟踪/暂存文件公网 IP + pre-commit 钩子（`make hooks-install`）防复发。理由：野草云4 IP 已由公开 DNS 解析、重写历史零收益且需 force push。详情见 [`asset_isolation_plan.md`](./asset_isolation_plan.md) §10 与 [`sprint_plan.md`](./sprint_plan.md) Sprint 2 #1 |
 
 ---
 

@@ -2,7 +2,13 @@ ai-memory-mcp/
 tmp-memory.md
 .DS_Store
 .env
+# 本机 secret 文件（真实 IP / SSH 密码 / 管理台账号，永不入库）
+secrets.local*
 *.key
+
+# 本地部署：真实 API key 与真实端点（由模板填充而来，永不入库）
+hk_vps_4/deploy/.env.local
+hk_vps_4/deploy/config.local.toml
 
 # IDE / 工具数据：Plan Mode 计划文件等（公开仓不入库，防 `git add .` 误带）
 .codebuddy/

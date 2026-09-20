@@ -20,7 +20,8 @@
 
 - **存储**：SQLite 命名卷（官方镜像不含 `sal-postgres`，走 Postgres 需自建镜像）
 - **镜像**：`ghcr.io/alphaonedev/ai-memory:0.10.0`（固定版本，禁用 `latest`；消费上游官方镜像 = 已批准例外，本仓库无构建工作流）——**版本坐标与镜像指纹的唯一真相源是 [`../upstream.lock`](../upstream.lock)**，本文档不再各自抄写
-- **tier**：`smart`；LLM = qwen（DashScope）主 `qwen-plus` + `[llm.auto_tag]` 仅覆盖 model 为 `qwen-turbo`（**不写 backend**）；embedder 走 API 且**必须显式 `[embeddings].dim`**（DashScope 模型不在 `KNOWN_EMBEDDING_DIMS` 表内）
+- **tier**：`smart`；LLM = qwen 主 `qwen-plus` + `[llm.auto_tag]` 仅覆盖 model 为 `qwen-turbo`（**不写 backend**）；embedder 走 API，`qwen3.7-text-embedding` + **必须显式 `[embeddings].dim = 1024`**（qwen 模型不在 `KNOWN_EMBEDDING_DIMS` 表内，实测维度 1024）
+- **端点**：走**私有 MaaS workspace** —— `[llm].base_url` 与 `[embeddings].base_url` 必须显式覆盖（公开仓用占位符 `<QWEN_BASE_URL>`，真实值见 `hk_vps_4/secrets.local.hk_vps_4.md`）。`qwen` 别名默认指向公网 dashscope，而 workspace 级 key 在公网端点不通
 - **客户端接入**：stdio-over-SSH（forced-command，无公网 HTTP 入口）——因此无域名 / NPM / HTTPS / api_key
 - **容器**：`HOME=/data`（配置路径由 `$HOME` 推导且无法改写）；`AI_MEMORY_REQUIRE_AGENT_ATTESTATION=0`（v0.9 可用性前提）；`serve` 绑 `127.0.0.1`
 - **上游文档陷阱**：`/mcp`、`/sse` 端点不存在；`[llm.auto_tag]` 样例的 `ollama` 会打挂 LLM 功能（详见 deployment_strategy.md §7）
@@ -33,8 +34,8 @@
 
 | # | 项 | 状态 |
 | --- | --- | --- |
-| 1 | DashScope API key | ☐ 待提供 |
-| 2 | DashScope embedding `model` 与 `dim`（填入 config.toml 后必须跑 doctor 探针验证） | ☐ 待提供 |
+| 1 | qwen API key | ✅ 已提供并验证（2026-09-20；`../scripts/qwen-verify.sh` 与 `ai-memory doctor` 均实测调通） |
+| 2 | qwen embedding `model` 与 `dim`（填入 config.toml 后必须跑 doctor 探针验证） | ✅ 已实测确定：`qwen3.7-text-embedding` / `dim = 1024`；已写入 `../deploy/config.toml.tmpl` 与本地 `config.local.toml`，doctor 探针通过 |
 | 3 | SSH 密钥对（调用者 ↔ 野草云4，forced-command） | ☐ 待生成 |
 | 4 | 单建受限用户 `aimem-ssh`（docker 组，不用 root） | ☐ 待执行 |
 | 5 | 部署仓库建立并 push（见 asset_isolation_plan.md §6） | ✅ 已执行（公开仓 `ethanhuangcst/memory.agent-mate.ai`，`main` 已推送） |
@@ -229,7 +230,7 @@ echo '{"jsonrpc":"2.0","id":1,"method":"initialize",...}' | ssh ai-memory     # 
 | # | 动作 | 依赖 |
 | --- | --- | --- |
 | 1 | 父仓初始化 + 资产迁移（asset_isolation_plan.md §8；含 `.gitignore` 护栏与 Makefile） | ✅ 已完成 |
-| 2 | 云资源：DashScope key、embedding model/dim 确认、OSS 桶 + RAM | ☐ |
+| 2 | 云资源：qwen key ✅（已验证）、embedding model/dim ✅（`qwen3.7-text-embedding` / 1024）；**OSS 桶 + RAM 待办** | ☐（仅剩 OSS + RAM） |
 | 3 | 服务器：受限用户 + SSH forced-command + `/opt/ai-memory-mcp` 落地 | ☐ |
 | 4 | Portainer 部署 stack + 冒烟（§3.3） | 1–3 |
 | 5 | 备份：ossutil + 脚本 + cron + 首次外迁 + **恢复演练**（§4） | 4 |

@@ -1,9 +1,9 @@
 # 野草云4 — 运维方案与资源清单（与野草云3 平台层同构）
 
-> **节点**：野草云4 · `68.64.176.124`  
+> **节点**：野草云4 · `<VPS4_IP>`  
 > **角色**：应用/边缘节点（与 [野草云3]() **同一套部署方式**，供未来应用迁入/新建）  
 > **状态**：**平台层已落地**（Docker + `portainer_network` + Portainer + NPM + GHCR registry + 运维域名 HTTPS）  
-> **原则**：本文件不写密码 / Token。SSH / 管理台账号见本机 `secrets.local.hk_vps_4.md`（**gitignore，不入仓，故此处不写为链接**——写了在 GitHub 上必断链）。  
+> **原则**：本文件不写密码 / Token。SSH / 管理台账号见本机 `hk_vps_4/secrets.local.hk_vps_4.md`（**gitignore，不入仓，故此处不写为链接**——写了在 GitHub 上必断链）。  
 > **对齐基准**：[``]() §0 标准运维方案。  
 > **as_of**：2026-08-12（SSH 实机）
 
@@ -21,7 +21,7 @@
 | 外部网络 `portainer_network` | 同节点互通；NPM 用容器名反代 | **已创建；禁止删建** |
 | Portainer CE | Stack 部署/更新 | 目标 `https://portainer4.agent-mate.ai` → `portainer:9443` |
 | Nginx Proxy Manager | TLS + 反代 + Custom Locations | `80`/`443`/`81`；目标 `https://nginx4.agent-mate.ai` → `:81` |
-| Cloudflare | DNS | 各应用域名 A/CNAME → **`68.64.176.124`** |
+| Cloudflare | DNS | 各应用域名 A/CNAME → **`<VPS4_IP>`** |
 
 平台层 Compose：`/root/service-compose.yaml`，`networks.default.name: portainer_network`（`external: true`）。
 
@@ -41,7 +41,7 @@
 
 | | 野草云3 | 野草云4 |
 | --- | --- | --- |
-| IP | `38.55.192.140` | `68.64.176.124` |
+| IP | `<VPS3_IP>` | `<VPS4_IP>` |
 | 现网应用 | hcp / mypoke / kb（+ media 规划） | **空**（平台建好后承接新 app 或迁移） |
 | Portainer / NPM 域名 | `portainer.agent-mate.ai` / `nginx.agent-mate.ai` | `portainer4.agent-mate.ai` / `nginx4.agent-mate.ai` |
 | 外部 DB | 可继续用现有阿里云/独立 MySQL，或新建库 | 按应用新建库名；勿混用他应用库 |
@@ -82,8 +82,8 @@ DNS Name 栏只填 {appname}                    # 不要填 FQDN
 
 | 项 | 值 |
 | --- | --- |
-| 公网 IP | `68.64.176.124` |
-| SSH | user `root`（密码见 secrets.local；建议改 key） |
+| 公网 IP | `<VPS4_IP>` |
+| SSH | user `root`（密码见 `hk_vps_4/secrets.local.hk_vps_4.md`；建议改 key） |
 | Hostname | `qiuge` |
 | OS / Kernel | Debian GNU/Linux 13 (trixie) · `6.12.57+deb13-cloud-amd64` |
 | CPU / Memory / Disk | 4 vCPU · 7.8 GiB · `/` 89G |
@@ -110,7 +110,7 @@ Compose：`/root/service-compose.yaml`。
 | `portainer4.agent-mate.ai` | `https://portainer:9443` | Let's Encrypt · Force SSL |
 | `nginx4.agent-mate.ai` | `http://root-nginx-proxy-manager-1:81` | Let's Encrypt · Force SSL |
 
-Cloudflare：上述两子域 A → `68.64.176.124`，**DNS only（灰云）**（申请证书时）。
+Cloudflare：上述两子域 A → `<VPS4_IP>`，**DNS only（灰云）**（申请证书时）。
 
 上游一律**容器名**，不要写宿主机公网 IP。
 
@@ -125,7 +125,7 @@ Cloudflare：上述两子域 A → `68.64.176.124`，**DNS only（灰云）**（
 云厂商安全组目前 **仅放行约 22/80/443**（本机可达 `:80`；公网直连 `:81`/`:9443` 超时）。生产管理入口应走域名 `:443`（NPM）；临时管理用 SSH 隧道：
 
 ```bash
-ssh -L 9443:127.0.0.1:9443 -L 8181:127.0.0.1:81 root@68.64.176.124
+ssh -L 9443:127.0.0.1:9443 -L 8181:127.0.0.1:81 root@<VPS4_IP>
 # 然后 https://127.0.0.1:9443 与 http://127.0.0.1:8181
 ```
 
@@ -178,7 +178,7 @@ ssh -L 9443:127.0.0.1:9443 -L 8181:127.0.0.1:81 root@68.64.176.124
 
 本节点不默认跑主库。新应用：
 
-- 在现有 Postgres `101.132.156.250` 或 MySQL `38.55.199.241` **新建独立库**，或另购实例；  
+- 在现有 Postgres `<PG_HOST>` 或 MySQL `<MYSQL_HOST>` **新建独立库**，或另购实例；  
 - **禁止**复用野草云3 上其他应用的库名；  
 - 连接串只进节点/本机 `.env`，不进 Git。
 
@@ -212,8 +212,8 @@ ssh -L 9443:127.0.0.1:9443 -L 8181:127.0.0.1:81 root@68.64.176.124
 - [x] 系统探活 + 安装 Docker（Debian 13）  
 - [x] 创建 docker network `portainer_network`  
 - [x] 部署 Stack `root`：Portainer + NPM（`/root/service-compose.yaml`）  
-- [x] 初始化 Portainer / NPM admin（密钥仅 `secrets.local`）  
-- [x] Cloudflare：`portainer4` / `nginx4` A → `68.64.176.124`（灰云）  
+- [x] 初始化 Portainer / NPM admin（密钥仅 `hk_vps_4/secrets.local.hk_vps_4.md`）  
+- [x] Cloudflare：`portainer4` / `nginx4` A → `<VPS4_IP>`（灰云）  
 - [x] NPM：为上述子域建 Proxy Host（上游已配）  
 - [x] NPM：Let's Encrypt + Force SSL；验收 `https://portainer4.agent-mate.ai` / `https://nginx4.agent-mate.ai`  
 - [x] Portainer Registries：`ghcr.io`（当前无 PAT；公开包可 pull）  
@@ -239,13 +239,13 @@ ssh -L 9443:127.0.0.1:9443 -L 8181:127.0.0.1:81 root@68.64.176.124
 2. 禁止删建 `portainer_network`。  
 3. `IMAGE_TAG` = GHCR 真实 tag（ADR-002）。  
 4. Agent 类服务 recreate 后 NPM Save + `/healthz`（ADR-003）。  
-5. 密码只放 `secrets.local.hk_vps_4.md` / 密码管理器，不写进本文件。  
-6. 勿触碰野草云3（`38.55.192.140`）任何 Stack / NPM / DNS。
+5. 密码只放 `hk_vps_4/secrets.local.hk_vps_4.md` / 密码管理器，不写进本文件。  
+6. 勿触碰野草云3（`<VPS3_IP>`）任何 Stack / NPM / DNS。
 
 ---
 
 ## 12. 来源
 
-- 用户提供：公网 IP `68.64.176.124`、SSH `root`（密钥文件）  
+- 用户提供：公网 IP `<VPS4_IP>`、SSH `root`（密钥文件）  
 - 方案对齐：[``]()  
 - 手册：`knowledge/` · ADR-002 / ADR-003

@@ -20,7 +20,7 @@
 
 | 项 | 野草云4 定稿 |
 | --- | --- |
-| 节点 IP | `68.64.176.124` |
+| 节点 IP | `<VPS4_IP>` |
 | 运维入口 | Portainer `https://portainer4.agent-mate.ai` · NPM `https://nginx4.agent-mate.ai` |
 | **应用公网域名约定** | **`{appname}.agent-mate.ai`**（例：`jobhunt.agent-mate.ai`） |
 | Cloudflare zone（应用 + 运维） | **`agent-mate.ai`**（同一个 zone；应用与运维**仅以子域区分**） |
@@ -105,7 +105,7 @@ mail  api  admin  status    # 常规基础设施名
 
 | 层级 | 野草云4 事实 |
 | --- | --- |
-| 节点 | **野草云4** · `68.64.176.124` · Hostname `qiuge` · Debian 13 |
+| 节点 | **野草云4** · `<VPS4_IP>` · Hostname `qiuge` · Debian 13 |
 | 容器编排 | **Portainer** `https://portainer4.agent-mate.ai/` |
 | 共享网络 | **`portainer_network`** — 已存在；**禁止删除或重建** |
 | TLS / HTTP | **NPM** `https://nginx4.agent-mate.ai/` · 主机 `80`/`443`/`81` |
@@ -158,7 +158,7 @@ mail  api  admin  status    # 常规基础设施名
 | 3 | Env | 变量**名**；`APP_URL=https://{appname}.agent-mate.ai` |
 | 4 | DB | 连通方式；迁移命令或「无需迁移」；独立 `<DB_NAME>` |
 | 5 | Portainer | 打开 **portainer4**；仅部署本 `STACK_NAME`；确认网络已存在 |
-| 6 | Cloudflare | **Zone = `agent-mate.ai`**；Type A；Name = `{appname}`；Content = `68.64.176.124`；先**灰云** |
+| 6 | Cloudflare | **Zone = `agent-mate.ai`**；Type A；Name = `{appname}`；Content = `<VPS4_IP>`；先**灰云** |
 | 7 | NPM | 打开 **nginx4**；新建 Host：Domain = `{appname}.agent-mate.ai`；上游 `http://<container>:<容器端口>`；LE + Force SSL |
 | 8 | 冒烟 | `https://{appname}.agent-mate.ai/` + 关键路径；既有应用抽查（若有）；确认 `portainer4`/`nginx4` 未被误改 |
 
@@ -199,7 +199,7 @@ mail  api  admin  status    # 常规基础设施名
 ## 0. Meta
 - 应用仓库：`<GITHUB_OWNER>/<GITHUB_REPO>`
 - 首次部署 git ref：`main`（或 tag 策略）
-- 目标节点：野草云4（`68.64.176.124`）
+- 目标节点：野草云4（`<VPS4_IP>`）
 - 运维入口：Portainer `https://portainer4.agent-mate.ai` · NPM `https://nginx4.agent-mate.ai`
 - Stack 名：`<STACK_NAME>`                 # 例：jobhunt
 - App slug：`<APP_SLUG>`                   # 例：jobhunt
@@ -241,7 +241,7 @@ mail  api  admin  status    # 常规基础设施名
 
 ## 7. DNS 与 TLS（agent-mate.ai）
 - Zone：`agent-mate.ai`
-- 记录：Type **A** · Name **`{appname}`** · Content **`68.64.176.124`**
+- 记录：Type **A** · Name **`{appname}`** · Content **`<VPS4_IP>`**
 - 代理：申请 Let's Encrypt 前用 **DNS only（灰云）**；成功后可按需橙云（Full / Full strict）
 - NPM Domain Names：必须精确为 `{appname}.agent-mate.ai`
 - 上游：`http://<container_name>:<CONTAINER_PORT>`
@@ -264,7 +264,7 @@ mail  api  admin  status    # 常规基础设施名
 - [ ] `{appname}` 不在保留子域清单，且不与野草云3/4 既有应用重名
 - [ ] 不重建 `portainer_network`
 - [ ] 不编辑其他 NPM Host；不改 `portainer4` / `nginx4` 记录
-- [ ] 不触碰野草云3（`38.55.192.140`）
+- [ ] 不触碰野草云3（`<VPS3_IP>`）
 
 ## 11. 运维注意（应用特有）
 - 首次登录 / 种子数据
@@ -280,7 +280,7 @@ mail  api  admin  status    # 常规基础设施名
 | `<APP_DOMAIN>` | `jobhunt.agent-mate.ai` |
 | `<APP_URL>` | `https://jobhunt.agent-mate.ai` |
 | DNS Name | `jobhunt` |
-| DNS Content | `68.64.176.124` |
+| DNS Content | `<VPS4_IP>` |
 | NPM Domain | `jobhunt.agent-mate.ai` |
 | NPM Forward | `http://jobhunt-web:3000`（容器端口以 compose 为准） |
 | Portainer | `https://portainer4.agent-mate.ai` → Stack `jobhunt` |
@@ -333,7 +333,7 @@ networks:
 3. DNS → Add record：
    - Type: **A**
    - Name: **`{appname}`**（仅子域标签）
-   - IPv4: **`68.64.176.124`**
+   - IPv4: **`<VPS4_IP>`**
    - Proxy: **DNS only（灰云）**（首次申 LE）
 4. 用权威/DoH 确认解析到本机 IP 后再进 NPM 申证。  
 5. 证书成功后，若需橙云：打开代理，SSL/TLS 模式 **Full** 或 **Full (strict)**；长连接应用先评估超时。
@@ -394,7 +394,7 @@ networks:
 
 - [ ] §5 各节齐全（不用则标 N/A）  
 - [ ] `<APP_DOMAIN>` 符合 **`{appname}.agent-mate.ai`**，与 `APP_URL`、DNS、NPM 四处一致  
-- [ ] 目标节点明确为野草云4（`68.64.176.124`），运维入口为 portainer4 / nginx4  
+- [ ] 目标节点明确为野草云4（`<VPS4_IP>`），运维入口为 portainer4 / nginx4  
 - [ ] 服务/端口/镜像/stack/slug 无歧义  
 - [ ] Compose + CI 路径存在或列为阻塞（若消费上游官方镜像，按 §4 例外条款留痕）  
 - [ ] Env 表仅名称；有 `.env.prod.example`  

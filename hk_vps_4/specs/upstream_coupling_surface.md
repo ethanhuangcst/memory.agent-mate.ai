@@ -89,6 +89,7 @@
 | D8 | `[embeddings].backfill_batch = 100` | 低 | 越界 WARN 回落 100 | `doctor` | `src/config.rs:3480-3483`、`:7958-7969` |
 | D9 | 顶层 `api_key`（secret，本方案**不设**，因无 HTTP 入口） | 中 | 未来开放 HTTP 时必须补，且认证头是 `X-API-Key`（见 H4） | `docker exec <c> env` 与 `config.toml` 均无 api_key | `src/config.rs:2792-2793`；空串视为未配置 `src/daemon_runtime.rs:4361-4362` |
 | D10 | 解析优先级：**CLI flag > `AI_MEMORY_*` env > config file > 编译默认** | **高·静默** | 误以为"config 优先" → 排查时查错文件（同 B5） | 见 B5 | `docs/CLI_REFERENCE.md:52-53` |
+| D11 | **`[llm].base_url` 与 `[embeddings].base_url`（后者同义字段 `url`，`base_url` 优先）** —— 别名只提供默认端点（`qwen` 别名默认公网 `dashscope.aliyuncs.com/compatible-mode/v1`），走私有 MaaS workspace 必须显式覆盖 | **高·响亮** | 不覆盖 → 打到公网端点，workspace 级 key 在那里**鉴权失败**（好在这点不静默）。反之若上游把 `base_url` 改名/改语义，我方私有端点配置会失效（**静默**风险） | `doctor` 的 LLM / Embeddings Reachability 显示的 base_url 是否为私有端点 | `LlmSection.base_url` `src/config.rs:3315-3334`；`EmbeddingsSection.base_url`/`url` `:3433-3484`；qwen 别名默认端点 `:6500` |
 
 ### E. tier 机制
 
@@ -104,7 +105,7 @@
 |---|---|---|---|---|---|
 | F1 | `KNOWN_EMBEDDING_DIMS` 表**不含任何 DashScope 模型**（表中只有 nomic / MiniLM / BGE / mxbai / OpenAI text-embedding-3-* / Gemini / granite / snowflake-arctic） | **高·静默** | 若上游把 DashScope 模型加进表且维度与我们写的不一致，两边取值可能打架（以显式 `dim` 为准，故风险可控）；反之若上游**移除**某条目而我们依赖自动推断 → 维度错 | 逐项核对表内容 | `src/config.rs:6572-6617`；查找函数 `:6629-6639` |
 | F2 | 未命中表且未设 `dim` → **回落到 tier preset 的编译期维度**（smart = 768） | **高·静默** | 与 DashScope 实际维度不符 → **写入失败或检索质量异常，且不报错**。这是本部署唯一的"必须手工确认数值"的参数 | `doctor` Embeddings Reachability 的维度；写入 + 检索一条做端到端 | `src/config.rs:7985-7995`；注释 `:6560-6565`、`:6620-6622` |
-| F3 | 显式 `[embeddings].dim` 覆盖优先；非正值被忽略 | 高 | 填 0 / 负数 → **静默**被忽略并回落 768（我方模板里 `dim = 0` 就是占位符，绝不能原样上线） | 部署前必须替换为真实值，并在 `doctor` 复核 | `src/config.rs:7992-7994` |
+| F3 | 显式 `[embeddings].dim` 覆盖优先；非正值被忽略 | 高 | 填 0 / 负数 → **静默**被忽略并回落 768（模板里曾经的 `dim = 0` 只是占位符，绝不能原样上线）。我方实测值：`qwen3.7-text-embedding` = **1024** | 部署前必须替换为真实值，并在 `doctor` 复核 —— 嵌入器加载行应显示 `1024-dim` | `src/config.rs:7992-7994` |
 
 ### G. 路径与缓存
 
