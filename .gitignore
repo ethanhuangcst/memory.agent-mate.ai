@@ -1,0 +1,5 @@
+ai-memory-mcp/
+tmp-memory.md
+.DS_Store
+.env
+*.key

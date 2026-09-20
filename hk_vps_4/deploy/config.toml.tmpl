@@ -1,0 +1,56 @@
+# ============================================================================
+# ai-memory config 模板 — 复制为 config.toml 后填入真实值
+# 容器内路径：/data/.config/ai-memory/config.toml（由 HOME=/data 推导）
+#
+# ⚠️ 内联密钥（api_key = "..."）会在解析期被拒绝 — 只能用 api_key_env / api_key_file
+# ============================================================================
+
+schema_version = 2
+
+# serve 守护进程的档位（serve 无 --tier 参数，只能从这里来）
+tier = "smart"
+
+db = "/data/ai-memory.db"
+
+# ---------------------------------------------------------------------------
+# [llm] — smart 档的整理能力后端
+# qwen 是官方一等别名（等价 dashscope），默认 base_url:
+#   https://dashscope.aliyuncs.com/compatible-mode/v1
+# ---------------------------------------------------------------------------
+[llm]
+backend     = "qwen"
+model       = "qwen-plus"          # 主档
+api_key_env = "DASHSCOPE_API_KEY"  # 环境变量名，不是 key 本身
+
+# ---------------------------------------------------------------------------
+# [llm.auto_tag] — 高频结构化调用（auto_tag / 查询扩展 / 矛盾检测）用更便宜的档
+#
+# ⚠️ 只写 model，不要写 backend！
+#    写 backend = "ollama" 会在无 Ollama 的机器上把这三类功能全部打挂
+#    （官方样例文档 CONFIG_SCHEMA.md 正是这个坑）。
+#    省略 backend 时逐字段继承 [llm]。
+# ---------------------------------------------------------------------------
+[llm.auto_tag]
+model = "qwen-turbo"
+
+# ---------------------------------------------------------------------------
+# [embeddings] — 必须显式指向 API（smart 档 preset 默认走 Ollama 的 Nomic）
+#
+# ⚠️ dim 必须显式填写且与模型实际输出维度一致：
+#   - DashScope 的 embedding 模型不在 KNOWN_EMBEDDING_DIMS 表内
+#   - 不设 dim 会退回 tier preset 的 768，可能与实际不符
+#   - 不存在 AI_MEMORY_EMBED_DIM 环境变量，dim 只能写在这里
+#   - 维度定下即绑定到已写入向量；换模型需 ai-memory reembed 回填
+#   - ⏳ TODO: 从 DashScope 文档确认 model 与 dim 后回填
+# ---------------------------------------------------------------------------
+[embeddings]
+backend  = "qwen"
+model    = "<TODO: DashScope embedding model id>"
+dim      = 0                          # TODO: 填与该模型一致的实际维度
+backfill_batch = 100
+
+# ---------------------------------------------------------------------------
+# 本部署不对外开放 HTTP，故不设置顶层 api_key。
+# 未来开放 HTTP 时必须：此处设 api_key + 环境变量 AI_MEMORY_REQUIRE_API_KEY=1
+# 认证头是 X-API-Key，不是 Authorization: Bearer。
+# ---------------------------------------------------------------------------

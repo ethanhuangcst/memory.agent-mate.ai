@@ -1,0 +1,68 @@
+name: ai-memory-mcp
+
+services:
+  ai-memory:
+    image: ghcr.io/alphaonedev/ai-memory:${IMAGE_TAG:?set IMAGE_TAG in .env}
+    container_name: ai-memory-mcp
+    restart: unless-stopped
+
+    # 不映射任何主机端口：本方案无公网 HTTP 入口（客户端走 SSH stdio）。
+    # 若未来开放 HTTP：取消注释改绑 3200:9077，并必须同时设置
+    #   config.toml 顶层 api_key + 环境变量 AI_MEMORY_REQUIRE_API_KEY=1
+    # ports:
+    #   - "3200:9077"
+
+    # 绑回环：容器接入共享 portainer_network，而 9077 无 api_key，
+    # 避免同网络其他容器访问到未认证的 HTTP 面。
+    command: ["serve", "--host", "127.0.0.1", "--port", "9077"]
+
+    env_file:
+      - .env
+    environment:
+      # ── 关键：HOME 指到持久卷 ──────────────────────────────────────
+      # 配置路径 = $HOME/.config/ai-memory/config.toml（无其他 env 可改写）
+      # HF 模型缓存 = $HOME/.cache/huggingface（设 HOME 后 recreate 不重下）
+      HOME: /data
+      AI_MEMORY_DB: /data/ai-memory.db
+      # 可用性前提：v0.9 默认开启 attestation，无签名写入会 403
+      AI_MEMORY_REQUIRE_AGENT_ATTESTATION: "0"
+
+    volumes:
+      - ai_memory_data:/data
+      # 挂载点必须与 $HOME 推导路径一致，否则配置被静默忽略
+      - ./config.toml:/data/.config/ai-memory/config.toml:ro
+
+    networks:
+      - default
+
+  # ── curator：智能整理守护进程 ─────────────────────────────────────
+  # 启用前先预演并人工审阅：
+  #   docker exec ai-memory-mcp-curator ai-memory curator --once --dry-run --json
+  # Phase 0 必须核对报告 tagged > 0，否则即静默失效（fail-open）。
+  # 撤销自动改动：ai-memory curator --rollback-last 5
+  curator:
+    image: ghcr.io/alphaonedev/ai-memory:${IMAGE_TAG:?set IMAGE_TAG in .env}
+    container_name: ai-memory-mcp-curator
+    restart: unless-stopped
+    command: ["curator", "--daemon", "--interval-secs", "3600", "--max-ops", "50"]
+    env_file:
+      - .env
+    environment:
+      HOME: /data
+      AI_MEMORY_DB: /data/ai-memory.db
+      AI_MEMORY_REQUIRE_AGENT_ATTESTATION: "0"
+    volumes:
+      - ai_memory_data:/data
+      - ./config.toml:/data/.config/ai-memory/config.toml:ro
+    depends_on:
+      - ai-memory
+    networks:
+      - default
+
+volumes:
+  ai_memory_data:
+
+networks:
+  default:
+    external: true
+    name: portainer_network
