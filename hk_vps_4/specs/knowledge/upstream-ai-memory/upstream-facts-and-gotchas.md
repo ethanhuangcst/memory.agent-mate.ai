@@ -78,6 +78,10 @@ src/storage/migrations.rs:1507
 | `memory_search` | **ASCII 子串精确匹配**：ASCII 标记可靠命中；**中文查询一律 count=0**（FTS 分词不吃 CJK），即使该串在 title/content 中连续存在 | 「三层全绿」（content 连续子串）count=0；对照 `l2-client-20260920` count=2 |
 | `memory_recall` | 语义/hybrid 检索，中文查询质量高（实测 score 0.887 / 0.893 居首），`mode:hybrid` | 查询词不含标记字面量仍命中 |
 | 传输 | 服务端**无** `/mcp`、`/sse` HTTP 端点；`serve` 的 9077 仅绑容器内回环 → 客户端只能走 stdio（`docker exec -i`，**不加 `-t`**） | `mcp-test.md` §0；`-t` 会破坏 stdio 帧 |
+| `memory_capabilities` | core 档亦常驻的能力清单探针（家族/装载状态/features/models/工具总数）；其 `summary` 用**族计数口径**（「7 of 100 … under core」）——实际 `tools/list` 注册数 = **8**，源码 `registry::ALL` = **101**（v0.10.0 与 main 实测同；manifest 自称 100 的上游口径差未定因） | 2026-09-20 真实客户端 manifest + 源码计数 |
+| 家族与工具数 | core 7 / lifecycle 6 / graph 12 / governance 8 / power 49 / meta 6 / archive 4 / other 9 = **101**；`full`=101，其余档 +1 always-on（core 实注册 8） | capabilities manifest 与 `mcp_tool_inventory.md` 一致 |
+| harness 延迟注册 | 客户端回报 `your_harness_supports_deferred_registration: false` → `memory_load_family` 对 Cursor **无效**，档位只能在启动参数 `--profile` 定死 | manifest 原文 |
+| 功能边界（v0.10.0） | `compaction.enabled=false`（v0.8+ 规划）、`transcripts.enabled=false`、`reranker_active="off"`（无 cross-encoder）、`recall_mode_active="hybrid"`、`embedding_dim=1024` | capabilities manifest |
 
 ## Lesson / guidance
 
@@ -107,6 +111,9 @@ src/storage/migrations.rs:1507
 11. **写元数据前先按 `inputSchema` 构造参数**：`source` 等是枚举字段，凭字段名猜值会被响亮拒绝（好）但白耗一轮往返。
 12. **批量/重复写入必须容忍 CONFLICT**：near-duplicate 去重让语义相近的写入返回 CONFLICT，
     脚本若不处理，第二次运行就会假失败（正解：改验既有标记，见 `mcp-test.md` §1 原则）。
+13. **档位是启动参数，不是运行时能力**：`--profile`（工具档）与 `--tier`（搜索档）彼此独立；
+    且 Cursor 等 harness 不支持动态注册（`your_harness_supports_deferred_registration: false`），
+    想用 core 之外的家族只能在客户端 args 里写死 `--profile` 再重连 —— 上线前必须在**客户端侧**确认档位，而不是只看服务端。
 
 ## Links
 

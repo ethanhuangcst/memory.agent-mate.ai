@@ -34,6 +34,8 @@
 - **不泄密**：脚本不读 env、不打印容器环境；key 只存在于容器侧。
 - **近重复容忍**：上游 near-duplicate 去重会让重复写入返回 CONFLICT——改验既有标记（通路验证目的一致）。
 - **检索工具分工**：`memory_search` 是 ASCII 子串精确匹配——FTS 分词对 CJK 查询**不命中**（2026-09-20 实测：content 连续子串「三层全绿」count=0，ASCII 标记同库 count=2）；**中文/语义查询必须走 `memory_recall`**，冒烟断言用标记字面量走 search 的设计正确。
+- **capabilities 优先，但认准口径**：`memory_capabilities`（core 档亦常驻）返回家族清单 / 装载状态 / features / models / 工具总数，是**档位与能力核对的首选探针**（Sprint 3 #2）。注意其 `summary` 的「7 of 100」是**族计数口径**：实际 `tools/list` 注册数 core=**8**，源码 `registry::ALL`=**101**（v0.10.0 与 main 实测皆为 101；manifest 自称 100 的上游口径差未定因）。**一切断言以 `tools/list` 实测为准**。
+- **档位只能启动时定**：客户端 harness（Cursor）回报 `your_harness_supports_deferred_registration: false` → `memory_load_family` **不会**把新家族工具注册进 harness；要用 core 之外的家族，必须在客户端 args 里写 `--profile <family>`（与 `--tier` 是两回事，见 §3）。
 
 ## §2 测试计划（阶段映射）
 
@@ -41,7 +43,7 @@
 |---|---|---|
 | Sprint 2 #4 | 本地基线：local-up 常驻 + L0 + L1（mcp-smoke.sh 全通过，证据：8 工具断言、`mode:hybrid` 语义召回命中） | ✅ 2026-09-20 |
 | L2 客户端接入（即时） | Cursor 加载 `ai-memory-local`（8 工具 + 2 prompts）+ agent 直调 store/recall/search（§4-B2） | ✅ 2026-09-20 |
-| Sprint 3 #2 | 档位核对：复用 initialize+tools/list 模式，断言各档工具数（core=8；full 待核） | 待做 |
+| Sprint 3 #2 | 档位核对：**双探针** —— `memory_capabilities`（家族/装载/features/models 全貌）+ `tools/list` 计数（core=8；graph=20 / admin=22 / power=57 / full=101，族口径见 `mcp_tool_inventory.md`）；客户端侧改档须改 mcp.json 的 `--profile` 并重连（harness 不支持延迟注册） | 待做 |
 | Sprint 4 | 门户 / 公网入口若引入：先回到 §0 #5 增补远程接入用例 | 待做 |
 | Sprint 5 | 服务器冒烟：L3（ssh 通道跑同构 jsonl 会话）+ 生产 doctor 三静默失败点 | 待做 |
 | 回归触发 | 每次改动 config / 镜像 tag / 档位后：重跑 L0 + L1（`../deploy/README.md` §冒烟与验收） | 持续 |
@@ -64,6 +66,7 @@
 - **无需 `env` 字段**：`docker exec` 继承容器环境，qwen key 不进 Cursor 配置、不进仓。
 - 前置：`bash hk_vps_4/scripts/local-up.sh` 已常驻；容器被 down / 重启后在 Cursor MCP 面板 reconnect。
 - 生效核对：Settings → MCP 出现 `ai-memory-local` 且可见 8 个 `memory_*` 工具。
+- **改档位**（要用 lifecycle / graph / power 等家族）：在 `args` 里加 `--profile <family>`（如 `--profile core,graph`）；`--tier` 是**搜索档**（semantic/smart），`--profile` 是**工具档**，二者独立。**Cursor 不支持运行中动态注册**（`memory_load_family` 对 harness 无效），改完必须重启该 MCP 条目 / reconnect。
 
 ### 生产（Sprint 5 上线后，与本地条目并存）
 
@@ -110,6 +113,8 @@
 > 首次执行（2026-09-20）：全部通过。标记 `l2-client-20260920` → id `55d04c8c-1910-4d04-a8b7-5c41dced492d`；recall `mode:hybrid` score 0.887 排第一；search count=1；`source:"codebuddy"` 被拒后改 `user` 成功。
 >
 > 补充实测（同日，对话记忆召回）：总结记忆 `bbd29a16` recall 语义命中 score **0.893** 居首；同时发现 `memory_search` 中文查询一律 count=0（对照：ASCII 标记 `l2-client-20260920` 同库 count=2）——检索分工结论见 §1 原则。
+>
+> 第二次执行（同日，**另一客户端交叉验证**）：另一个 Cursor agent（`ai:cursor-vscode@974b303dab0e`，同一容器）向 `places-workspace` 命名空间写入 3 条 long-tier 记忆——其中一条首轮因 `source:"conversation"` 被拒（TC-L2-02 负例**独立再现**），修正为 `user` 后 **3/3 落库**；随后由本客户端按语义召回**交叉命中**（score 0.899 / 0.781）。结论：**跨客户端写入 + 跨客户端召回**可作为 L2 加强判据（证明库/通路与具体客户端无关）；另注意被拒轮次与成功轮次并存时，客户端叙述可能只报结果（"已写入 3 条"）——核验一律以 `memory_list`/`memory_get` 为准。
 
 ### C. 占位（随阶段增补）
 
@@ -125,3 +130,4 @@
 |---|---|
 | 2026-09-20 | 初版：定位声明（MCP 测试策略+计划+用例的 spec）；传输形态核实（stdio-over-SSH，非 http url+API key，源码级证据）；固化 mcp-smoke.sh 6 用例与 doctor 2 用例；登记本地/生产 Cursor 接入配置；占位 Sprint 3/4/5 用例 |
 | 2026-09-20 | 增补 §4-B2 L2 客户端接入用例（TC-L2-01..04）并记录首次执行全通过；§2 登记 L2 ✅（用户配置 Cursor 后 8 工具 + 2 prompts 加载确认） |
+| 2026-09-20 | 增补 §1 原则两条（capabilities 探针与计数口径：manifest 族口径 100/core 7 vs `tools/list` core=8 vs 源码 `ALL`=101；**档位只能启动时定**——harness 不支持延迟注册）与 §3 改档说明；§2 Sprint 3 #2 改双探针；§4-B2 记录第二客户端交叉验证（`places-workspace` 3 条，`source` 负例独立再现并自愈） |
