@@ -1,0 +1,11 @@
+{
+  "_fixture": "预发布版：prerelease=true（用例期望 exit 2 +「该版本尚不稳定，不适合更新」，命中 H1）",
+  "_fixture_now": "2026-09-20T00:00:00Z",
+  "tag_name": "v0.12.0-rc.1",
+  "name": "v0.12.0-rc.1 — dry run",
+  "draft": false,
+  "prerelease": true,
+  "published_at": "2026-09-15T00:00:00Z",
+  "target_commitish": "main",
+  "body": "Pre-release dry run. Downstream stable channels skipped."
+}

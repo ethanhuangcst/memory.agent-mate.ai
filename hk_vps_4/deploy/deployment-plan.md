@@ -2,8 +2,8 @@
 
 ## 0. Meta
 
-- 应用仓库：`<GITHUB_OWNER>/memory.agent-mate.ai`（薄部署仓库，私有）
-- 上游镜像来源：`ghcr.io/alphaonedev/ai-memory`
+- 应用仓库：`ethanhuangcst/memory.agent-mate.ai`（薄部署资产仓，**公开**——脱敏规则见 `asset_isolation_plan.md` §10）
+- 上游镜像来源：`ghcr.io/alphaonedev/ai-memory`（版本坐标与指纹见 `hk_vps_4/upstream.lock`）
 - 首次部署 git ref：`main`
 - 目标节点：野草云4（`<VPS4_IP>`）
 - 运维入口：Portainer `https://portainer4.agent-mate.ai` · NPM `https://nginx4.agent-mate.ai`（**本应用不使用 NPM**）
@@ -30,8 +30,26 @@
 
 - **本仓库无构建工作流（已批准例外）**：镜像由上游发布，本仓库只消费
 - 镜像坐标：`ghcr.io/alphaonedev/ai-memory:${IMAGE_TAG}`
-- `IMAGE_TAG` 必须是 GHCR **真实存在**的版本号（当前 `0.9.0`）；**禁用 `latest`**（ADR-002）
-- 上游版本升级跟踪责任方：仓库 owner（对照 `docs/deployment_strategy.md` §6.2）
+- `IMAGE_TAG` 必须是 GHCR **真实存在**的版本号（当前 `0.10.0`）；**禁用 `latest`**（ADR-002）
+- 上游版本升级跟踪责任方：仓库 owner（对照 `../specs/deployment_strategy.md` §6.2 与 `../specs/dev-plan.md` §5）
+
+### 3.1 IMAGE_TAG ↔ 上游 tag / commit / digest 映射
+
+**单一真相源：`hk_vps_4/upstream.lock`**（本表仅为便于阅读；任何不一致以锁文件为准）。
+
+| 项 | 值 |
+| --- | --- |
+| 上游 release tag | `v0.10.0`（`warn-carrier`，2026-07-12 发布） |
+| 上游 release commit | `43c4d4103b3ab59ac7614d99f26acdbdac499043` |
+| 镜像 `IMAGE_TAG` | `0.10.0` |
+| 镜像清单 digest | `sha256:507d2a5082decb786a7fd38c7b5f6a3cfb4af0e7ab9ad8fa416abdf4bce25e49` |
+| 镜像 amd64 digest | `sha256:7e19ae9dcd750d93151c4d4c2b19fef4854b3c8fce9702d079eb79c4520d4364` |
+| 指纹校验方式 | `registry-api`（`make preflight ARGS=--with-image`，2026-09-20 实测一致） |
+| 数据库 schema | `80`（上游 `src/storage/migrations.rs` 的 `CURRENT_SCHEMA_VERSION`） |
+| 参考层 clone | `main` @ `96b8c694`（**注意**：上游 main 与 release tag 提交图不连通，见 `deployment_strategy.md` §7.2） |
+
+> 变更流程：`make preflight` 判定通过 → `make pin-update` 回写锁文件 → 同步本表与 `.env`。
+> 升级顺序：**先跑 `make preflight` 读准入结论**（`dev-plan.md` §5.2），再按 §5.1 七步链路执行。
 
 ## 4. Compose 契约
 

@@ -1,6 +1,6 @@
 # 资产隔离计划 — 协同布局（父仓 memory.agent-mate.ai）
 
-> **状态：** 计划待审核 —— **本文档描述的迁移动作尚未执行**
+> **状态：** ✅ **迁移已执行**（2026-09-20；见 §9 清单与 §12 决策记录）
 > **布局裁决（2026-09-20）：** 采纳**协同布局**（父仓 + 嵌套 gitignored clone）；物理分仓降级为备选记录（§6）
 > **嵌套管理：** gitignored 普通 clone（非 submodule）
 > **关联：** [`deployment_strategy.md`](./deployment_strategy.md) · [`dev-plan.md`](./dev-plan.md)
@@ -20,17 +20,26 @@
 ~/code/memory.agent-mate.ai/            # 父仓（公开）
 │                                         remote = https://github.com/ethanhuangcst/memory.agent-mate.ai.git
 ├── .gitignore                           # 第一行：ai-memory-mcp/
-├── Makefile                             # upstream / pin / up / down / backup / restore-drill
+├── Makefile                             # upstream / pin / pin-update / preflight / preflight-test / backup / restore-drill
+├── .github/workflows/                   # 平台强制路径（根目录例外，见下方说明）
+├── .github/scripts/                     # 平台强制路径下的辅助脚本（render-preflight.py）
 ├── ai-memory-mcp/                       # 嵌套 clone（gitignored）—— 上游，只读约定
 │                                         remote = https://github.com/alphaonedev/ai-memory-mcp.git
 └── hk_vps_4/                            # 自有资产（全部入库）
-    ├── docs/
+    ├── upstream.lock                    # ★ 版本契约单一真相源（上游 tag / 镜像指纹 / schema）
+    ├── scripts/
+    │   ├── upstream-preflight.sh        # 升级准入判定（判据 H1–H5 / W1–W6；退出码 0/2/3/1）
+    │   └── tests/                       # 离线 fixture 自测（make preflight-test）
+    ├── specs/                           # 文档与决议（2026-09-20 由 docs/ 更名，见 §12）
     │   ├── deployment_strategy.md       # 决议真相源
     │   ├── dev-plan.md                  # 部署与升级计划
+    │   ├── upstream_coupling_surface.md # 耦合面清单（本部署依赖上游的每个契约点）
     │   ├── asset_isolation_plan.md      # 本文档
     │   ├── hk_vps_4_settings.md
     │   ├── vps4_new_deployment_instruction.md
-    │   └── mcp_oss_bak_com_requirements.md   # mcp.oss-bak.com 需求规格（另建项目用）
+    │   ├── mcp_oss_bak_com_requirements.md   # mcp.oss-bak.com 需求规格（另建项目用）
+    │   ├── adr/                         # 架构决议记录（ADR-004 / ADR-005）
+    │   └── knowledge/                   # 可复用研究与运维知识（upstream-ai-memory/）
     ├── deploy/
     │   ├── docker-compose.prod.yml
     │   ├── config.toml.tmpl
@@ -44,6 +53,13 @@
 ```
 
 **判据**：任何一个文件，要么属于上游（`ai-memory-mcp/` 内、被其跟踪、未修改），要么属于本项目（`hk_vps_4/` 内、被父仓跟踪）——**不存在第三种位置**。
+
+**根目录例外（仅两类；内容仍属本项目，位置由基础设施/平台决定）**：
+
+1. `.gitignore`、`Makefile` —— 仓级基础设施，必须在根。
+2. `.github/workflows/`、`.github/scripts/` —— **GitHub 平台强制**工作流位于仓库根，无法下沉到 `hk_vps_4/`（见 `.github/workflows/upstream-track.yml`）。
+
+> 决议记录与知识库（`adr/`、`knowledge/`）现位于 `hk_vps_4/specs/` 之下，**属自有资产、非根目录例外**（2026-09-20 由仓根 `specs/` 并入，见 §12）。
 
 ## 3. 嵌套 clone 的 git 行为与护栏（最易踩的坑）
 
@@ -59,7 +75,7 @@
 | 2 | pre-commit 守卫拒绝 stage `ai-memory-mcp/` | 一行脚本（防 `git add -f` 手滑）；可选但成本低 |
 | 3 | 上游 remote 非本方所有 → **天然无推送权** | 无需额外机制 |
 | 4 | 每次上游升级后，父仓 `git status` 必须仍然干净 | 写入 dev-plan.md §5 升级预检清单 |
-| 5 | 父仓记录上游对应版本 | `deployment-plan.md` 的 IMAGE_TAG ↔ 上游 tag 映射；`make pin` 自动回填 |
+| 5 | 父仓记录上游对应版本 | **`hk_vps_4/upstream.lock` 为唯一真相源**（上游 tag / commit / 镜像 digest / schema / 沉淀期阈值）；`deployment-plan.md` §3.1 提供人读映射表；`make pin` 打印、`make pin-update` 回写 |
 
 ## 4. 「只读策略」评估结论
 
@@ -72,8 +88,8 @@
 ## 5. 隔离规则（长期生效）
 
 1. **clone 内禁止修改任何被跟踪文件**；需要「覆盖」上游行为的一律放 `hk_vps_4/`，并注明对应上游版本。
-2. **引用上游文档一律用 GitHub URL + 固定 tag**（如 `https://github.com/alphaonedev/ai-memory-mcp/blob/v0.9.0/docs/CONFIG_SCHEMA.md`），不用跨仓库相对路径——GitHub 网页上必断链。
-3. **父仓记录上游对应版本**：`deployment-plan.md` 维护 `IMAGE_TAG ↔ 上游 tag/commit` 映射；`make pin` 自动回填。
+2. **引用上游文档一律用 GitHub URL + release tag**（如 `https://github.com/alphaonedev/ai-memory-mcp/blob/v0.10.0/docs/CONFIG_SCHEMA.md`），不用跨仓库相对路径（GitHub 网页上必断链），也不用 main 分支（内容会漂移）或开发 commit（上游重写历史后会消失，见 `deployment_strategy.md` §7.2）。
+3. **父仓记录上游对应版本**：**唯一真相源为 `hk_vps_4/upstream.lock`**（tag / commit / 镜像 digest / schema）；`make pin` 打印、`make pin-update` 回写。
 4. **secrets 永不入父仓**（公开仓库）：key/AK/密码/私钥只在服务器 `.env` / 密码管理器；模板只含占位符。
 5. **公开仓库脱敏**（§9）。
 
@@ -102,12 +118,12 @@ up: / down:          ## 本地栈起停（见 dev-plan.md §3）
 
 > `make upstream` 解决「公开父仓不含上游代码」的 bootstrap 问题：新机器/新同事一条命令补齐。
 
-## 8. 迁移步骤（**本计划不执行**；前置：GitHub 空仓已建）
+## 8. 迁移步骤（**已执行**，2026-09-20；前置：GitHub 空仓已建）
 
 1. `mv ~/code/ai-memory-mcp ~/code/memory.agent-mate.ai`
 2. 父仓初始化：`git init` + 关联 GitHub remote（或先 clone 空仓再搬入）
 3. 上游 clone 原样移入 `memory.agent-mate.ai/ai-memory-mcp/`（保留其 `.git` 与 remote）
-4. 自有资产移入 `hk_vps_4/`：`docs/ye_cao_yun_production/*` → `hk_vps_4/docs/`；`docs/ye_cao_yun_production/deploy/*` → `hk_vps_4/deploy/`
+4. 自有资产移入 `hk_vps_4/`：`docs/ye_cao_yun_production/*` → `hk_vps_4/specs/`；`docs/ye_cao_yun_production/deploy/*` → `hk_vps_4/deploy/`
 5. 写 `.gitignore`（`ai-memory-mcp/`）→ **先于任何 `git add`**
 6. 修正文档内引用：仓内互引改为 `hk_vps_4/...` 相对路径；上游引用改为 GitHub URL + 固定 tag
 7. 验证：父仓 `git status` 仅出现 `hk_vps_4/` 与 Makefile；`ai-memory-mcp/` 内 `git status` 干净、`git pull` 可用
@@ -118,12 +134,12 @@ up: / down:          ## 本地栈起停（见 dev-plan.md §3）
 | # | 资产 | 迁移动作 | 状态 |
 | --- | --- | --- | --- |
 | 1 | 上游 clone 整体 | → `ai-memory-mcp/`（保留 .git） | ✅ |
-| 2 | `deployment_strategy.md` | → `hk_vps_4/docs/` | ✅ |
-| 3 | `dev-plan.md` | → `hk_vps_4/docs/` | ✅ |
-| 4 | 本文档 | → `hk_vps_4/docs/` | ✅ |
-| 5 | `hk_vps_4_settings.md` | → `hk_vps_4/docs/` | ✅ |
-| 6 | `vps4_new_deployment_instruction.md` | → `hk_vps_4/docs/` | ✅ |
-| 7 | `mcp_oss_bak_com_requirements.md` | → `hk_vps_4/docs/` | ✅ |
+| 2 | `deployment_strategy.md` | → `hk_vps_4/specs/` | ✅ |
+| 3 | `dev-plan.md` | → `hk_vps_4/specs/` | ✅ |
+| 4 | 本文档 | → `hk_vps_4/specs/` | ✅ |
+| 5 | `hk_vps_4_settings.md` | → `hk_vps_4/specs/` | ✅ |
+| 6 | `vps4_new_deployment_instruction.md` | → `hk_vps_4/specs/` | ✅ |
+| 7 | `mcp_oss_bak_com_requirements.md` | → `hk_vps_4/specs/` | ✅ |
 | 8 | `deploy/`（5 文件） | → `hk_vps_4/deploy/` | ✅ |
 | 9 | `backup/` 脚本 | → `hk_vps_4/backup/`（dev-plan.md §4 落地时创建） | ☐ |
 | 10 | `.gitignore` + Makefile | 父仓根（先于 git add） | ✅ |
@@ -161,3 +177,5 @@ up: / down:          ## 本地栈起停（见 dev-plan.md §3）
 | 日期 | 决策 |
 | --- | --- |
 | 2026-09-20 | 确立资产隔离：初版为物理分仓；同日改采**协同布局**（父仓 `memory.agent-mate.ai` 公开仓 + 嵌套 gitignored 上游 clone + `hk_vps_4/` 自有资产）。**迁移已执行（同日，见 §9 清单）。** |
+| 2026-09-20 | 新增**版本契约层**：`hk_vps_4/upstream.lock`（单一真相源）+ `specs/upstream_coupling_surface.md`（耦合面清单）+ `scripts/upstream-preflight.sh`（升级准入判定）+ `.github/workflows/upstream-track.yml`（每日跟踪）。§3 护栏 5 与 §5 规则 3 的映射载体由 `deployment-plan.md` 正文改为锁文件；§2 判据补充根目录例外（`.github/workflows/`，平台强制）。 |
+| 2026-09-20 | **目录更名**：`hk_vps_4/docs/` → **`hk_vps_4/specs/`**；仓根 `specs/`（ADR / knowledge）并入 `hk_vps_4/specs/`。理由：自有资产（含决议与知识）全部集中在 `hk_vps_4/` 之下，根目录只余基础设施与平台强制路径，§2 判据回到「只有两种归属」。同步清扫全仓路径引用（Makefile / upstream.lock / 预检脚本 / Actions / deploy 文档 / ADR / knowledge）。 |

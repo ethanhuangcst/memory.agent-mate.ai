@@ -1,0 +1,131 @@
+# =============================================================================
+# upstream-track.yml — 上游 ai-memory-mcp 版本跟踪（每日）
+#
+# 职责边界（重要）：
+#   ✅ 只做「发现 + 提醒 + 准入判定」 → 开 / 更新 issue
+#   ❌ 绝不自动升级、绝不自动改 upstream.lock、绝不碰服务器
+#      （部署决策与执行**始终人工**，见 hk_vps_4/specs/dev-plan.md §5）
+#
+# 判定逻辑完全复用 hk_vps_4/scripts/upstream-preflight.sh，本工作流不重复实现判据。
+# 退出码 → 分流：
+#   0  无新版                    → 静默（不产噪音）
+#   2  命中硬性阻断              → issue + label `upstream-unstable`
+#                                 标题含「该版本尚不稳定，不适合更新」
+#   3  无硬性阻断，有人工确认项  → issue + label `ready-to-upgrade`
+#   1  运行错误                  → 工作流失败（红叉可见），不建 issue
+#
+# 备注：`.github/workflows/` 必须位于仓库根（GitHub 平台强制），是资产隔离判据中
+#       继 `.gitignore` / `Makefile` 之后的第三个根目录例外，已在
+#       hk_vps_4/specs/asset_isolation_plan.md §2 显式记录。
+# =============================================================================
+name: upstream-track
+
+on:
+  schedule:
+    # 每日 01:00 UTC = 09:00 Asia/Shanghai
+    - cron: '0 1 * * *'
+  workflow_dispatch:
+    inputs:
+      soak_days:
+        description: '覆盖沉淀期阈值（天）；留空则用 upstream.lock 的 SOAK_DAYS_MIN'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: upstream-track
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    name: 版本预检与准入判定
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出仓库
+        uses: actions/checkout@v4
+
+      - name: 运行预检脚本
+        id: preflight
+        run: |
+          set +e
+          ARGS=(--with-image --json)
+          if [ -n "${{ github.event.inputs.soak_days }}" ]; then
+            ARGS+=(--soak-days "${{ github.event.inputs.soak_days }}")
+          fi
+          bash hk_vps_4/scripts/upstream-preflight.sh "${ARGS[@]}" \
+            > "$RUNNER_TEMP/report.json" 2> "$RUNNER_TEMP/preflight.log"
+          rc=$?
+          set -e
+          echo "exit_code=$rc" >> "$GITHUB_OUTPUT"
+          echo "=== 预检日志（stderr）==="; cat "$RUNNER_TEMP/preflight.log"
+
+      - name: 渲染结论与 issue 正文
+        id: render
+        if: always()
+        env:
+          RC: ${{ steps.preflight.outputs.exit_code }}
+        run: |
+          python3 .github/scripts/render-preflight.py \
+            "$RUNNER_TEMP/report.json" "$RC" "$RUNNER_TEMP/issue-body.md" \
+            >> "$GITHUB_OUTPUT"
+
+      - name: 写入运行摘要
+        if: always()
+        run: |
+          {
+            echo "## upstream-track 运行结果"
+            echo ""
+            echo "| 项 | 值 |"
+            echo "| --- | --- |"
+            echo "| 退出码 | \`${{ steps.preflight.outputs.exit_code }}\` |"
+            echo "| 分流动作 | \`${{ steps.render.outputs.action }}\` |"
+            echo "| 候选版本 | \`${{ steps.render.outputs.tag }}\` |"
+            echo ""
+            echo "退出码语义：0 无新版 · 2 尚不稳定 · 3 可评估升级 · 1 运行错误"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 运行错误则使工作流失败
+        if: steps.render.outputs.action == 'error'
+        run: |
+          echo "::error::预检脚本运行错误（exit ${{ steps.preflight.outputs.exit_code }}），详见上方日志"
+          exit 1
+
+      - name: 开 / 更新 issue
+        if: steps.render.outputs.action == 'unstable' || steps.render.outputs.action == 'ready'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTION: ${{ steps.render.outputs.action }}
+          TAG: ${{ steps.render.outputs.tag }}
+          TITLE: ${{ steps.render.outputs.title }}
+          BODY_FILE: ${{ runner.temp }}/issue-body.md
+        run: |
+          set -euo pipefail
+
+          if [ "$ACTION" = "unstable" ]; then
+            LABEL="upstream-unstable"
+            COLOR="B60205"
+            DESC="上游版本尚不稳定，不适合更新"
+          else
+            LABEL="ready-to-upgrade"
+            COLOR="0E8A16"
+            DESC="上游有新版本，可评估升级"
+          fi
+
+          # 幂等：label 不存在则创建（--force 兼作「已存在则更新」）
+          gh label create "$LABEL" --color "$COLOR" --description "$DESC" --force >/dev/null 2>&1 || true
+
+          # 去重：同一候选版本已有 open issue → 只追加评论，不重复开单
+          EXISTING="$(gh issue list --state open --label "$LABEL" --limit 100 \
+            --json number,title \
+            --jq ".[] | select(.title | contains(\"$TAG\")) | .number" | head -1)"
+
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --body-file "$BODY_FILE"
+            echo "已在 issue #$EXISTING 追加评论（候选 $TAG 已开过单）"
+          else
+            gh issue create --title "$TITLE" --body-file "$BODY_FILE" --label "$LABEL"
+            echo "已创建 issue：$TITLE"
+          fi

@@ -3,7 +3,7 @@
 > **节点**：野草云4 · `68.64.176.124`  
 > **角色**：应用/边缘节点（与 [野草云3]() **同一套部署方式**，供未来应用迁入/新建）  
 > **状态**：**平台层已落地**（Docker + `portainer_network` + Portainer + NPM + GHCR registry + 运维域名 HTTPS）  
-> **原则**：本文件不写密码 / Token。SSH / 管理台账号见本机 [`secrets.local.hk_vps_4.md`](./secrets.local.hk_vps_4.md)（gitignore）。  
+> **原则**：本文件不写密码 / Token。SSH / 管理台账号见本机 `secrets.local.hk_vps_4.md`（**gitignore，不入仓，故此处不写为链接**——写了在 GitHub 上必断链）。  
 > **对齐基准**：[``]() §0 标准运维方案。  
 > **as_of**：2026-08-12（SSH 实机）
 

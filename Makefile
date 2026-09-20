@@ -1,19 +1,31 @@
 # memory.agent-mate.ai — 部署资产仓（公开）
 # 上游 ai-memory clone 位于 ./ai-memory-mcp/（gitignored，只读约定）
-# 详见 hk_vps_4/docs/asset_isolation_plan.md 与 hk_vps_4/docs/dev-plan.md
+# 版本契约（上游 tag / 镜像指纹）的单一真相源：hk_vps_4/upstream.lock
+# 详见 hk_vps_4/specs/asset_isolation_plan.md 与 hk_vps_4/specs/dev-plan.md
 
 UPSTREAM_URL := https://github.com/alphaonedev/ai-memory-mcp.git
+LOCK := hk_vps_4/upstream.lock
+PREFLIGHT := hk_vps_4/scripts/upstream-preflight.sh
 
-.PHONY: help upstream pin backup restore-drill
+.PHONY: help upstream pin pin-update preflight preflight-test backup restore-drill
 
 help:
-	@grep -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*## "} {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
+	@grep -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*## "} {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
 
 upstream: ## 首次/重建上游 clone（gitignored；新机器 bootstrap）
 	git clone $(UPSTREAM_URL) ai-memory-mcp
 
-pin: ## 打印当前上游 tag/commit（回填 hk_vps_4/deploy/deployment-plan.md 的版本映射）
-	@cd ai-memory-mcp && git describe --tags --always 2>/dev/null || git rev-parse --short HEAD
+pin: ## 打印版本契约（读 hk_vps_4/upstream.lock；零网络依赖）
+	@grep -E '^(UPSTREAM_RELEASE_TAG|UPSTREAM_RELEASE_COMMIT|IMAGE_TAG|IMAGE_DIGEST_AMD64|IMAGE_DIGEST_VERIFIED_BY|VERIFIED_AT)=' $(LOCK)
+
+pin-update: ## 重新校验上游并回写 upstream.lock（需网络；不部署）
+	bash $(PREFLIGHT) --write-lock
+
+preflight: ## 升级预检：准入判定 + CHANGELOG 摘要（追加 ARGS，如 ARGS=--with-image）
+	bash $(PREFLIGHT) $(ARGS)
+
+preflight-test: ## 预检脚本离线自测（fixture 驱动，无网络依赖）
+	bash hk_vps_4/scripts/tests/run-fixtures.sh
 
 backup: ## 备份并外迁：快照 → sha256 → ossutil 上传 → 回读比对（见 hk_vps_4/backup/）
 	bash hk_vps_4/backup/backup-and-push.sh

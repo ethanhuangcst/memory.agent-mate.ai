@@ -1,0 +1,11 @@
+{
+  "_fixture": "沉淀期不足：正式 release 但仅发布 3 天（用例期望 exit 2，命中 H2；阈值 14 天）",
+  "_fixture_now": "2026-09-20T00:00:00Z",
+  "tag_name": "v0.11.1",
+  "name": "v0.11.1 — hotfix",
+  "draft": false,
+  "prerelease": false,
+  "published_at": "2026-09-17T00:00:00Z",
+  "target_commitish": "main",
+  "body": "Fresh stable release, still within the soak window."
+}

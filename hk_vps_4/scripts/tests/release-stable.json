@@ -1,0 +1,11 @@
+{
+  "_fixture": "稳定候选：正式 release、沉淀期充足（用例期望 exit 3「可评估升级」）",
+  "_fixture_now": "2026-09-20T00:00:00Z",
+  "tag_name": "v0.11.0",
+  "name": "v0.11.0 — additive",
+  "draft": false,
+  "prerelease": false,
+  "published_at": "2026-08-20T00:00:00Z",
+  "target_commitish": "main",
+  "body": "Additive release. No default flips."
+}

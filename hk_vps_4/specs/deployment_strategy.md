@@ -4,7 +4,7 @@
 > **节点：** 野草云4 · `68.64.176.124` · Debian 13 · 4 vCPU / 7.8 GiB / `/` 89G
 > **对齐基准：** [`hk_vps_4_settings.md`](./hk_vps_4_settings.md) · [`vps4_new_deployment_instruction.md`](./vps4_new_deployment_instruction.md)
 > **原则：** 本文件不写密码 / Token / API key。密钥见本机 `secrets.local.hk_vps_4.md`（gitignore）。
-> **as_of：** 2026-09-19（基于克隆的 HEAD `96b8c694`，`Cargo.toml` 版本 `0.10.0`，当前稳定镜像 `0.9.0`）
+> **as_of：** 2026-09-20（参考层 clone HEAD `96b8c694`；**制品层版本坐标以 [`../upstream.lock`](../upstream.lock) 为唯一真相源**——当前 release `v0.10.0` / `IMAGE_TAG=0.10.0` / schema 80）
 
 ---
 
@@ -13,7 +13,7 @@
 | # | 决策项 | 决议 | 理由 | 已知代价 |
 |---|---|---|---|---|
 | 1 | **存储后端** | **SQLite 命名卷**（非 Postgres） | 官方 GHCR 镜像用 `cargo build --release` 默认特性构建，**不含 `sal-postgres`**；用官方镜像即零定制、零 CI 改动 | DB 绑死 4 号机，节点挂则数据停在最近快照；不可横向扩。官方定位 <5 agent / <10GB |
-| 2 | **镜像** | `ghcr.io/alphaonedev/ai-memory:0.9.0`（**固定版本号，禁用 `latest`**） | 上游 release workflow 已发布；符合「边缘只 pull，不 build」 | 无（属 §4 已批准例外：本仓库无构建工作流） |
+| 2 | **镜像** | `ghcr.io/alphaonedev/ai-memory:0.10.0`（**固定版本号，禁用 `latest`**；**标签 + 指纹双写**——指纹记在 [`../upstream.lock`](../upstream.lock)，防标签被重推） | 上游 release workflow 已发布；符合「边缘只 pull，不 build」；0.10.0 修正了 0.9.0 的 attestation 默认值缺陷 | 无（属 §4 已批准例外：本仓库无构建工作流） |
 | 3 | **tier** | **`smart`** | 需要自动打标 / 归并 / 查询扩展 / 矛盾检测 | 每写一次触发 LLM 调用（费用）；需常驻 curator |
 | 4 | **LLM** | **云端 qwen（DashScope）便宜档** | LLM 跑在云端，服务器不承载模型权重 | 每写一次的 API 费用；`qwen-turbo`/`plus` 档质量弱于旗舰档 |
 | 5 | **Embedder** | **走云端 API**（非本地 Ollama） | 避免在 4 vCPU / 7.8 GiB 上再跑 Ollama | **必须显式设 `dim`**（见 §3.1） |
@@ -21,7 +21,7 @@
 | 7 | **域名 / NPM / HTTPS** | **不需要** | 无公网 HTTP 入口 | 无法用 REST/curl 从外部访问（如需要，见 §8 待办） |
 | 8 | **HTTP api_key** | **不设置** | HTTP 面不对外暴露，且 stdio MCP 按设计无 key 机制 | 无 |
 | 9 | **agent attestation** | **关闭**（`AI_MEMORY_REQUIRE_AGENT_ATTESTATION=0`） | v0.9 默认开启会 403 拒绝写入。**这是可用性前提，不是安全让渡** | 写入标记为 `claimed`（自称）而非密码学证明 |
-| 10 | **部署制品仓库** | 新建**薄部署仓库**（命名待定，见 §8） | 不污染上游；release-bot 有明确主输入 | 多一个仓库（内容约 5 个文件） |
+| 10 | **部署制品仓库** | ✅ 已决（2026-09-20 定稿）：**公开**仓 `ethanhuangcst/memory.agent-mate.ai` | 不污染上游；release-bot 有明确主输入 | 公开仓必须脱敏（见 [`asset_isolation_plan.md`](./asset_isolation_plan.md) §10） |
 
 ### 明确排除的方案及原因
 
@@ -293,11 +293,11 @@ Host ai-memory
 
 | 步 | 动作 | 本应用取值 |
 |---|---|---|
-| 0 | 预检 | 镜像 `ghcr.io/alphaonedev/ai-memory:0.9.0`；stack `ai-memory-mcp`；无公网端口；无 DB 迁移 |
+| 0 | 预检 | 镜像 `ghcr.io/alphaonedev/ai-memory:0.10.0`；stack `ai-memory-mcp`；无公网端口；无 DB 迁移 |
 | 0b | 隔离门禁 | 与野草云4 既有应用无冲突（当前应用栈为空）；**不新增 DNS 记录、不新增 NPM Host**；不重建 `portainer_network` |
 | 1 | Compose | `/opt/ai-memory-mcp/docker-compose.prod.yml`；仅 `image:`；`external: portainer_network` |
 | 2 | CI → GHCR | **不适用** —— 消费上游官方镜像。按文档 §4 例外条款留痕：镜像坐标 + 「本仓库无构建工作流」+ 版本跟踪责任方 |
-| 3 | Env | `.env` 含 `DASHSCOPE_API_KEY`、`IMAGE_TAG=0.9.0`；`config.toml` 只读挂载 |
+| 3 | Env | `.env` 含 `DASHSCOPE_API_KEY`、`IMAGE_TAG=0.10.0`；`config.toml` 只读挂载 |
 | 4 | DB | **无需迁移** —— SQLite 首次启动自建 |
 | 5 | Portainer | 打开 `https://portainer4.agent-mate.ai`；仅部署 stack `ai-memory-mcp` |
 | 6 | Cloudflare | **不适用**（无域名） |
@@ -381,7 +381,7 @@ docker exec ai-memory-mcp ai-memory doctor
 
 - 迁移**前向-only**，无法降级
 - 迁移前快照命名：`<db-file>.pre-migration-v<FROM>-to-v<TO>-<token>.bak`，落在 `/data` 内（已在持久卷）
-- 二进制会拒绝启动于「比自身更新的库」——部分回滚会**大声失败**而非静默损坏
+- ⚠️ **更正（2026-09-20 源码核实）**：~~二进制会拒绝启动于「比自身更新的库」~~ —— 该假设**已证伪**。`src/storage/migrations.rs:1507` 为 `if version >= CURRENT_SCHEMA_VERSION { return Ok(()); }`，全 `src` 无任何「库过新则拒绝启动」的逻辑。**实际行为：把二进制换回旧版本后它会照常启动，并操作一个它不认识的 schema → 静默的数据损坏风险。** 因此**回滚必须用 pre-migration 快照覆盖 DB，不能只改 `IMAGE_TAG`**（见 §6.3）。证据与影响见 [`upstream_coupling_surface.md`](./upstream_coupling_surface.md) J3。
 
 ### 6.3 回滚
 
@@ -389,6 +389,10 @@ docker exec ai-memory-mcp ai-memory doctor
 # 停容器 → 用 pre-migration 快照覆盖 /data/ai-memory.db（清掉 -wal / -shm 兄弟文件）
 # → .env 的 IMAGE_TAG 改回旧版本 → Portainer Recreate
 ```
+
+> ⚠️ **快照覆盖这一步不可省略。** 上游不会因「库比二进制新」而拒绝启动（§6.2 更正），
+> 只改 `IMAGE_TAG` 的"回滚"会让旧二进制继续读写新 schema，**不报错但可能损坏数据**。
+> 快照命名规则：`<dbfile>.pre-migration-v<from>-to-v<to>-<nanos>.bak`，与库同目录。
 
 ### 6.4 排障速查
 
@@ -441,6 +445,27 @@ docker exec ai-memory-mcp ai-memory doctor
 
 > 本项仅作本地记录，不向上游反馈（决策：2026-09-19）。
 
+### 7.2 上游 main 与 release tag 的提交图**不连通**（历史被重写）
+
+**事实（2026-09-20 核实）**：`main` 的 HEAD 与已发布的 release tag 属于**两条互不相交的血脉**。
+
+三条独立证据：
+
+1. `git merge-base HEAD v0.10.0` → 空（退出码 1，无共同祖先）；`v0.10.0` 不在 `origin/main` 上，`git tag --merged HEAD` 为空。
+2. GitHub 官方 API 原文：`{"message": "No common ancestor between v0.10.0 and main.", "status": "404"}`（`v0.9.0` 同样 404）。
+3. 两侧**根提交消息与日期完全相同、哈希不同**：main 根 `467de197`（2026-03-30 20:54:24）vs release 线根 `20706363`（同消息同时间）。
+
+**成因**：上游对 `main` 做过历史重写（force-push / filter-repo），旧的树干连同其发版标签被抛在一边。
+
+**影响（对运维有实质约束）**：
+
+| 影响 | 约束 |
+|---|---|
+| `git log <tag>..HEAD`、`git diff <tag> main` 全部失效 | **升级预检不得依赖 git 谱系**；只用 releases API + CHANGELOG + 镜像指纹（详见 [`dev-plan.md`](./dev-plan.md) §5 与 [`../scripts/upstream-preflight.sh`](../scripts/upstream-preflight.sh)） |
+| 引用上游文档若写开发 commit（如 `blob/96b8c694/…`），上游下次重写历史后会**链接全断** | 统一改为 **release tag URL**（见 §10） |
+| `make pin` 原先用 `git describe --tags` 在 main 上永远拿不到 tag | 已改为读取 [`../upstream.lock`](../upstream.lock) |
+| 两条线的 commit 天然是"两个值"，不是"落后" | 锁文件分别记录 `REFERENCE_CLONE_COMMIT`（main）与 `UPSTREAM_RELEASE_COMMIT`（制品线） |
+
 ---
 
 ## 8. 未决事项与 Phase 1 前置
@@ -449,7 +474,7 @@ docker exec ai-memory-mcp ai-memory doctor
 
 | # | 事项 | 状态 |
 |---|---|---|
-| 1 | 部署制品仓库 | ✅ 已决：**私有**，名 `memory.agent-mate.ai`（与域名同名；注意本方案不含该域名，见 §9 变更记录） |
+| 1 | 部署制品仓库 | ✅ 已决：**公开**仓 `ethanhuangcst/memory.agent-mate.ai`（名与域名同名；注意本方案不含该域名，见 §9 变更记录） |
 | 2 | qwen 模型档位 | ✅ 已决：主 `qwen-plus`，`[llm.auto_tag]` 用 `qwen-turbo`（**只写 model，不写 backend**） |
 | 3 | DashScope embedding 的具体 `model` 与 `dim` | ⏳ **待你提供**（从 DashScope 文档/控制台取）。`KNOWN_EMBEDDING_DIMS` 不含 DashScope 模型，`dim` 必须手工填且必须一致；填错不报错，只会召回异常。**回填后必须跑 §5.1 的 doctor 探针验证** |
 | 4 | curator | ✅ 已决：**常驻**（独立 compose service；先 `--once --dry-run` 预演审阅；`--max-ops 50`；Phase 0 核对 `tagged > 0`） |
@@ -505,13 +530,18 @@ SHOW shared_preload_libraries;
 | 2026-09-19 | 更正：**config 路径由 `$HOME` 推导且无法改写** —— 由 `/etc/ai-memory/config.toml` 改为 `HOME=/data` + `/data/.config/ai-memory/config.toml`；顺带解决 HF 模型缓存持久化。原写法会静默忽略配置、tier 退回 semantic |
 | 2026-09-19 | 决议：curator 常驻（独立 service，先 dry-run 预演，`--max-ops 50`）；SSH 用单建受限用户；部署仓库私有、名 `memory.agent-mate.ai`；qwen 主 `plus` + auto_tag `turbo` |
 | 2026-09-19 | 备注：仓库名 `memory.agent-mate.ai` 与「本方案无该域名（方案 A）」存在命名不一致，按你的指示保留；若未来启用 HTTP 入口则名称自洽 |
-| 2026-09-19 | 生成部署制品：`docs/ye_cao_yun_production/deploy/`（staging，复制入新仓库即可） |
+| 2026-09-19 | 生成部署制品：`docs/ye_cao_yun_production/deploy/`（staging，复制入新仓库即可）。**该路径已随资产迁移变更** → 现为 [`../deploy/`](../deploy/) |
 | 2026-09-19 | 决议：备份外迁改采**先自研通用 OSS 备份 MCP**（当时名 `oss-backup-mcp`）作为前置项目。架构要点：一套核心 + 两个前端（MCP 给 agent、CLI 给 cron——MCP 无法承载定时触发）；恢复永不 in-place、必须过恢复演练验收。ai-memory 本地快照腿独立、可先行启用。（当时规格文件几经更名，现内容并入 [`mcp_oss_bak_com_requirements.md`](./mcp_oss_bak_com_requirements.md)） |
 | 2026-09-19 | 更名：项目更名为 **`aliyun-oss-bak-mcp`**（曾短暂改为「产品内置」后撤回，回归自研独立项目）；规格文件更名为 `aliyun_oss_bak_mcp_spec.md`，内容不变（含官方 OSS MCP alpha 替代评估：不可用，覆盖率 0/4） |
 | 2026-09-20 | **备份方案裁决**：mcp.oss-bak.com 从本计划**取消**，另建项目单独建设；研究整理为独立自洽需求规格 [`mcp_oss_bak_com_requirements.md`](./mcp_oss_bak_com_requirements.md)（移交物，旧规格文件删除、轨迹保留于此）。备份回归**默认方案**（本地快照 + cron/ossutil 外迁 OSS 香港 + 季度恢复演练），落地细节见 [`dev-plan.md`](./dev-plan.md) §4–5 |
 | 2026-09-20 | 新增：上游升级策略（7 步链路 + 三类破坏性变更审查 + 升级门禁「无新鲜外迁备份不升级」+ 升级后备份管线探针 + 半自动版本跟踪）——见 [`dev-plan.md`](./dev-plan.md) §5；资产隔离计划——见 [`asset_isolation_plan.md`](./asset_isolation_plan.md)（迁移待批） |
 | 2026-09-20 | 资产隔离布局定稿：**协同布局** —— 工程目录更名 `memory.agent-mate.ai`（公开仓 `ethanhuangcst/memory.agent-mate.ai`），上游 clone 嵌套为 `ai-memory-mcp/`（gitignored，只读约定），自有资产集中 `hk_vps_4/`；`.gitignore` 防 gitlink 陷阱 + `make pin` 回填版本映射；物理分仓降级为备选（见 asset_isolation_plan.md §6）。迁移已执行 |
 | 2026-09-20 | **资产迁移已执行**：自有资产入父仓 `hk_vps_4/`、上游重新 clone 为嵌套 gitignored 目录、断链修正、首提交 `4dbff84` 推送 GitHub；旧目录改名备份未删除（含 CodeBuddy 会话数据） |
+| 2026-09-20 | **改钉 0.9.0 → 0.10.0**：上游最新 release 为 `v0.10.0`（2026-07-12，且已是 GHCR `latest`）；0.10.0 默认翻转数为 0（仅加 WARN），并修正了 0.9.0 的 attestation require-everywhere 缺陷。我方 `AI_MEMORY_REQUIRE_AGENT_ATTESTATION=0` 在两个版本语义一致，升级**无需改配置** |
+| 2026-09-20 | **新增 §7.2**：上游 `main` 与 release tag 提交图不连通（历史被重写）——升级预检不得依赖 git 谱系；文档引用基准由开发 commit 改为 release tag |
+| 2026-09-20 | **更正 §6.2 / §6.3 回滚假设**：「二进制会拒绝启动于更新的库」已由源码证伪（`migrations.rs:1507`）；**回滚必须用 pre-migration 快照覆盖 DB**，只改 `IMAGE_TAG` 会静默损坏数据 |
+| 2026-09-20 | **建立版本契约层（单一真相源）**：新增 `hk_vps_4/upstream.lock`（tag + commit + schema + **镜像指纹**）、`specs/upstream_coupling_surface.md`（耦合面清单）、`scripts/upstream-preflight.sh`（升级准入判定，含「该版本尚不稳定，不适合更新」话术）、`.github/workflows/upstream-track.yml`（每日跟踪）。镜像固定粒度定为**标签 + 指纹双写**（防标签被重推） |
+| 2026-09-20 | 订正：§0 决议 10「命名待定」与 §8.1 #1「私有」改为实际状态（公开仓 `ethanhuangcst/memory.agent-mate.ai`）；上游文档引用由 4 处 `blob/96b8c694/…` 改为 `blob/v0.10.0/…`；制品路径 `docs/ye_cao_yun_production/deploy/` 订正为 `hk_vps_4/deploy/` |
 
 ---
 
@@ -521,8 +551,18 @@ SHOW shared_preload_libraries;
 |---|---|
 | [`hk_vps_4_settings.md`](./hk_vps_4_settings.md) | 野草云4 端口 / 网络 / 平台验收 |
 | [`vps4_new_deployment_instruction.md`](./vps4_new_deployment_instruction.md) | 节点 + 域名约定；`deployment-plan.md` 必填章节 |
-| [`../../docs/install-quickstart.md`](https://github.com/alphaonedev/ai-memory-mcp/blob/96b8c694/docs/install-quickstart.md) | 上游安装说明 |
-| [`../../docs/CONFIG_SCHEMA.md`](https://github.com/alphaonedev/ai-memory-mcp/blob/96b8c694/docs/CONFIG_SCHEMA.md) | `[llm]` / `[embeddings]` 段权威 schema |
-| [`../../docs/ADMIN_GUIDE.md`](https://github.com/alphaonedev/ai-memory-mcp/blob/96b8c694/docs/ADMIN_GUIDE.md) | 全部环境变量与运维面 |
-| [`../../docs/integrations/llm-backends.md`](https://github.com/alphaonedev/ai-memory-mcp/blob/96b8c694/docs/integrations/llm-backends.md) | 各 LLM 后端配方（含 qwen / DashScope） |
-| `specs/adr/` ADR-002 / ADR-003 | IMAGE_TAG；NPM Save + healthz |
+| [`install-quickstart.md`](https://github.com/alphaonedev/ai-memory-mcp/blob/v0.10.0/docs/install-quickstart.md) | 上游安装说明 |
+| [`CONFIG_SCHEMA.md`](https://github.com/alphaonedev/ai-memory-mcp/blob/v0.10.0/docs/CONFIG_SCHEMA.md) | `[llm]` / `[embeddings]` 段权威 schema |
+| [`ADMIN_GUIDE.md`](https://github.com/alphaonedev/ai-memory-mcp/blob/v0.10.0/docs/ADMIN_GUIDE.md) | 全部环境变量与运维面 |
+| [`integrations/llm-backends.md`](https://github.com/alphaonedev/ai-memory-mcp/blob/v0.10.0/docs/integrations/llm-backends.md) | 各 LLM 后端配方（含 qwen / DashScope） |
+| [`../upstream.lock`](../upstream.lock) | ★ **版本契约单一真相源**（上游 tag / 镜像指纹 / schema / 沉淀期阈值） |
+| [`upstream_coupling_surface.md`](./upstream_coupling_surface.md) | 耦合面清单：本部署依赖上游的每个契约点（含敏感度与检测方法） |
+| [`../scripts/upstream-preflight.sh`](../scripts/upstream-preflight.sh) | 升级预检脚本（准入判据 H1–H5 / W1–W6，退出码 0/2/3/1） |
+
+> **上游文档引用基准 = release tag**（`blob/v0.10.0/…`），不用 `main`（内容漂移）也不用开发 commit
+> （上游重写历史后会断链，见 §7.2）。实测：这 4 份文档在 v0.9.0 → v0.10.0 之间**逐字节未变**，
+> 故切换基准零信息损失（唯一差异是 `CONFIG_SCHEMA.md` 中一处与本部署无关的 Postgres pgvector 版本号）。
+| `specs/adr/` ADR-002 / ADR-003 | IMAGE_TAG；NPM Save + healthz（运维知识库侧） |
+| [`./adr/ADR-004-version-contract-single-source-of-truth.md`](./adr/ADR-004-version-contract-single-source-of-truth.md) | 版本契约锁文件 + 镜像标签/指纹双写 + 引用基准 |
+| [`./adr/ADR-005-upgrade-admission-gate-layering.md`](./adr/ADR-005-upgrade-admission-gate-layering.md) | 准入判据分层（H/W）+ 回滚必须快照覆盖 |
+| [`./knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md`](./knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md) | 上游版本拓扑 / schema 阶梯 / 回滚语义 / 文档缺陷（实测记录） |
