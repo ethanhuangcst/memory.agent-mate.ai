@@ -68,14 +68,16 @@ Accepted
 - ✅ 闸门可实际通过（`make preflight` 对当前 0.10.0 输出 exit 0）。
 - ✅ 上游发新版时 Actions 能稳定分流：`exit 2` → `upstream-unstable` 标签 +「尚不稳定」标题；
   `exit 3` → `ready-to-upgrade` 标签。
-- ✅ 判据规格（`dev-plan.md` §5.2）与执行体（`upstream-preflight.sh`）**同源**，变更须同步。
+- ✅ 判据规格（`deployment.md` §9.4 告警项 W1–W6）与执行体（`upstream-preflight.sh`）**同源**，变更须同步。
 - ⚠️ 人工确认项依赖人的纪律：`exit 3` 不等于"可以升"，必须逐条读 W 清单。
 - ⚠️ H5 无法自动求值 → 在任何自动化结论里都显示为「未判定」，需人工在服务器侧用 `ossutil ls` 补上。
 - ⚠️ 附带发现（非本 ADR 决策但受其约束）：**回滚必须用 pre-migration 快照覆盖 DB**。
   上游**不会**因「库比二进制新」而拒绝启动（`src/storage/migrations.rs:1507`：`version >= CURRENT_SCHEMA_VERSION`
   时直接 `return Ok(())`；全 `src` 无拒绝逻辑），故只改 `IMAGE_TAG` 的「回滚」会让旧二进制
-  静默操作它不认识的 schema。该约束已写入 `dev-plan.md` §5.6 与 `deployment_strategy.md` §6.2/§6.3。
+  静默操作它不认识的 schema。该约束已写入 `deployment.md` §10（回滚）。
 
 ## Date
 
 2026-09-20
+
+> 2026-09-20：本文档的**路径与指向**随目录改名（`hk_vps_4/` → `memory.agent-mate.ai/`）及 specs 整合同步；决议文字与理由一字未改。

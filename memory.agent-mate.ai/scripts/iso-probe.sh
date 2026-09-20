@@ -4,7 +4,7 @@
 # 前置：local-up.sh 已启动（容器 ai-memory-mcp 常驻）。会话调用方式与生产 SSH forced command
 #       同构：docker exec -i [-e ...] ai-memory-mcp ai-memory mcp --tier smart（-i 不加 -t）。
 #
-# 目的：为「多用户隔离是否可实现」提供**实测证据**（源码依据见 specs/multiuser_isolation.md §2 /
+# 目的：为「多用户隔离是否可实现」提供**实测证据**（源码依据见 specs/mcp/mcp-design.md §2 /
 #       specs/sprint_plan.md「阻断级风险」）。
 #
 #   A 组 负向（R1 解析链）
@@ -17,7 +17,7 @@
 #     P2  双用户（iso-alice / iso-bob）独立 MCP 会话：A 的标记 B 检索不到；A↔B 互相 get 不可见；
 #         用户库文件存在且属主 aimem；共享主库记忆计数不变（sprint_plan V2/V3 的本地版）
 #     P3  与用户会话完全相同的 env/argv 跑 doctor --json，断言 source == 该用户库（V4 的本地版）
-#     P5  每库显式维护通路：ai-memory --db <user> stats 可用（multiuser_isolation.md §5.3 的前置）
+#     P5  每库显式维护通路：ai-memory --db <user> stats 可用（mcp/mcp-design.md §5.3 的前置）
 #
 #   C 组 方案 ② 单库 + per-user env 对照（证明「读可强制、写不可信」→ ③ 的必要性）
 #     P6  同库：alice 写入私有行；bob 以 agent_id=human:iso-alice 注入（写路径可伪造）；

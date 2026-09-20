@@ -8,7 +8,7 @@ tags:
   - bash
   - git-grep
   - secret-scanning
-related_spec: memory.agent-mate.ai/specs/asset_isolation_plan.md
+related_spec: memory.agent-mate.ai/specs/architecture.md
 related:
   - adr/ADR-006-public-repo-ip-placeholder-deidentification.md
 ---

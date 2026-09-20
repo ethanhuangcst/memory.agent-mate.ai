@@ -9,9 +9,9 @@ tags:
   - versioning
   - rollback
   - ghcr
-related_spec: memory.agent-mate.ai/specs/deployment_strategy.md
+related_spec: memory.agent-mate.ai/specs/deployment.md
 related:
-  - memory.agent-mate.ai/specs/upstream_coupling_surface.md
+  - memory.agent-mate.ai/specs/mcp/mcp-design.md
   - memory.agent-mate.ai/upstream.lock
   - adr/ADR-004-version-contract-single-source-of-truth.md
   - adr/ADR-005-upgrade-admission-gate-layering.md
@@ -78,9 +78,9 @@ src/storage/migrations.rs:1507
 | 近重复写入 | 语义相近的写入返回 **CONFLICT（near-duplicate 去重）**，非 bug | 冒烟二次运行命中；`mcp-smoke.sh` 按「改验既有标记」容忍 |
 | `memory_search` | **ASCII 子串精确匹配**：ASCII 标记可靠命中；**中文查询一律 count=0**（FTS 分词不吃 CJK），即使该串在 title/content 中连续存在 | 「三层全绿」（content 连续子串）count=0；对照 `l2-client-20260920` count=2 |
 | `memory_recall` | 语义/hybrid 检索，中文查询质量高（实测 score 0.887 / 0.893 居首），`mode:hybrid` | 查询词不含标记字面量仍命中 |
-| 传输 | 服务端**无** `/mcp`、`/sse` HTTP 端点；`serve` 的 9077 仅绑容器内回环 → 客户端只能走 stdio（`docker exec -i`，**不加 `-t`**） | `mcp-test.md` §0；`-t` 会破坏 stdio 帧 |
+| 传输 | 服务端**无** `/mcp`、`/sse` HTTP 端点；`serve` 的 9077 仅绑容器内回环 → 客户端只能走 stdio（`docker exec -i`，**不加 `-t`**） | `specs/mcp/mcp-test.md` §0；`-t` 会破坏 stdio 帧 |
 | `memory_capabilities` | core 档亦常驻的能力清单探针（家族/装载状态/features/models/工具总数）；其 `summary` 用**族计数口径**（「7 of 100 … under core」）——实际 `tools/list` 注册数 = **8**，源码 `registry::ALL` = **101**（v0.10.0 与 main 实测同；manifest 自称 100 的上游口径差未定因） | 2026-09-20 真实客户端 manifest + 源码计数 |
-| 家族与工具数 | core 7 / lifecycle 6 / graph 12 / governance 8 / power 49 / meta 6 / archive 4 / other 9 = **101**；`full`=101，其余档 +1 always-on（core 实注册 8） | capabilities manifest 与 `mcp_tool_inventory.md` 一致 |
+| 家族与工具数 | core 7 / lifecycle 6 / graph 12 / governance 8 / power 49 / meta 6 / archive 4 / other 9 = **101**；`full`=101，其余档 +1 always-on（core 实注册 8） | capabilities manifest 与 `specs/mcp/mcp-design.md` §8 一致 |
 | harness 延迟注册 | 客户端回报 `your_harness_supports_deferred_registration: false` → `memory_load_family` 对 Cursor **无效**，档位只能在启动参数 `--profile` 定死 | manifest 原文 |
 | 功能边界（v0.10.0） | `compaction.enabled=false`（v0.8+ 规划）、`transcripts.enabled=false`、`reranker_active="off"`（无 cross-encoder）、`recall_mode_active="hybrid"`、`embedding_dim=1024` | capabilities manifest |
 
@@ -95,7 +95,7 @@ src/storage/migrations.rs:1507
 | 写路径授权边界 | **不存在**：`memory_store` 顶层 `agent_id` 参数可指定他人身份写入**成功**（响应回显该身份），随后该行在原属主检索中可见 | 探针 P6；`src/mcp/tools/store/tests.rs:46/1191` |
 | 读路径授权边界 | 存在但**只认 env**（`AI_MEMORY_AGENT_ID`，不接受工具参数）；同库下 B 读不到 A 的 private 行 | 探针 P6；`src/identity/mod.rs:160/333-345` |
 | 用户库目录 | 属主必须是容器进程用户 `aimem:aimem`；创建须 `docker exec -u 0 … mkdir` + `chown` | 探针 P0/P2 |
-| 每用户库的后台维护 | compose 常驻 serve/curator **只服务默认库**；`ai-memory --db <path> stats` 调用形态可用 | 探针 P5；`multiuser_isolation.md` §5.3 |
+| 每用户库的后台维护 | compose 常驻 serve/curator **只服务默认库**；`ai-memory --db <path> stats` 调用形态可用 | 探针 P5；`specs/mcp/mcp-design.md` §5.3 |
 
 ## Lesson / guidance
 
@@ -124,7 +124,7 @@ src/storage/migrations.rs:1507
     （如 `mcp-smoke-<epoch>`），语义验证用 recall 的中文查询词；两者职责对调会出现「明明存进去了却搜不到」的假故障。
 11. **写元数据前先按 `inputSchema` 构造参数**：`source` 等是枚举字段，凭字段名猜值会被响亮拒绝（好）但白耗一轮往返。
 12. **批量/重复写入必须容忍 CONFLICT**：near-duplicate 去重让语义相近的写入返回 CONFLICT，
-    脚本若不处理，第二次运行就会假失败（正解：改验既有标记，见 `mcp-test.md` §1 原则）。
+    脚本若不处理，第二次运行就会假失败（正解：改验既有标记，见 `specs/mcp/mcp-test.md` §1 原则）。
 13. **档位是启动参数，不是运行时能力**：`--profile`（工具档）与 `--tier`（搜索档）彼此独立；
     且 Cursor 等 harness 不支持动态注册（`your_harness_supports_deferred_registration: false`），
     想用 core 之外的家族只能在客户端 args 里写死 `--profile` 再重连 —— 上线前必须在**客户端侧**确认档位，而不是只看服务端。
@@ -142,11 +142,11 @@ src/storage/migrations.rs:1507
 
 ## Links
 
-- 契约点逐条清单（含敏感度与检测方法）：`memory.agent-mate.ai/specs/upstream_coupling_surface.md`
+- 契约点逐条清单（含敏感度与检测方法）：`memory.agent-mate.ai/specs/mcp/mcp-design.md` §9
 - 版本坐标唯一真相源：`memory.agent-mate.ai/upstream.lock`
-- 升级策略（含准入判据规格）：`memory.agent-mate.ai/specs/dev-plan.md` §5
-- 决议真相源：`memory.agent-mate.ai/specs/deployment_strategy.md` §6/§7/§9
-- MCP 测试策略 / 计划 / 用例（L0–L3 分层、客户端接入配置、工具行为原则）：`memory.agent-mate.ai/specs/mcp-test.md`
-- 多用户隔离方案与结论（冻结机制 / D1–D5 / V1–V4 / 未决前提）：`memory.agent-mate.ai/specs/multiuser_isolation.md` §0
+- 升级策略（含准入判据规格）：`memory.agent-mate.ai/specs/deployment.md` §9
+- 决议真相源：`memory.agent-mate.ai/specs/architecture.md` §2
+- MCP 测试策略 / 计划 / 用例（L0–L3 分层、客户端接入配置、工具行为原则）：`memory.agent-mate.ai/specs/mcp/mcp-test.md`
+- 多用户隔离方案与结论（冻结机制 / D1–D5 / V1–V4 / 未决前提）：`memory.agent-mate.ai/specs/mcp/mcp-design.md` §0
 - 隔离探针（可重复）：`memory.agent-mate.ai/scripts/iso-probe.sh`（A 负向解析链 / B 方案③双用户隔离 / C 方案②对照）
 - 相关 ADR：`adr/ADR-004-version-contract-single-source-of-truth.md`、`adr/ADR-005-upgrade-admission-gate-layering.md`、`adr/ADR-008-local-baseline-reuses-production-compose.md`、`adr/ADR-009-per-user-db-isolation-over-single-db-agent-id.md`（多用户隔离形态的决策，含"排除单库 per-agent"的实测理由）

@@ -13,7 +13,7 @@ Accepted
 发布的官方镜像。2026-09-20 复核时发现三个具体问题：
 
 1. **版本坐标散落**：上游 release tag / 镜像 tag / 参考 clone commit 共约 30 处、分布在 9 个文件里。
-   改一次要改 30 处，漏一处即自相矛盾 —— **已实际发生**：`deployment_strategy.md` 写「当前稳定镜像 0.9.0」，
+   改一次要改 30 处，漏一处即自相矛盾 —— **已实际发生**：彼时的 `deployment_strategy.md`（现并入 `architecture.md`）写「当前稳定镜像 0.9.0」，
    而上游早在 2026-07-12 就发布了 0.10.0 并把它打成 GHCR `latest`。
 2. **上游有过历史重写**：`main` 的 HEAD 与已发布 release tag 的**提交图不连通**
    （`git merge-base` 为空；GitHub API 明确返回 `No common ancestor between v0.10.0 and main.`；
@@ -60,3 +60,5 @@ Accepted
 ## Date
 
 2026-09-20
+
+> 2026-09-20：本文档的**路径与指向**随目录改名（`hk_vps_4/` → `memory.agent-mate.ai/`）及 specs 整合同步；决议文字与理由一字未改。

@@ -28,7 +28,9 @@ Accepted
 - 真实 IP 的物理真相源变为本机 `secrets.local.hk_vps_4.md`（不入仓，需本机保管/密码管理器）。
 - 任何含公网 IP 的提交会被 pre-commit 拦下；`make secret-check` 可手动复查。
 - 变更记录行**不得**写真实 IP 字面量（否则会触发自己的护栏）；应写占位符或指向 `secrets.local`。
-- 决策已写入 `asset_isolation_plan.md` §10 / §12、`sprint_plan.md` Sprint 2 #1 与变更记录、`deployment_strategy.md` §0 决议 10 与变更记录。
+- 决策已写入 `architecture.md` §5（仓库与资产边界 / 脱敏规则）、`sprint_plan.md` Sprint 2 #1 与变更记录、`architecture.md` §2 决议 10 与变更记录。
 
 ## Date
 2026-09-20
+
+> 2026-09-20：本文档的**路径与指向**随目录改名（`hk_vps_4/` → `memory.agent-mate.ai/`）及 specs 整合同步；决议文字与理由一字未改。

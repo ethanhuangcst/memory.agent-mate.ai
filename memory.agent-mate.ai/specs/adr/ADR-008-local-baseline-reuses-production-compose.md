@@ -19,7 +19,7 @@ Sprint 2 #4 需要一条**本地对照基线**：本机跑起 ai-memory-mcp，�
 2. **常驻而非一次性**：容器保持 `Up`，供 `docker exec -i` 的 stdio 接入复用于任何时候的客户端验证；停止保留卷用 `docker-compose -f memory.agent-mate.ai/deploy/docker-compose.prod.yml down`。
 3. **协议验收脚本化**：新增 `memory.agent-mate.ai/scripts/mcp-smoke.sh`——握手 → 工具数断言 → 唯一标记写入 → **跨进程**语义召回，退出码语义化（10 环境 / 20 握手或工具数 / 30 写入 / 40 召回）。
 4. **工具数断言写死 `core = 8`**（core 7 + always-on `memory_capabilities`）：把「默认档位是 core 不是 full」这个静默漂移点变成显式断言。
-5. **所有 MCP 测试集中登记于 `memory.agent-mate.ai/specs/mcp-test.md`**（测试策略 + 计划 + 用例的唯一 spec），分层 L0 前置健康 / L1 协议冒烟 / L2 客户端接入 / L3 生产 SSH 通道；不新增第二处测试清单。
+5. **所有 MCP 测试集中登记于 `memory.agent-mate.ai/specs/mcp/mcp-test.md`**（测试策略 + 计划 + 用例的唯一 spec），分层 L0 前置健康 / L1 协议冒烟 / L1.5 隔离探针 / L2 客户端接入 / L3 生产 SSH 通道；不新增第二处测试清单。
 
 ## Rationale
 
@@ -27,7 +27,7 @@ Sprint 2 #4 需要一条**本地对照基线**：本机跑起 ai-memory-mcp，�
 - 常驻是客户端接入的前提：`docker exec` 挂不到已停容器，且 MCP 客户端不提供「按需拉起」。
 - 脚本化而非一次性命令：基线要**可重复**；且 `initialize` 回包核对工具数这一模式正是 Sprint 3 #2 与 Sprint 5 冒烟的判据，符合项目「探针脚本化」惯例（对照 `qwen-verify.sh` / `secret-check.sh`）。
 - 唯一标记 + 跨进程召回：写入与召回分两个 `docker exec` 进程，一次运行同时证明「协议通路」与「卷持久化」；召回用语义查询词而不含标记字面量，顺带证明 embedder 未降级为 keyword（静默失败点 #1 的行为级证据）。
-- 集中 spec：探针与用例若散落在多个文档，改动 config / 镜像 tag / 档位时无法知道该重跑哪些；集中在 `mcp-test.md` 可给出单一回归清单。
+- 集中 spec：探针与用例若散落在多个文档，改动 config / 镜像 tag / 档位时无法知道该重跑哪些；集中在 `specs/mcp/mcp-test.md` 可给出单一回归清单。
 
 ## Consequences
 
@@ -36,7 +36,9 @@ Sprint 2 #4 需要一条**本地对照基线**：本机跑起 ai-memory-mcp，�
 - 回归触发条件明确：改动 config / 镜像 tag / 档位后重跑 L0 + L1；客户端环境变化（重连 / 换机器）后重跑 L2。
 - **`docker-compose.prod.yml` 是生产资产**：本地不得为图方便直接改它，任何改动同时作用于生产。
 - L2（真实客户端接入）依赖 `~/.cursor/mcp.json` 用户级条目 `ai-memory-local`；容器重启后需在 MCP 面板 reconnect。
-- 生产传输形态为 **stdio-over-SSH**（非 `http url + API key`），源码级核实结论见 `memory.agent-mate.ai/specs/mcp-test.md` §0；若将来开放 HTTP 入口，须回该 spec 增补远程接入用例。
+- 生产传输形态为 **stdio-over-SSH**（非 `http url + API key`），源码级核实结论见 `memory.agent-mate.ai/specs/mcp/mcp-test.md` §0；若将来开放 HTTP 入口，须回该 spec 增补远程接入用例。
 
 ## Date
 2026-09-20
+
+> 2026-09-20：本文档的**路径与指向**随目录改名（`hk_vps_4/` → `memory.agent-mate.ai/`）及 specs 整合同步；决议文字与理由一字未改。

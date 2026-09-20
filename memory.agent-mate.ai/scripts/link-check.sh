@@ -22,7 +22,8 @@
 #   - 锚点忽略：只校验 `#` 之前的路径部分（锚点内容随文档重写易变，且不可离线判）。
 #   - 允许清单 scripts/link-check.allow：把「已知且暂不修」的遗留**显式化**，
 #     而不是静默放宽规则；每行 `<源文件相对路径> <链接目标>`，目标写 `*` 表示该文件
-#     的全部悬空链接暂允。清单里的每一行都必须带理由注释。
+#     的全部悬空链接暂允。源文件路径相对仓根或相对产品目录书写均可（后缀匹配）。
+#     清单里的每一行都必须带理由注释。
 #   - 依赖仅 python3（标准库）；零外部依赖，可离线运行。
 # =============================================================================
 set -uo pipefail
@@ -75,6 +76,19 @@ elif verbose:
 LINK_RE = re.compile(r'\[[^\]]*\]\(\s*<?([^)\s>]+)>?(?:\s+"[^"]*")?\s*\)')
 SCHEME_RE = re.compile(r'^[A-Za-z][A-Za-z0-9+.\-]*:')  # http/https/mailto/... 外部协议
 
+def is_allowed(rel_src, target, path_part):
+    """允许清单匹配：源文件路径既可用「相对仓根」也可用「相对产品目录」书写。
+
+    后者（如 `specs/sprint_plan.md`）是清单里的惯用写法，靠后缀匹配兼容，
+    避免清单与脚本对「相对谁」的理解不一致导致豁免静默失效 —— 这正是本护栏要防的缺陷。
+    """
+    for key, tgts in allow.items():
+        key = key.lstrip("./")
+        if rel_src == key or rel_src.endswith("/" + key):
+            if "*" in tgts or target in tgts or path_part in tgts:
+                return True
+    return False
+
 md_files = []
 for dirpath, dirnames, filenames in os.walk(root):
     dirnames[:] = [d for d in dirnames if d not in EXCLUDE_DIRS]
@@ -115,8 +129,7 @@ for path in md_files:
             if os.path.exists(resolved):
                 continue
 
-            allowed = allow.get(rel_src, set())
-            if "*" in allowed or target in allowed or path_part in allowed:
+            if is_allowed(rel_src, target, path_part):
                 continue
             dangling.append((rel_src, lineno, target))
 

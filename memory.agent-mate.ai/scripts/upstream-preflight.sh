@@ -28,9 +28,9 @@
 #   - 网络统一走 fetch_url()：15s 超时 + 3 次指数退避重试
 #   - 锁文件按「键名白名单」逐行解析，**不使用** source / eval
 #   - 报告写 stdout，日志写 stderr
-#   - 判据定义见 memory.agent-mate.ai/specs/upstream_coupling_surface.md 与 dev-plan.md §5
+#   - 判据定义见 memory.agent-mate.ai/specs/mcp/mcp-design.md §9 与 specs/deployment.md §9
 #
-# 准入判据（详见 dev-plan §5.2）:
+# 准入判据（详见 deployment.md §9.4）:
 #   硬性阻断 H1 非预发布版 / H2 沉淀期 ≥ SOAK_DAYS_MIN / H3 GHCR 有对应镜像
 #            H4 候选不早于所钉版本 / H5 存在新鲜外迁备份（服务器侧人工确认）
 #   人工确认 W1 CHANGELOG 破坏性关键词 / W2 schema 前向迁移 / W3 契约面差异
@@ -419,7 +419,7 @@ checks_h = [
     {"id": "H3", "name": "GHCR 存在对应镜像", "ok": h3_ok, "detail": h3_detail},
     {"id": "H4", "name": "候选不早于当前所钉版本", "ok": h4_ok, "detail": h4_detail},
     {"id": "H5", "name": "存在新鲜外迁备份（人工确认）", "ok": None,
-     "detail": "服务器侧判据：升级前须确认 OSS 上存在新鲜外迁备份（dev-plan §5.2）"},
+     "detail": "服务器侧判据：升级前须确认 OSS 上存在新鲜外迁备份（deployment.md §9.4 W3）"},
 ]
 
 # ---------- W1：CHANGELOG 破坏性关键词 ----------
@@ -515,7 +515,7 @@ elif blocked:
     message = "ai-memory %s —— 该版本尚不稳定，不适合更新" % cand_tag
 else:
     verdict, code = "ready", 3
-    message = "ai-memory %s —— 可评估升级（人工确认后按 dev-plan §5.1 执行）" % cand_tag
+    message = "ai-memory %s —— 可评估升级（人工确认后按 deployment.md §9.2 执行）" % cand_tag
 
 suggest = ""
 if code == 2:

@@ -6,7 +6,7 @@
 #   docker exec -i ai-memory-mcp ai-memory mcp --tier smart   （-i 不加 -t，pty 会破坏 stdio 帧）
 #
 # 会话 A（写入）：initialize 握手 → tools/list 断言 core 档 8 工具（依据
-#                specs/mcp_tool_inventory.md §2，v0.10.0 实测名单：
+#                specs/mcp/mcp-design.md §8，v0.10.0 实测名单：
 #                store/recall/search/list/load_family/smart_load/get/capabilities）
 #                → memory_store 写入含唯一标记的自然语句（schema 实证：必填 content + title）
 # 会话 B（召回，新 docker exec 进程 = 跨进程验证持久化）：
