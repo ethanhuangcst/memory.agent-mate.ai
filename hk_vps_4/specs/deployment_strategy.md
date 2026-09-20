@@ -550,6 +550,7 @@ SHOW shared_preload_libraries;
 | 2026-09-20 | **更正 §6.2 / §6.3 回滚假设**：「二进制会拒绝启动于更新的库」已由源码证伪（`migrations.rs:1507`）；**回滚必须用 pre-migration 快照覆盖 DB**，只改 `IMAGE_TAG` 会静默损坏数据 |
 | 2026-09-20 | **建立版本契约层（单一真相源）**：新增 `hk_vps_4/upstream.lock`（tag + commit + schema + **镜像指纹**）、`specs/upstream_coupling_surface.md`（耦合面清单）、`scripts/upstream-preflight.sh`（升级准入判定，含「该版本尚不稳定，不适合更新」话术）、`.github/workflows/upstream-track.yml`（每日跟踪）。镜像固定粒度定为**标签 + 指纹双写**（防标签被重推） |
 | 2026-09-20 | 订正：§0 决议 10「命名待定」与 §8.1 #1「私有」改为实际状态（公开仓 `ethanhuangcst/memory.agent-mate.ai`）；上游文档引用由 4 处 `blob/96b8c694/…` 改为 `blob/v0.10.0/…`；制品路径 `docs/ye_cao_yun_production/deploy/` 订正为 `hk_vps_4/deploy/` |
+| 2026-09-20 | 本次复核（`sprint_plan.md` 重排为 6 个 Sprint）：文档内**无 Sprint 编号引用**（§8.1 的待办项与 Sprint 2 的 DashScope key / embedding model+dim 一致），**无需改动**。注：§0「无域名 / 无 HTTPS / 无公网入口」将被门户引入的入口修订 —— 按 Sprint 3「同步既有文档 9 处矛盾」与 Sprint 4「公网入口与认证边界」处理 |
 
 ---
 
