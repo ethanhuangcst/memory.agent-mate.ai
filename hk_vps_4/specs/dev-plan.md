@@ -1,7 +1,7 @@
 # dev-plan — ai-memory 生产部署与升级计划
 
 > **状态：** 计划待审核 —— **文档内描述的部署动作均未执行**
-> **范围变更：** mcp.oss-bak.com（多租户备份 MCP）已从本计划**移出**，另建项目单独建设；其需求规格见 [`mcp_oss_bak_com_requirements.md`](./mcp_oss_bak_com_requirements.md)。备份回归**默认方案**（§4）。
+> **范围变更：** mcp.oss-bak.com（多租户备份 MCP）已从本计划**移出**，另建项目单独建设；其需求规格（`mcp_oss_bak_com_requirements.md`）已作为移交物**移出本仓**（2026-09-20）。备份回归**默认方案**（§4）。
 > **关联：** [`deployment_strategy.md`](./deployment_strategy.md)（决议真相源） · [`asset_isolation_plan.md`](./asset_isolation_plan.md)（资产隔离） · [`hk_vps_4_settings.md`](./hk_vps_4_settings.md) · [`vps4_new_deployment_instruction.md`](./vps4_new_deployment_instruction.md)
 > **as_of：** 2026-09-20
 
@@ -11,7 +11,7 @@
 
 | 日期 | 变更 |
 | --- | --- |
-| 2026-09-20 | mcp.oss-bak.com（多租户备份 MCP）移出本计划，另建项目；需求规格移交至 [`mcp_oss_bak_com_requirements.md`](./mcp_oss_bak_com_requirements.md)。备份回归默认方案（§4）。新增上游升级策略（§5） |
+| 2026-09-20 | mcp.oss-bak.com（多租户备份 MCP）移出本计划，另建项目；需求规格移交至 `mcp_oss_bak_com_requirements.md`（**该文件已于 2026-09-20 移出本仓**）。备份回归默认方案（§4）。新增上游升级策略（§5） |
 | 2026-09-19 | 初版方向：SQLite 卷 + 官方镜像 + smart(qwen) + stdio-over-SSH（详见 deployment_strategy.md 决议表） |
 
 ## 2. 背景与已确认决议

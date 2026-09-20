@@ -39,8 +39,7 @@
     │   ├── asset_isolation_plan.md      # 本文档
     │   ├── hk_vps_4_settings.md
     │   ├── vps4_new_deployment_instruction.md
-    │   ├── mcp_oss_bak_com_requirements.md   # mcp.oss-bak.com 需求规格（另建项目用）
-    │   ├── adr/                         # 架构决议记录（ADR-004 / ADR-005）
+    │   ├── adr/                         # 架构决议记录（ADR-004 … ADR-009）
     │   └── knowledge/                   # 可复用研究与运维知识（upstream-ai-memory/）
     ├── deploy/
     │   ├── docker-compose.prod.yml
@@ -141,7 +140,7 @@ up: / down:          ## 本地栈起停（见 dev-plan.md §3）
 | 4 | 本文档 | → `hk_vps_4/specs/` | ✅ |
 | 5 | `hk_vps_4_settings.md` | → `hk_vps_4/specs/` | ✅ |
 | 6 | `vps4_new_deployment_instruction.md` | → `hk_vps_4/specs/` | ✅ |
-| 7 | `mcp_oss_bak_com_requirements.md` | → `hk_vps_4/specs/` | ✅ |
+| 7 | `mcp_oss_bak_com_requirements.md` | → `hk_vps_4/specs/`（**2026-09-20 随项目移交移出本仓**） | ✅ 迁移已完成；文件本身此后被移除 |
 | 8 | `deploy/`（5 文件） | → `hk_vps_4/deploy/` | ✅ |
 | 9 | `backup/` 脚本 | → `hk_vps_4/backup/`（dev-plan.md §4 落地时创建） | ☐ |
 | 10 | `.gitignore` + Makefile | 父仓根（先于 git add） | ✅ |

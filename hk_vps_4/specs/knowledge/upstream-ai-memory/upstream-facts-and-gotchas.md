@@ -15,6 +15,7 @@ related:
   - hk_vps_4/upstream.lock
   - adr/ADR-004-version-contract-single-source-of-truth.md
   - adr/ADR-005-upgrade-admission-gate-layering.md
+  - adr/ADR-009-per-user-db-isolation-over-single-db-agent-id.md
 ---
 
 # 上游 ai-memory-mcp 的事实与坑
@@ -83,6 +84,19 @@ src/storage/migrations.rs:1507
 | harness 延迟注册 | 客户端回报 `your_harness_supports_deferred_registration: false` → `memory_load_family` 对 Cursor **无效**，档位只能在启动参数 `--profile` 定死 | manifest 原文 |
 | 功能边界（v0.10.0） | `compaction.enabled=false`（v0.8+ 规划）、`transcripts.enabled=false`、`reranker_active="off"`（无 cross-encoder）、`recall_mode_active="hybrid"`、`embedding_dim=1024` | capabilities manifest |
 
+**多用户隔离（2026-09-20 实测，v0.10.0，本地基线容器；可重复探针 `hk_vps_4/scripts/iso-probe.sh`）**
+
+| 事实 | 实测结论 | 证据 |
+| --- | --- | --- |
+| 漏设 `AI_MEMORY_DB`（unset） | **不报错**（rc=0、无告警），库路径静默落到 `config.toml` 的 `db`（本部署 = `/data/ai-memory.db`，即共享主库） | 探针 P1a；`src/config.rs:7506-7516` + `src/daemon_runtime.rs:88/137/980` |
+| 显式设 `AI_MEMORY_DB` | 解析结果随 env 改变；`doctor --json` 的 `source` 字段 = 实际解析出的库路径 | 探针 P1b/P3；`src/cli/doctor.rs:117-119/591` |
+| 错设到父目录不存在 | `Storage` section `severity=critical`（`failed to open database`）、`overall=critical`、**rc=2**（fail-loud） | 探针 P4 |
+| 一用户一 DB | 跨库物理隔离成立：A/B 双向 `memory_search` 未命中、`memory_get` → `memory not found`；各库计数独立（1/1）、主库计数与 mtime 不变 | 探针 P2/P5 |
+| 写路径授权边界 | **不存在**：`memory_store` 顶层 `agent_id` 参数可指定他人身份写入**成功**（响应回显该身份），随后该行在原属主检索中可见 | 探针 P6；`src/mcp/tools/store/tests.rs:46/1191` |
+| 读路径授权边界 | 存在但**只认 env**（`AI_MEMORY_AGENT_ID`，不接受工具参数）；同库下 B 读不到 A 的 private 行 | 探针 P6；`src/identity/mod.rs:160/333-345` |
+| 用户库目录 | 属主必须是容器进程用户 `aimem:aimem`；创建须 `docker exec -u 0 … mkdir` + `chown` | 探针 P0/P2 |
+| 每用户库的后台维护 | compose 常驻 serve/curator **只服务默认库**；`ai-memory --db <path> stats` 调用形态可用 | 探针 P5；`multiuser_isolation.md` §5.3 |
+
 ## Lesson / guidance
 
 1. **不要用 git 谱系判断上游版本差异**。上游会重写历史；`git log <tag>..main` 与 `git diff` 会直接失效。
@@ -114,6 +128,17 @@ src/storage/migrations.rs:1507
 13. **档位是启动参数，不是运行时能力**：`--profile`（工具档）与 `--tier`（搜索档）彼此独立；
     且 Cursor 等 harness 不支持动态注册（`your_harness_supports_deferred_registration: false`），
     想用 core 之外的家族只能在客户端 args 里写死 `--profile` 再重连 —— 上线前必须在**客户端侧**确认档位，而不是只看服务端。
+14. **多用户隔离的失效形态是「功能正常」**：漏设 `AI_MEMORY_DB` 时进程 rc=0、无告警，所有用户静默共用 `config.toml` 指定的主库
+    （上游 `AppConfig::effective_db()` 的优先级陷阱：CLI/env 库路径**恰为默认值**时改用 config 的 `db`）。
+    因此多用户部署必须同时做两件事：**移除 config 的 `db` 键**（让"漏设"退化为相对路径 → fail-loud）+ **spawn 前 fail-closed 断言**（路径非空、以 `/data/users/` 开头、含该 handle）。
+    只"写对 env"是在赌模板永不出错。
+15. **`doctor --json` 的 `source` 是解析链的自证手段**：任何"这条会话到底落在哪个库"的问题，用它对照模板的 env/argv 即可闭环（V4 探针法），比翻日志/看时间戳可靠。
+16. **单库 + per-agent env 不构成隔离**：写路径**完全没有** caller 过滤（`agent_id` 是自述值，可被任意调用者指定为他人），
+    读路径又只认 env —— 结果是「读能被强制、写完全不可信」。真正的多用户隔离只能靠**一用户一数据库**（物理分离，无跨库路径）。
+17. **探针脚本里「写入 + 立刻检索」必须分会话**：near-duplicate CONFLICT 时**本次标记并未落库**，
+    同一会话内紧接着检索该标记必然 `count:0`（表现为「明明存了却搜不到」的假失败，且只在第二次运行后暴露）。
+    正解：写入会话先取「生效标记」（CONFLICT 响应中引用的既有标记），再用该标记另开会话检索 —— 见 `iso-probe.sh` 的 A1/A2、B1/B2 结构。
+    另：`memory_store` 的 CONFLICT 响应同样带 `id` 字段，可直接作为后续 `memory_get` 的目标。
 
 ## Links
 
@@ -122,4 +147,6 @@ src/storage/migrations.rs:1507
 - 升级策略（含准入判据规格）：`hk_vps_4/specs/dev-plan.md` §5
 - 决议真相源：`hk_vps_4/specs/deployment_strategy.md` §6/§7/§9
 - MCP 测试策略 / 计划 / 用例（L0–L3 分层、客户端接入配置、工具行为原则）：`hk_vps_4/specs/mcp-test.md`
-- 相关 ADR：`adr/ADR-004-version-contract-single-source-of-truth.md`、`adr/ADR-005-upgrade-admission-gate-layering.md`、`adr/ADR-008-local-baseline-reuses-production-compose.md`
+- 多用户隔离方案与结论（冻结机制 / D1–D5 / V1–V4 / 未决前提）：`hk_vps_4/specs/multiuser_isolation.md` §0
+- 隔离探针（可重复）：`hk_vps_4/scripts/iso-probe.sh`（A 负向解析链 / B 方案③双用户隔离 / C 方案②对照）
+- 相关 ADR：`adr/ADR-004-version-contract-single-source-of-truth.md`、`adr/ADR-005-upgrade-admission-gate-layering.md`、`adr/ADR-008-local-baseline-reuses-production-compose.md`、`adr/ADR-009-per-user-db-isolation-over-single-db-agent-id.md`（多用户隔离形态的决策，含"排除单库 per-agent"的实测理由）

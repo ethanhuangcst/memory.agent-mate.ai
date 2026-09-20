@@ -160,7 +160,7 @@ docker exec ai-memory-mcp ai-memory restore --from /data/backups
 
 云资源一次性准备：私有桶（香港 + SSE）+ RAM 子账号（**仅** `oss:PutObject/GetObject/ListObjects`，资源限定 `acs:oss:*:*:<bucket>/<prefix>/*`）；AK 走 `0400` 文件或环境变量，**永不进 argv、永不入仓**。
 
-> 多租户备份 MCP（mcp.oss-bak.com）已另建项目，不在本部署关键路径；其需求规格见 `../specs/mcp_oss_bak_com_requirements.md`（已随资产迁移入库）。
+> 多租户备份 MCP（mcp.oss-bak.com）已另建项目，不在本部署关键路径；其需求规格已随项目移交**移出本仓**（原 `../specs/mcp_oss_bak_com_requirements.md`）。
 
 ## 升级 / 回滚
 

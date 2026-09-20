@@ -496,7 +496,7 @@ docker exec ai-memory-mcp ai-memory doctor
 | 2 | qwen 模型档位 | ✅ 已决：主 `qwen-plus`，`[llm.auto_tag]` 用 `qwen-turbo`（**只写 model，不写 backend**） |
 | 3 | qwen embedding 的具体 `model` 与 `dim` | ✅ **已实测确定**（2026-09-20）：`qwen3.7-text-embedding` / **1024 维**，由 `../scripts/qwen-verify.sh` 在私有 MaaS 端点上实测（`/models` 探测 + 真实 embeddings 调用取向量长度）；已回写 `config.toml.tmpl` 与本地 `config.local.toml`，并通过 doctor + 写入/召回 + curator `auto_tagged=1` 端到端验证。备选 `qwen3.7-text-embedding-flash`（同为 1024 维）|
 | 4 | curator | ✅ 已决：**常驻**（独立 compose service；先 `--once --dry-run` 预演审阅；`--max-ops 50`；Phase 0 核对 `tagged > 0`） |
-| 5 | 备份外迁 | ✅ 已决（2026-09-20 更新）：**默认方案** —— `ai-memory backup` 本地快照 + cron + ossutil 外迁 OSS 香港 region 私有桶（RAM 最小权限）+ 季度恢复演练；升级门禁「无新鲜外迁备份，不升级」。多租户备份 MCP（mcp.oss-bak.com）**移出本计划、另建项目**，其独立需求规格见 [`mcp_oss_bak_com_requirements.md`](./mcp_oss_bak_com_requirements.md)（移交物）。详见 [`dev-plan.md`](./dev-plan.md) §4–5 |
+| 5 | 备份外迁 | ✅ 已决（2026-09-20 更新）：**默认方案** —— `ai-memory backup` 本地快照 + cron + ossutil 外迁 OSS 香港 region 私有桶（RAM 最小权限）+ 季度恢复演练；升级门禁「无新鲜外迁备份，不升级」。多租户备份 MCP（mcp.oss-bak.com）**移出本计划、另建项目**，其独立需求规格作为移交物**已从本仓移出**（原 `mcp_oss_bak_com_requirements.md`，2026-09-20 删除）。详见 [`dev-plan.md`](./dev-plan.md) §4–5 |
 | 6 | SSH 身份 | ✅ 已决：**单建权限受限用户** + docker 组 + forced-command 密钥（不用 root） |
 | 7 | 部署仓库制品 | ✅ 已生成并随资产迁移入库：`hk_vps_4/deploy/` |
 
@@ -549,9 +549,9 @@ SHOW shared_preload_libraries;
 | 2026-09-19 | 决议：curator 常驻（独立 service，先 dry-run 预演，`--max-ops 50`）；SSH 用单建受限用户；部署仓库私有、名 `memory.agent-mate.ai`；qwen 主 `plus` + auto_tag `turbo` |
 | 2026-09-19 | 备注：仓库名 `memory.agent-mate.ai` 与「本方案无该域名（方案 A）」存在命名不一致，按你的指示保留；若未来启用 HTTP 入口则名称自洽 |
 | 2026-09-19 | 生成部署制品：`docs/ye_cao_yun_production/deploy/`（staging，复制入新仓库即可）。**该路径已随资产迁移变更** → 现为 [`../deploy/`](../deploy/) |
-| 2026-09-19 | 决议：备份外迁改采**先自研通用 OSS 备份 MCP**（当时名 `oss-backup-mcp`）作为前置项目。架构要点：一套核心 + 两个前端（MCP 给 agent、CLI 给 cron——MCP 无法承载定时触发）；恢复永不 in-place、必须过恢复演练验收。ai-memory 本地快照腿独立、可先行启用。（当时规格文件几经更名，现内容并入 [`mcp_oss_bak_com_requirements.md`](./mcp_oss_bak_com_requirements.md)） |
+| 2026-09-19 | 决议：备份外迁改采**先自研通用 OSS 备份 MCP**（当时名 `oss-backup-mcp`）作为前置项目。架构要点：一套核心 + 两个前端（MCP 给 agent、CLI 给 cron——MCP 无法承载定时触发）；恢复永不 in-place、必须过恢复演练验收。ai-memory 本地快照腿独立、可先行启用。（当时规格文件几经更名，后统一为 `mcp_oss_bak_com_requirements.md`；**该文件已于 2026-09-20 随项目移交移出本仓**） |
 | 2026-09-19 | 更名：项目更名为 **`aliyun-oss-bak-mcp`**（曾短暂改为「产品内置」后撤回，回归自研独立项目）；规格文件更名为 `aliyun_oss_bak_mcp_spec.md`，内容不变（含官方 OSS MCP alpha 替代评估：不可用，覆盖率 0/4） |
-| 2026-09-20 | **备份方案裁决**：mcp.oss-bak.com 从本计划**取消**，另建项目单独建设；研究整理为独立自洽需求规格 [`mcp_oss_bak_com_requirements.md`](./mcp_oss_bak_com_requirements.md)（移交物，旧规格文件删除、轨迹保留于此）。备份回归**默认方案**（本地快照 + cron/ossutil 外迁 OSS 香港 + 季度恢复演练），落地细节见 [`dev-plan.md`](./dev-plan.md) §4–5 |
+| 2026-09-20 | **备份方案裁决**：mcp.oss-bak.com 从本计划**取消**，另建项目单独建设；研究整理为独立自洽需求规格 `mcp_oss_bak_com_requirements.md`（移交物，旧规格文件删除、轨迹保留于此；**该文件已于 2026-09-20 移出本仓**）。备份回归**默认方案**（本地快照 + cron/ossutil 外迁 OSS 香港 + 季度恢复演练），落地细节见 [`dev-plan.md`](./dev-plan.md) §4–5 |
 | 2026-09-20 | 新增：上游升级策略（7 步链路 + 三类破坏性变更审查 + 升级门禁「无新鲜外迁备份不升级」+ 升级后备份管线探针 + 半自动版本跟踪）——见 [`dev-plan.md`](./dev-plan.md) §5；资产隔离计划——见 [`asset_isolation_plan.md`](./asset_isolation_plan.md)（迁移待批） |
 | 2026-09-20 | 资产隔离布局定稿：**协同布局** —— 工程目录更名 `memory.agent-mate.ai`（公开仓 `ethanhuangcst/memory.agent-mate.ai`），上游 clone 嵌套为 `ai-memory-mcp/`（gitignored，只读约定），自有资产集中 `hk_vps_4/`；`.gitignore` 防 gitlink 陷阱 + `make pin` 回填版本映射；物理分仓降级为备选（见 asset_isolation_plan.md §6）。迁移已执行 |
 | 2026-09-20 | **资产迁移已执行**：自有资产入父仓 `hk_vps_4/`、上游重新 clone 为嵌套 gitignored 目录、断链修正、首提交 `4dbff84` 推送 GitHub；旧目录改名备份未删除（含 CodeBuddy 会话数据） |
