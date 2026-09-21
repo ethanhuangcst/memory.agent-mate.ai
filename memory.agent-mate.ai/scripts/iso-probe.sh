@@ -7,16 +7,16 @@
 # 目的：为「多用户隔离是否可实现」提供**实测证据**（源码依据见 specs/mcp/mcp-design.md §2 /
 #       specs/sprint_plan.md「阻断级风险」）。
 #
-#   A 组 负向（R1 解析链）
-#     P1a 漏设 AI_MEMORY_DB（unset）→ doctor --json 的 source 仍指向 config 的 db（= 共享主库）
-#         —— 行为级证实「漏设 = 静默落主库、不报错」（R1；D2 要移除的正是在 config 里的 db 键）
+#   A 组 负向（D2 落地后的 R1 / V1 解析链）
+#     P1a 漏设 AI_MEMORY_DB（unset）→ doctor 必须 fail-loud；source 不得为共享主库，解析后的
+#         目标必须是绝对路径；失败原因必须来自存储路径；共享主库记忆计数不变
 #     P1b 显式设 AI_MEMORY_DB=/data/users/<u>/ai-memory.db → source 随 env 改变（env 权威性对照）
 #     P4  错设 AI_MEMORY_DB（父目录不存在）→ 记录报错形态（fail-loud 与否；仅记录，不判定失败）
 #
 #   B 组 方案 ③ 一用户一 DB 正向
 #     P2  双用户（iso-alice / iso-bob）独立 MCP 会话：A 的标记 B 检索不到；A↔B 互相 get 不可见；
 #         用户库文件存在且属主 aimem；共享主库记忆计数不变（sprint_plan V2/V3 的本地版）
-#     P3  与用户会话完全相同的 env/argv 跑 doctor --json，断言 source == 该用户库（V4 的本地版）
+#     P3  用与用户会话相同的**四项服务端 env** 跑 doctor --json，断言 source == 该用户库（V4 的本地版）
 #     P5  每库显式维护通路：ai-memory --db <user> stats 可用（mcp/mcp-design.md §5.3 的前置）
 #
 #   C 组 方案 ② 单库 + per-user env 对照（证明「读可强制、写不可信」→ ③ 的必要性）
@@ -61,7 +61,7 @@ trap 'rm -rf "$WORK"' EXIT
 # ── 容器侧小工具（镜像内有 stat/awk，无 python3 —— 解析一律在宿主机做）──
 c_owner() { docker exec "$CONTAINER" stat -c '%U:%G' "$1" 2>/dev/null || echo MISSING; }
 c_stamp() { docker exec "$CONTAINER" stat -c '%Y/%s' "$1" 2>/dev/null || echo MISSING; }
-main_count() { docker exec "$CONTAINER" ai-memory stats 2>/dev/null | awk '/^total memories:/ {print $3}'; }
+main_count() { docker exec "$CONTAINER" ai-memory --db "$MAIN_DB" stats 2>/dev/null | awk '/^total memories:/ {print $3}'; }
 
 jfield() { # $1=json 文件 $2=字段名
   python3 -c 'import json,sys
@@ -100,11 +100,13 @@ BOB_DB="${BOB_DIR}/ai-memory.db"
 SHARED_DB="${SHARED_DIR}/ai-memory.db"
 MAIN_DB="/data/ai-memory.db"
 
-# 会话 env（与生产 forced command 同构；库路径/身份/密钥目录全部钉在服务端）
-ALICE_ENV=("AI_MEMORY_DB=${ALICE_DB}" "AI_MEMORY_AGENT_ID=human:iso-alice" "AI_MEMORY_KEY_DIR=${ALICE_DIR}/keys")
-BOB_ENV=("AI_MEMORY_DB=${BOB_DB}" "AI_MEMORY_AGENT_ID=human:iso-bob" "AI_MEMORY_KEY_DIR=${BOB_DIR}/keys")
-SH_ALICE_ENV=("AI_MEMORY_DB=${SHARED_DB}" "AI_MEMORY_AGENT_ID=human:iso-alice" "AI_MEMORY_KEY_DIR=${ALICE_DIR}/keys")
-SH_BOB_ENV=("AI_MEMORY_DB=${SHARED_DB}" "AI_MEMORY_AGENT_ID=human:iso-bob" "AI_MEMORY_KEY_DIR=${BOB_DIR}/keys")
+# 会话 env（与生产 forced command 用户行同构，四项逐项对齐 §5.2 模板：
+# AI_MEMORY_DB / AI_MEMORY_AGENT_ID / AI_MEMORY_KEY_DIR / AI_MEMORY_REQUIRE_AGENT_ATTESTATION=0；
+# 库路径/身份/密钥目录全部钉在服务端。attestation 显式重申与容器级取值一致，不改变断言语义。）
+ALICE_ENV=("AI_MEMORY_DB=${ALICE_DB}" "AI_MEMORY_AGENT_ID=human:iso-alice" "AI_MEMORY_KEY_DIR=${ALICE_DIR}/keys" "AI_MEMORY_REQUIRE_AGENT_ATTESTATION=0")
+BOB_ENV=("AI_MEMORY_DB=${BOB_DB}" "AI_MEMORY_AGENT_ID=human:iso-bob" "AI_MEMORY_KEY_DIR=${BOB_DIR}/keys" "AI_MEMORY_REQUIRE_AGENT_ATTESTATION=0")
+SH_ALICE_ENV=("AI_MEMORY_DB=${SHARED_DB}" "AI_MEMORY_AGENT_ID=human:iso-alice" "AI_MEMORY_KEY_DIR=${ALICE_DIR}/keys" "AI_MEMORY_REQUIRE_AGENT_ATTESTATION=0")
+SH_BOB_ENV=("AI_MEMORY_DB=${SHARED_DB}" "AI_MEMORY_AGENT_ID=human:iso-bob" "AI_MEMORY_KEY_DIR=${BOB_DIR}/keys" "AI_MEMORY_REQUIRE_AGENT_ATTESTATION=0")
 
 # ═══════════════════ P0 前置准备 ═══════════════════
 for u in $USERS; do
@@ -114,24 +116,49 @@ done
 log "P0 目录就绪：$(docker exec "$CONTAINER" ls /data/users 2>/dev/null | tr '\n' ' ')"
 
 MAIN_COUNT_BEFORE="$(main_count)"
-MAIN_STAMP_BEFORE="$(c_stamp "$MAIN_DB")"
+case "$MAIN_COUNT_BEFORE" in
+  ''|*[!0-9]*) die 10 "无法取得共享主库记忆计数（值=${MAIN_COUNT_BEFORE:-<empty>}），拒绝在无基线证据时继续" ;;
+esac
+CONTAINER_CWD="$(docker exec "$CONTAINER" pwd 2>/dev/null || true)"
+case "$CONTAINER_CWD" in
+  /*) ;;
+  *) die 10 "无法取得容器绝对工作目录（值=${CONTAINER_CWD:-<empty>}）" ;;
+esac
 
-# ═══════════════════ P1 负向：解析链（R1）═══════════════════
-CFG_DB_KEY="$(docker exec "$CONTAINER" sh -c "grep -c '^db[[:space:]]*=' /data/.config/ai-memory/config.toml" || true)"
-note "P1-0 生效 config 中 'db =' 键计数 = ${CFG_DB_KEY}（>0 即 R1 落点存在；D2 的目标是移除该键使漏设变为 fail-loud）"
+# ═══════════════════ P1 负向：解析链（R1 / V1）═══════════════════
+CFG_DB_KEY="$(docker exec "$CONTAINER" sh -c "awk '/^[[:space:]]*\[/ { exit } /^[[:space:]]*(db|\"db\"|\\047db\\047)[[:space:]]*=/ { n++ } END { print n+0 }' /data/.config/ai-memory/config.toml" || true)"
+[ "$CFG_DB_KEY" = "0" ] \
+  || die 20 "P1-0 生效 config 仍有 ${CFG_DB_KEY} 个顶层 db 键（D2 未落地，拒绝继续以免验证旧行为）"
+ok "P1-0 生效 config 无顶层 db fallback"
 
-log "P1a 漏设 AI_MEMORY_DB（unset）→ doctor --json"
+log "P1a 漏设 AI_MEMORY_DB（unset）→ doctor --json 必须 fail-loud"
 set +e
 docker exec "$CONTAINER" sh -c 'unset AI_MEMORY_DB; exec ai-memory doctor --json' \
   > "$WORK/p1a.json" 2> "$WORK/p1a.err"
 P1A_RC=$?
 set -e
 P1A_SRC="$(jfield "$WORK/p1a.json" source)"
-note "P1a 结果：rc=${P1A_RC} source=${P1A_SRC}"
-[ "$P1A_RC" -eq 0 ] || die 20 "P1a 异常：doctor 退出码 ${P1A_RC}（尾部：$(tail -c 200 "$WORK/p1a.err" | tr '\n' ' ')）"
-[ "$P1A_SRC" = "$MAIN_DB" ] \
-  || die 20 "P1a 断言失败：漏设 AI_MEMORY_DB 后 source=${P1A_SRC}，预期 ${MAIN_DB}（解析链与预期不符，须重新核查 effective_db 语义）"
-ok "P1a 证实 R1：漏设 AI_MEMORY_DB 时**无报错**且落到 config 的 db（${MAIN_DB} = 共享主库）"
+P1A_OVERALL="$(jfield "$WORK/p1a.json" overall)"
+P1A_RESOLVED="$(python3 -c 'import posixpath,sys; print(posixpath.normpath(posixpath.join(sys.argv[1], sys.argv[2])))' "$CONTAINER_CWD" "$P1A_SRC" 2>/dev/null || true)"
+P1A_ERR="$(cat "$WORK/p1a.err" "$WORK/p1a.json" | tr '\n' ' ' | cut -c1-500)"
+note "P1a 结果：rc=${P1A_RC} overall=${P1A_OVERALL} source=${P1A_SRC} resolved=${P1A_RESOLVED}"
+[ "$P1A_RC" -ne 0 ] || die 20 "P1a 断言失败：漏设 AI_MEMORY_DB 后 doctor 仍成功（source=${P1A_SRC}）"
+[ -n "$P1A_SRC" ] || die 20 "P1a 断言失败：doctor 未返回 source，无法审计解析目标"
+[ "$P1A_SRC" != "$MAIN_DB" ] && [ "$P1A_RESOLVED" != "$MAIN_DB" ] \
+  || die 20 "P1a 断言失败：漏设 AI_MEMORY_DB 仍解析到共享主库 ${MAIN_DB}"
+case "$P1A_RESOLVED" in
+  /*) ;;
+  *) die 20 "P1a 断言失败：解析后的目标不是绝对路径（source=${P1A_SRC} resolved=${P1A_RESOLVED:-<empty>}）" ;;
+esac
+printf '%s' "$P1A_ERR" | grep -Eiq 'storage|database|sqlite|open|path' \
+  || die 20 "P1a 断言失败：失败原因不像存储路径解析错误（${P1A_ERR:-<empty>}）"
+P1A_MAIN_COUNT_AFTER="$(main_count)"
+case "$P1A_MAIN_COUNT_AFTER" in
+  ''|*[!0-9]*) die 20 "P1a 后无法取得共享主库记忆计数（值=${P1A_MAIN_COUNT_AFTER:-<empty>}）" ;;
+esac
+[ "$MAIN_COUNT_BEFORE" = "$P1A_MAIN_COUNT_AFTER" ] \
+  || die 20 "P1a 断言失败：共享主库记忆计数变化 ${MAIN_COUNT_BEFORE} → ${P1A_MAIN_COUNT_AFTER}"
+ok "P1a 通过（V1）：漏设 AI_MEMORY_DB fail-loud，目标=${P1A_RESOLVED}，共享主库计数未变化"
 
 log "P1b 显式设 AI_MEMORY_DB=${ALICE_DB} → doctor --json（env 权威性对照）"
 set +e
@@ -491,20 +518,18 @@ B_OWNER="$(c_owner "$BOB_DB")"
 log "P2 用户库文件：alice ${ALICE_DB}（${A_OWNER}，$(c_stamp "$ALICE_DB")）、bob ${BOB_DB}（${B_OWNER}，$(c_stamp "$BOB_DB")）"
 
 MAIN_COUNT_AFTER="$(main_count)"
-MAIN_STAMP_AFTER="$(c_stamp "$MAIN_DB")"
-if [ -n "$MAIN_COUNT_BEFORE" ] && [ -n "$MAIN_COUNT_AFTER" ]; then
-  [ "$MAIN_COUNT_BEFORE" = "$MAIN_COUNT_AFTER" ] \
-    || die 30 "共享主库记忆计数变化：${MAIN_COUNT_BEFORE} → ${MAIN_COUNT_AFTER}（用户会话疑似落到了主库）"
-  ok "主库未被写入：记忆计数 ${MAIN_COUNT_BEFORE} 不变（mtime/size ${MAIN_STAMP_BEFORE} → ${MAIN_STAMP_AFTER}，仅作参考）"
-else
-  note "主库计数取得失败（before=${MAIN_COUNT_BEFORE} after=${MAIN_COUNT_AFTER}），跳过计数断言"
-fi
+case "$MAIN_COUNT_AFTER" in
+  ''|*[!0-9]*) die 30 "P2 后无法取得共享主库记忆计数（值=${MAIN_COUNT_AFTER:-<empty>}）" ;;
+esac
+[ "$MAIN_COUNT_BEFORE" = "$MAIN_COUNT_AFTER" ] \
+  || die 30 "共享主库记忆计数变化：${MAIN_COUNT_BEFORE} → ${MAIN_COUNT_AFTER}（用户会话疑似落到了主库）"
+ok "主库未被写入：记忆计数 ${MAIN_COUNT_BEFORE} 不变"
 ok "P2 通过：双用户物理隔离成立（双向检索不可见 + get 不可见 + 库属主正确 + 主库计数不变）"
 
 # ═══════════════════ P3 解析链自检（V4 本地版）═══════════════════
-log "P3 与 alice 会话完全相同的 env 跑 doctor --json → 断言 source == ${ALICE_DB}"
+log "P3 与 alice 会话相同的服务端 env 跑 doctor --json → 断言 source == ${ALICE_DB}"
 set +e
-run_doctor "$WORK/p3.json" "AI_MEMORY_DB=${ALICE_DB}"
+run_doctor "$WORK/p3.json" "${ALICE_ENV[@]}"
 P3_RC=$?
 set -e
 P3_SRC="$(jfield "$WORK/p3.json" source)"
@@ -733,7 +758,13 @@ print(f"[verify] P6③ bob 查自己注入的标记 {inj_marker} → {'命中' i
 szt = rtext(z.get(2)) if z.get(2) else ""
 alice_sees = inj_marker in szt
 print(f"[verify] P6③ alice 查被注入标记 → {'命中（他人以我名义写进了我的私有空间）' if alice_sees else '未命中'}")
-print(f"[verify] P6 结论：读隔离=True；写可伪造见 P6①；注入对 alice 可见={alice_sees}；bob 可见={bob_sees}")
+if not alice_sees:
+    print("[verify] P6 对照失败：alice 未看到 bob 以 alice 身份写入的标记，写路径伪造结论已变化")
+    sys.exit(50)
+if bob_sees:
+    print("[verify] P6 对照失败：bob 看到了归属 alice 的注入行，读隔离结论已变化")
+    sys.exit(50)
+print("[verify] P6 结论：读隔离=True；写路径可伪造=True；注入行仅对 alice 可见")
 PY
 rc=$?
 set -e
@@ -743,9 +774,9 @@ set -e
 cat <<EOF
 
 ════════ iso-probe 证据汇总（标记前缀 ${STAMP}）════════
-[A 组] P1a 漏设 AI_MEMORY_DB        → source=${P1A_SRC}（= 共享主库；rc=${P1A_RC}，无报错）   ← R1 行为级证据
+[A 组] P1a 漏设 AI_MEMORY_DB        → rc=${P1A_RC} / source=${P1A_SRC} / resolved=${P1A_RESOLVED}；fail-loud 且共享主库未变化 ← V1
        P1b 显式 AI_MEMORY_DB        → source=${P1B_SRC}（env 权威）
-       config 'db =' 键计数          → ${CFG_DB_KEY}（R1 落点；D2 目标为移除）
+       config 顶层 'db =' 键计数     → ${CFG_DB_KEY}（必须为 0）
        P4  错设路径（父目录不存在）  → rc=${P4_RC} / overall=${P4_OVERALL}（fail-loud=${P4_LOUD}）
 [B 组] P2  双用户物理隔离            → alice=${EFF_A} / bob=${EFF_B}；双向检索与 get 均不可见；属主 aimem:aimem；主库计数 ${MAIN_COUNT_BEFORE}→${MAIN_COUNT_AFTER}
        P3  doctor source（V4 本地版）→ ${P3_SRC}
@@ -754,4 +785,4 @@ cat <<EOF
 ════════════════════════════════════════════════════════
 EOF
 
-log "全部通过：A 负向解析链 + B 方案③正向隔离 + C 方案②对照（标记 ${STAMP}）"
+log "全部通过：A 负向解析链（含 V1 fail-loud / 非共享主库 / 主库不变）+ B 方案③正向隔离 + C 方案②对照（标记 ${STAMP}）"

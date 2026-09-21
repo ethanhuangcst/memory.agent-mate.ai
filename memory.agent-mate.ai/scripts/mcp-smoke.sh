@@ -15,6 +15,13 @@
 #   ② memory_search（关键词/全文检索）——用标记字面量查询，命中即证明检索通路与持久化
 #   ※ 上游文档未讲清 recall 与 search 的差别，此语义区分来自 v0.10.0 实测（详见 specs/knowledge）
 #
+# 会话 C（attestation 正负对照 = TC-ATT-01）：
+#   正：会话 A 的写入本身即「容器级 AI_MEMORY_REQUIRE_AGENT_ATTESTATION=0 下可用」的证据
+#   负：同形态写入加 -e AI_MEMORY_REQUIRE_AGENT_ATTESTATION=1（全局严格）**必须被拒**
+#   ※ 这是「该 env 仍被上游读取」的唯一可靠判据。`attest_level=claimed` **不可断言** ——
+#     它是上游文档与启动告警的措辞（daemon 绑非回环且宽松时才打印），v0.10.0 的 MCP 响应
+#     / memory_get / export / memories 表均不暴露该值（实测 2026-09-21，见 specs/knowledge）
+#
 # 幂等性：core 档无删除工具，无法清理旧冒烟记忆；上游 near-duplicate 去重会让重复运行时
 #        memory_store 返回 CONFLICT。此时自动转为验证 CONFLICT 指向的既有近似记忆的标记
 #        （通路验证目的一致）；输出会明确标注当前生效的标记。
@@ -25,7 +32,8 @@
 #
 # 用法：bash memory.agent-mate.ai/scripts/mcp-smoke.sh
 # 退出码：0 全通过；10 前置失败（容器未运行）；20 握手或工具数断言失败；
-#         30 写入失败（含 CONFLICT 但无法提取既有标记）；40 召回未命中/失败
+#         30 写入失败（含 CONFLICT 但无法提取既有标记）；40 召回未命中/失败；
+#         50 attestation 负向对照失败（=1 未拒绝，或拒绝原因非 attestation）
 
 set -euo pipefail
 
@@ -223,4 +231,64 @@ rc=$?
 set -e
 [ "$rc" -eq 0 ] || die "$rc" "会话 B 校验未通过（退出码 ${rc}）"
 
-log "全部通过：握手 / ${EXPECTED_TOOLS} 工具断言 / 写入 / 跨进程语义召回 + 关键词检索（生效标记 ${EFFECTIVE_MARKER}）"
+# ── 会话 C：attestation 负向对照（TC-ATT-01 的可断言一半）──
+NEG_MARKER="ATT-C-$(date +%s)-$$"
+python3 - "$WORK" "$NEG_MARKER" <<'PY'
+import json, sys
+work, marker = sys.argv[1], sys.argv[2]
+init = {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
+    "protocolVersion": "2024-11-05", "capabilities": {},
+    "clientInfo": {"name": "mcp-smoke", "version": "0"}}}
+inited = {"jsonrpc": "2.0", "method": "notifications/initialized"}
+store = {"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {
+    "name": "memory_store", "arguments": {
+        "title": f"attestation negative control {marker}",
+        "content": (f"negative control write that must be rejected while agent attestation "
+                    f"is globally strict; marker {marker}.")}}}
+with open(f"{work}/session_c.jsonl", "w") as f:
+    for o in (init, inited, store):
+        f.write(json.dumps(o, ensure_ascii=False) + "\n")
+PY
+
+log "会话 C：attestation 负向对照（-e AI_MEMORY_REQUIRE_AGENT_ATTESTATION=1，期望被拒）标记=${NEG_MARKER}"
+if ! docker exec -i -e AI_MEMORY_REQUIRE_AGENT_ATTESTATION=1 "$CONTAINER" ai-memory mcp --tier smart \
+      < "$WORK/session_c.jsonl" > "$WORK/out_c.jsonl" 2> "$WORK/err_c.log"; then
+  tail -5 "$WORK/err_c.log" >&2 || true
+  die 50 "会话 C 进程异常退出（上方为容器侧日志尾部）"
+fi
+
+set +e
+python3 - "$WORK/out_c.jsonl" <<'PY'
+import json, sys
+resp = {}
+for line in open(sys.argv[1]):
+    line = line.strip()
+    if not line.startswith("{"):
+        continue
+    try:
+        o = json.loads(line)
+    except ValueError:
+        continue
+    if "id" in o:
+        resp[o["id"]] = o
+
+call = resp.get(2)
+if call is None or "error" in call or not call.get("result"):
+    print(f"[verify] 负向对照异常（无 tools/call 结果）: {json.dumps(call, ensure_ascii=False)[:300]}")
+    sys.exit(50)
+r = call["result"]
+text = " ".join(c.get("text", "") for c in r.get("content", []))
+if not r.get("isError"):
+    print("[verify] 负向对照失败：=1 时写入**未被拒** —— 该 env 可能已失效或被上游改名")
+    print(f"[verify] 响应片段: {text[:200]}")
+    sys.exit(50)
+if "attestation" not in text.lower():
+    print(f"[verify] 负向对照失败：被拒但原因不是 attestation: {text[:200]}")
+    sys.exit(50)
+print(f"[verify] 负向对照成立：=1 拒绝无签名写入 → {text[:110]}…")
+PY
+rc=$?
+set -e
+[ "$rc" -eq 0 ] || die "$rc" "会话 C 校验未通过（退出码 ${rc}）"
+
+log "全部通过：握手 / ${EXPECTED_TOOLS} 工具断言 / 写入 / 跨进程语义召回 + 关键词检索（生效标记 ${EFFECTIVE_MARKER}）/ attestation 正负对照（=0 可写、=1 被拒）"

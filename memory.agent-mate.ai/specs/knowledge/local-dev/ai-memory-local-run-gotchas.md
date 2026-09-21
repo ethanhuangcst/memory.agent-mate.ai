@@ -28,7 +28,7 @@ Apple Silicon 上跑本地验证一律加 `--platform linux/amd64`。
 
 ## 3. 写入必须关掉 agent attestation
 
-`-e AI_MEMORY_REQUIRE_AGENT_ATTESTATION=0` —— 否则写入会 403。
+`-e AI_MEMORY_REQUIRE_AGENT_ATTESTATION=0` —— **可用性前提**。口径按实测：v0.9 不设即拒写（HTTP 面等价出口 `403`）；**v0.10.0 是 surface-scoped**（MCP / CLI 缺省宽松、写入**不报错**）；**v0.11 起缺省翻转为全 surface required** ⇒ 显式写死。判据与证据见 [`../../mcp/mcp-design.md`](../../mcp/mcp-design.md) §9 B3 · [`../upstream-ai-memory/upstream-facts-and-gotchas.md`](../upstream-ai-memory/upstream-facts-and-gotchas.md)。
 
 ## 4. CLI 参数形态易错
 

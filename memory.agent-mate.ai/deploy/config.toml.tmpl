@@ -7,8 +7,9 @@
 #    （含 /compatible-mode/v1 路径）。真实主机名带 workspace 标识，属可探测信息，
 #    公开仓中不得出现明文 —— make secret-check 会拦截。
 #
-# 本地已填真实值的副本：config.local.toml（gitignored）。两者结构必须保持同步，
-# 唯一差别是「真实值 vs 占位符」。
+# 本地已填真实值的副本：config.local.toml（gitignored）。除真实值与占位符外，
+# 私有副本可能暂时保留旧版顶层 db；local-up.sh 派生运行时副本时会机械剥离
+# 私有副本中遗留的顶层 db，防止漏设 AI_MEMORY_DB 静默回落共享主库。
 # ============================================================================
 
 schema_version = 2
@@ -16,7 +17,8 @@ schema_version = 2
 # serve 守护进程的档位（serve 无 --tier 参数，只能从这里来）
 tier = "smart"
 
-db = "/data/ai-memory.db"
+# 数据库路径不得写入配置文件。每条 serve / curator / MCP / 维护启动路径必须
+# 通过 AI_MEMORY_DB 或 --db 显式指定目标库。
 
 # ---------------------------------------------------------------------------
 # [limits] — 容量与配额
@@ -42,7 +44,6 @@ max_page_size            = 1000
 max_inflight_requests    = 0         # 0 = 不装配 HTTP 并发准入层
 vector_index_capacity    = 100000
 vector_index_hard_fail_at_cap = false
-
 
 # ---------------------------------------------------------------------------
 # [llm] — smart 档的整理能力后端

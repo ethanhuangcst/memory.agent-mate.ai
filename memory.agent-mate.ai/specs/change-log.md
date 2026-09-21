@@ -8,6 +8,31 @@
 
 ## 2026-09-21
 
+### RID 解决方案全链路追踪 + Sprint Retrospective 双写规则
+
+**为什么**：RID 的解决方案虽已下沉 Product Backlog，但原链接只定位到文件顶部，Sprint 落点也是不可点击文本，无法沿 `Product Backlog → Sprint Backlog → design/test` 核对实施链；`retrospective` 技能也只要求 ADR / knowledge 沉淀，未强制回写实际交付 Sprint。
+
+**做了什么**：为 RID 涉及的 Product Backlog 与 Sprint Backlog 条目增加稳定锚点；RID 表和覆盖矩阵改为条目级可点击链路；Product Backlog 的 `关联` 列回链具体 Sprint 执行项与设计/测试依据。更新 [`sdd-scrum-practices.md`](sdd-scrum-practices.md)，规定完整追踪链与稳定锚点，并规定每次 retrospective 必须写入实际交付 Sprint 的 `Retrospective`，ADR / knowledge 仅在有持久价值时追加。
+
+**验证**：核对 5 个 Product Backlog 锚点、6 个 Sprint 锚点均有定义和双向引用；RID 8 行覆盖矩阵无空项；Markdown 诊断无新增问题；链接回归见本次验证记录。
+
+**边界**：不复制 Product、Sprint、design/test 的状态或正文；各自仍是其信息类型的唯一真源，跨文档只通过稳定链接导航。
+
+### SDD/Scrum 过程文档体例收口：RID 单向下沉 + 状态与说明分列
+
+**为什么**：RID Registry 把 R1–R3、D1–D5 与 V1–V4 混在同一张表，风险行通过 D/V 编号互相引用，解决方案、验证方法和执行状态重复；Sprint ToDo 与 Product Backlog 的状态列还混入日期和长篇过程说明，无法按枚举核对。
+
+**做了什么**：
+
+- 新增 [`sdd-scrum-practices.md`](sdd-scrum-practices.md) 与 [`ADR-013`](adr/ADR-013-sdd-scrum-process-doc-boundaries.md)，固定 RID Registry、Sprint Backlog、Product Backlog 的列定义、四态语义和单一真源边界。
+- RID 表只保留 R1–R3 与 D1–D5；V1–V4 从 RID 行移除，但作为稳定判据名保留，定义归位到 [`mcp/mcp-design.md`](mcp/mcp-design.md) §6.2 与 Product Backlog #11 的验收条件。新增 8 行覆盖对照，逐条给出 Backlog、验收条件与 Sprint 落点，无空项。
+- 6 张 Sprint ToDo 表新增「说明」列，状态只写 `ToDo` / `WIP` / `Implemented` / `Done`；长说明压缩为摘要并指向过程文档。三项原本仅存在于旧状态列的事实在本小节保留：Sprint 2「Qwen key」已从本地 secrets 回填 gitignored `.env.local` 并通过 `qwen-verify.sh` / `doctor`；临时文件 `tmp_user_key_option1.md` 经用户决定直接删除且确认不含真实密钥；Sprint 3「部署文档与事实一致性」已完成旧编号传播机械扫描，完整字段核对仍未完成。
+- Product Backlog 状态只写四态枚举；#4 / #11 / #14 / #26 的验收条件分别承载 D1、V1–V4、D3、D5，#17 校正为 `[limits]` 七键与本地行为探针已落地。`architecture.md` §6 改为薄索引。
+
+**验证**：RID 覆盖表 8 行逐项人工核对；Markdown 表格列数与状态枚举人工检查；回归执行 `make doc-links`、`make secret-check`、`make attestation-paths`、`make preflight-test` 与 `git diff --check`。
+
+**边界**：不新增状态/覆盖护栏脚本或 Makefile 目标；不改 `scripts/link-check.allow`、gitignored 文件及 Sprint 4–6 未开始条目的事项与验收条件；过程证据仍归现有设计、测试与变更文档。
+
 ### Sprint 3 #4 收口：上游 `[limits]` 容量与配额（模板显式定默认 + 行为探针）
 
 **做了什么**：把上游 `[limits]` 段落进生产模板并给出**行为级**证据，同时把「配置生效」与「行为生效」两件事分开证明。
@@ -30,10 +55,62 @@
 
 **边界**：HTTP 面超限（`max_page_size` / `max_inflight_requests` 真正触发）本地**无法验证**（容器不发布端口、镜像内无 curl/wget）⇒ 留 Sprint 5 生产通道；生产 SSH 通道的配额复核同属 Sprint 5。
 
-**用户验收**：2026-09-21，Robert Smith 确认可用。
-
 **ADR：无新增** —— 本轮是「按上游既有契约使用配置 + 显式固定默认值」，属既有策略（ADR-009 隔离、档位定档同源）的执行层，未引入新的架构或流程取舍。
 
+### Sprint 3 #1–#3 完成质量修复：口径单点化 + 调用点审计留痕 + 状态登记校正 + 静态护栏
+
+**为什么**：对 #1–#3 做只读质量复核，发现三类问题 —— ① #1 的「失准表述更正」只落到了 `mcp-design` §9 B3 与 `mcp-test` §4-D，**被引权威与引用方仍有 4 处残留**；② #2 的验收里含「每库维护命令审计」，而该命令是 #5 的产物、当时并不存在，属**不可验证项**，且审计无留痕；③ #3 的探针扎实，但 `sprint_plan.md` 风险表 D2/D5/V1/V2 的状态与同文件 Sprint 3 表的「已完成」**互相矛盾**，V4 的「与模板完全相同的 env」措辞也强于实现（实际只传三项）。
+
+**根因**：这正是 [`ADR-010`](adr/ADR-010-specs-single-source-and-doc-structure.md) 与 Sprint 2 Retrospective 记过的「**被引文档/权威未同步 ⇒ 转述静默过时**」——修一处漏一处，且没有护栏能发现。
+
+**做了什么**
+
+1. **口径单点化**：`architecture.md` §2.1 #9（attestation 单点权威，也是 `mcp-design.md` §5.2 引用的目标）、`product-backlog.md` 第 99 行、`docker-compose.prod.yml` 第 27 行注释、`knowledge/local-dev/ai-memory-local-run-gotchas.md` 第 31 行，全部删除已证伪的「不设会 403」与不可观测的「写入标记为 `claimed`」，改为 v0.9 / v0.10.0（surface-scoped）/ v0.11（缺省翻转）三段式，并指向真源 `mcp-design.md` §9 B3。`product-backlog.md` #15 的「三路径」计数与同事实其他表述统一为**四处**，状态由「进行中」改 **Done**。
+2. **审计可验证化 + 留痕**：`mcp-design.md` 新增 **§6.5 库路径调用点审计**（现存 5 条：compose ×2 / SSH 管理员行 / SSH 用户行 / 门户模板，逐条给出「库路径来源 + 证据位置」与复跑 grep 命令），结论是**无一条依赖 config 的库路径**。`sprint_plan.md` #2 验收把「每库维护命令」移出本条目（明确随 #5 定档时同批审计），标题改为「现存路径调用点审计」，并回链 §6.5。
+3. **状态登记校正**：`sprint_plan.md` 风险表 D2 / D5 / V1 / V2 / V3 / V4 与 R1 / R3 的状态列改为与 Sprint 3 表一致（本地已完成项标完成、生产项留 Sprint 5 #8、D1 留 Sprint 4 #7），消除同文件自相矛盾；`mcp-design.md` §6.1 D2 与 §6.2 V1–V4 同步；§0 的「漏设即静默落主库」补上 **D2 前/后**限定，§0.1「会话 env 三件套」注明实际为**四项**（含 attestation）。
+4. **措辞与实现对齐**：`iso-probe.sh` 的四个会话 env 数组补 `AI_MEMORY_REQUIRE_AGENT_ATTESTATION=0`，使 V4 的「与模板用户行相同的服务端 env」成立（对 `source` 解析与既有断言无影响，容器级本就为 `0`）。
+5. **新增静态护栏**：`scripts/attestation-paths-check.sh`（`make attestation-paths`，只读 / 无 Docker / 无网络，退出码 0/10/20）—— 断言 A 四路径模板同值、B `deployment.md` 用户行与 `mcp-design.md` §5.2 的 `-e` 子句**逐字一致**、C 门户 launch 模板含该 env、D 现行文档无已证伪口径回流；`mcp-test.md` 登记为 **TC-ATT-02** 并纳入 §2 回归触发条件。
+
+**验证**：`make attestation-paths` → 0；`iso-probe.sh` → 0（V1 `rc=2`、`resolved=/ai-memory.db`、主库计数 36 不变，V2–V4 与 P6 硬断言全绿）；`mcp-smoke.sh` → 0（8 工具 / 写入 / 召回 / attestation 正负对照）；`make doc-links` / `make secret-check` / `make preflight-test`（5/5）与 `git diff --check` 全绿。护栏另做**五类负向注入自测**（基线 0、curator 缺 env 10、失准口径回流 20、两模板不一致 10、用户行整行缺失 10）—— 确认非「恒绿」。
+
+**过程中自纠一处**：护栏 D 检查最初会被 `mcp-test.md` 自身对禁用字面量的**引述**触发（跑完护栏后才补的 TC-ATT-02 引入），实测 `rc=20` 与文档自称「已完成」矛盾；改为「不复述字面量、只指向脚本内 `STALE_PATTERNS`」，并在脚本内写明该约束。同批修复 `env_clause` 在 `pipefail` 下模板缺失时以未文档化退出码 1 早退的问题。
+
+**边界**：生产 SSH 通道复验仍属 Sprint 5 #8；门户 D1 的 spawn 前置断言仍属 Sprint 4 #7；每库 `gc` / `curator --once` 覆盖面仍属 Sprint 3 #5。
+
+### Sprint 3 #2–#3：移除共享 DB fallback + 隔离负向门禁定型
+
+**做了什么**：把本地配置派生、隔离负向探针和 Sprint 3 现行文档口径收紧为可复现的 fail-closed 验收，不依赖人工修改 gitignored 配置，也不把弱证据误报为通过。
+
+**实现**：tracked 的 [`../deploy/config.toml.tmpl`](../deploy/config.toml.tmpl) 移除顶层 `db`；[`../scripts/local-up.sh`](../scripts/local-up.sh) 从 `config.local.toml` 派生运行时配置时剥离裸键、双引号键和单引号键形式的顶层 `db`，保留 section 内同名键，并用临时文件、原子替换和 `0600` 权限生成 `.env` / `config.toml`；结果含顶层 `db` 时拒绝启动。
+
+**探针**：[`../scripts/iso-probe.sh`](../scripts/iso-probe.sh) 的 V1 现在要求漏设 `AI_MEMORY_DB` 时 `doctor` 非零；只规范化同一次响应中的 `source`，要求绝对路径且不等于 `/data/ai-memory.db`，失败原因属于存储路径；主库记忆计数在 P1a 与 P2 前后均必须可读且不变。P3 复用完整用户环境，方案②对照的伪造写入与归属可见性改为硬断言。
+
+**文档同步**：更新 `sprint_plan.md` 风险 / D2 / V1 / V2 及 Sprint 3 #2–#3 状态；更新 `mcp-design.md`、`mcp-test.md`、`web-portal/web-test.md`、ADR-008/009 的现行归属与验收表述；历史变更日志中的旧编号保留，并将已取消的方案②写路径泄露探针明确标注为取消。
+
+**验证**：`bash memory.agent-mate.ai/scripts/local-up.sh` 成功重建本地服务；`bash memory.agent-mate.ai/scripts/iso-probe.sh` 退出码 **0**。V1 实测 `rc=2`、`source=ai-memory.db` 规范化为 `/ai-memory.db`、共享主库计数不变；V2–V4、P4、P5 与方案②硬断言全部通过。静态夹具覆盖三种顶层 `db` 键形式且通过；脚本语法与 `git diff --check` 通过。
+
+**边界**：生产 SSH 通道复验仍属 Sprint 5 #8；有效但错误他库路径的门户 spawn 前置断言仍属 Sprint 4 #7；每库 `gc` / `curator --once` 覆盖面仍属 Sprint 3 #5。
+
+### Sprint 3 #1：agent attestation 现存路径收口（含两处失准表述更正）
+
+**做了什么**：核对 `AI_MEMORY_REQUIRE_AGENT_ATTESTATION=0` 在**现存**启动路径中的口径，补上 [`mcp/mcp-design.md`](mcp/mcp-design.md) §5.2 模板缺的那一项，并把「用哪个判据证明开关生效」从**不可观测的字段**换成**可复现的正负对照**。
+
+**口径核对（现存四处，全部一致）**：[`../deploy/docker-compose.prod.yml`](../deploy/docker-compose.prod.yml) 的 `ai-memory` / `curator` 两处；[`deployment.md`](deployment.md) §4.3 用户行；[`web-portal/web-design.md`](web-portal/web-design.md) §3.3 门户模板。缺项只有一处：`mcp-design.md` §5.2 的 forced-command 模板 —— `deployment.md` §4.3 把它称作「完整模板」并指过去，它却比那边少一项。补法是**与 `deployment.md` 用户行逐字一致**；§5.1 单人行按既有口径**不写** `-e`（依赖容器级变量，与 `deployment.md` §4.3 管理员行一致），并把这层依赖**显式写成注释**，免得被读成遗漏。
+
+**实测推翻两处既有表述**（关键，别再照抄）：
+
+| 原表述 | 实测（v0.10.0，本地基线容器） |
+| --- | --- |
+| `mcp-design.md` §9 B3：不设 → 写入 `403 ATTESTATION_FAILED` | 该变量在 v0.10.0 是 **surface-scoped**：MCP / CLI 缺省**宽松**（`unset` 后写入**成功**、无告警）；HTTP direct-write 缺省要求签名；`=1` 是**全局严格**（拒无签名写入：`agent attestation failed: … this write is unsigned`）；**v0.11 起缺省才翻转为全 surface required** |
+| `mcp-test.md` §4-D TC-ATT-01：写入返回 `attest_level=claimed` | **该字段在 v0.10.0 不可观测**。这句措辞出自上游文档与 daemon 的 `SECURITY POSTURE (#1798 R-12)` 启动告警（**仅**绑非回环且宽松时打印；本部署 `serve --host 127.0.0.1`，故从不打印）。MCP 响应 / `memory_get` / `export` / `memories` 表都没有它；库内带 `attest_level` 的只有 `memory_links` / `governance_rules` / `signed_events` / `archived_memory_links` / `model_attestations` 等表，且为空或 `unsigned` |
+
+**换成什么判据**：**正负对照** —— 同一形态的写入 `=0` 必须成功（无 `isError`）、`=1` 必须被拒且原因含 attestation。它比字段断言**更强**：能证明「这个 env **仍被上游读取**」，从而同时兜住「上游改名 / 移除该 env」这类静默失效。已固化为 [`../scripts/mcp-smoke.sh`](../scripts/mcp-smoke.sh) 的**会话 C**（失败退出码 50）。
+
+**验证**：`bash memory.agent-mate.ai/scripts/mcp-smoke.sh` → 退出码 **0**（握手 / 8 工具断言 / 写入 / 跨进程语义召回 + 关键词检索 / **attestation 正负对照**全绿）。
+
+**回写**：[`sprint_plan.md`](sprint_plan.md) Sprint 3 #1 → **已完成**（含验收口径更正与「变更记录」行）；[`product-backlog.md`](product-backlog.md) #15 说明按实测更正，并注明「漏设即 fail-loud」在 v0.10.0 服务端**不可得**、只能落在门户 spawn 前置断言（随 Sprint 4 #7）；上游事实沉淀见 [`knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md`](knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md)。
+
+**ADR：无新增** —— 本轮是实测更正 + 护栏加固，属 [`ADR-010`](adr/ADR-010-specs-single-source-and-doc-structure.md) 文档纪律的执行层，不产生新的架构 / 流程决议。
 
 ### Sprint 2 #11 收口：引用治理 + 能力文档体例定稿
 

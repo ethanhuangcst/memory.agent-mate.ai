@@ -13,9 +13,9 @@
 | 问题 | 答案 | 证据 |
 |---|---|---|
 | 一用户一 DB 的物理隔离能否成立？ | **能**（双向检索未命中 / `memory_get` → `memory not found` / 主库计数不变） | 探针 P2 · P3 · P5 |
-| 「不设 `AI_MEMORY_DB` 就共用主库」只是理论担忧？ | **不是** —— 实测：退出码 0、无任何告警，`source` 静默落到 config 的 `db`（`/data/ai-memory.db`） | 探针 P1a |
+| 「不设 `AI_MEMORY_DB` 就共用主库」只是理论担忧？ | **不是** —— D2 落地**前**（2026-09-20 实测）：退出码 0、无任何告警，`source` 静默落到 config 的 `db`（`/data/ai-memory.db`）。**该落点已于 2026-09-21（D2）消除**：漏设退化为相对路径并 fail-loud（现行行为见 §6.1 D2 / §6.2 V1） | 探针 P1a（旧行为）· §6.2 V1（现行） |
 | 方案②（单库 + per-user env）能替代吗？ | **不能** —— 读隔离成立，但**写路径完全可伪造**：bob 以 `agent_id=human:iso-alice` 写入成功并回显 alice 身份，alice 随后检索到被注入内容 | 探针 P6 |
-| 错设路径是否也静默？ | 注意：视情况 —— 目标库**打不开**时 fail-loud（`Storage=critical / failed to open database`，rc=2）；**漏设/指到有效库**时静默 | 探针 P4 · P1a |
+| 错设路径是否也静默？ | 注意：视情况 —— 目标库**打不开**时 fail-loud（`Storage=critical / failed to open database`，rc=2）；**指到有效他库**时仍静默（唯一拦截是 D1 断言，Sprint 4 #7）；**漏设**在 D2 落地后亦 fail-loud | 探针 P4 · §6.2 V1 |
 
 ### 0.1 冻结机制（2026-09-20 用户确认，按探针实测形态冻结）
 
@@ -24,14 +24,14 @@
 | 用户库路径 | `/data/users/<handle>/ai-memory.db` |
 | 用户密钥目录 | `/data/users/<handle>/keys/`（`AI_MEMORY_KEY_DIR`） |
 | 属主 | `aimem:aimem` —— `docker exec -u 0 ai-memory-mcp sh -c 'mkdir -p /data/users/<handle>/keys && chown -R aimem:aimem /data/users/<handle>'`。**2026-09-21 起**：门户路径下由门户以 `aimem` 身份自建 0700 目录，**前置**是 `/data/users` 为 `root:aimem 2775`（setgid，一次性引导见 [`deployment.md`](../deployment.md) §4.4）；`-u 0` 形式仅保留给 root 手工操作 |
-| 会话 env 三件套 | `AI_MEMORY_DB` / `AI_MEMORY_AGENT_ID=human:<handle>` / `AI_MEMORY_KEY_DIR` —— **全部钉在服务端**，客户端改不了 |
+| 会话 env 三件套（隔离相关） | `AI_MEMORY_DB` / `AI_MEMORY_AGENT_ID=human:<handle>` / `AI_MEMORY_KEY_DIR` —— **全部钉在服务端**，客户端改不了。用户行模板另含**可用性前提** `AI_MEMORY_REQUIRE_AGENT_ATTESTATION=0`（§5.2），故实际是**四项** |
 | 接入方式 | 单 OS 账号 + N 密钥，`authorized_keys` 每用户一行 forced command（§5.2 模板） |
 | 每库维护 | `ai-memory --db /data/users/<handle>/ai-memory.db stats \| gc \| curator --once` |
 | 探针残留 | `iso-alice` / `iso-bob` / `iso-shared` 三库保留供复查；清理 `docker exec -u 0 ai-memory-mcp rm -rf /data/users/iso-*` |
 
 ### 0.2 四个静默点（每次改动后必查）
 
-前三个见 [`../deployment.md`](../deployment.md) §7.2（embedder 降级 keyword / curator fail-open `tagged=0` / config 挂载错位退 semantic）；第四个是隔离侧的 **R1**：会话漏设 `AI_MEMORY_DB` → 静默落共享主库，**无报错、无告警、无日志**。
+前三个见 [`../deployment.md`](../deployment.md) §7.2（embedder 降级 keyword / curator fail-open `tagged=0` / config 挂载错位退 semantic）；第四个是隔离侧的 **R1**：会话漏设 `AI_MEMORY_DB` 曾**静默落共享主库**（无报错、无告警、无日志）—— D2 落地后该落点已消除、退化为 fail-loud；**指到有效他库仍静默**，由 D1 断言拦截（§6.1）。
 
 ---
 
@@ -115,14 +115,16 @@ command="docker exec -i ai-memory-mcp ai-memory mcp --tier smart --profile admin
 - **共享**：读 trust-all → 全部互见
 - **出处仍保留**：写入自动合成 `ai:cursor@mac1` / `ai:codebuddy@mac2` …（durable + pid-free；同机两个工具靠 `initialize.clientInfo.name` 区分）
 - 客户端 `mcp.json`（三台相同）：`{ "mcpServers": { "ai-memory": { "command": "ssh", "args": ["ai-memory"] } } }`
+- **本行不写 `-e AI_MEMORY_REQUIRE_AGENT_ATTESTATION=0`**：依赖 compose 的**容器级**同名变量（[`../../deploy/docker-compose.prod.yml`](../../deploy/docker-compose.prod.yml) 的 `ai-memory` / `curator` 两处），与 [`deployment.md`](../deployment.md) §4.3 管理员行口径一致。容器级缺该键的后果见 §9 B3；**用户行则显式重申**（§5.2，防模板漂移）
 
 ### 5.2 场景 B：多用户物理隔离（方案 ③）
 
 ```
-command="docker exec -i -e AI_MEMORY_DB=/data/users/alice/ai-memory.db -e AI_MEMORY_AGENT_ID=human:alice -e AI_MEMORY_KEY_DIR=/data/users/alice/keys ai-memory-mcp ai-memory mcp --tier smart --profile core",no-pty,no-port-forwarding,no-agent-forwarding,no-X11-forwarding ssh-ed25519 AAAA…alice alice@mac
+command="docker exec -i -e AI_MEMORY_DB=/data/users/alice/ai-memory.db -e AI_MEMORY_AGENT_ID=human:alice -e AI_MEMORY_KEY_DIR=/data/users/alice/keys -e AI_MEMORY_REQUIRE_AGENT_ATTESTATION=0 ai-memory-mcp ai-memory mcp --tier smart --profile core",no-pty,no-port-forwarding,no-agent-forwarding,no-X11-forwarding ssh-ed25519 AAAA…alice alice@mac
 ```
 
 - **档位**：用户行写 `--profile core`（8 项，对外统一口径）；管理员入口写 `--profile admin`（22 项）——决议与理由见 §8.3；改档位必须**重连**才生效
+- **`AI_MEMORY_REQUIRE_AGENT_ATTESTATION=0`**：可用性前提（[`../architecture.md`](../architecture.md) §2.1 #9）。**显式重申**的理由与 `--profile core` 同源 —— 防静默漂移：v0.10.0 的 MCP/CLI 面缺省即宽松（**实测写入成功、不报错**），HTTP direct-write 缺省要求签名，设 `=1` 则**全局严格**、无签名写入被拒（实测报错 `agent attestation failed: … this write is unsigned`）；而 v0.11 起默认翻转为全 surface required ⇒ 漏写这行会在升级后才爆。模板与 [`deployment.md`](../deployment.md) §4.3 用户行**逐字一致**
 - `AI_MEMORY_KEY_DIR` 指向用户目录，避免所有人共用默认 key dir
 - 客户端：`~/.ssh/config` 用自己的密钥；`mcp.json` 只需 `args: ["ai-memory"]`（forced command 覆盖一切）
 - **逐行追加**（最小侵入、易审计、可回滚）—— 不要整文件重写，一次拼错会连带整个文件失效
@@ -139,7 +141,7 @@ for db in /data/users/*/ai-memory.db; do
 done
 ```
 
-> `--db <path> stats` 通路已实测（各库计数独立）；注意：`gc` / `curator --once` 对每库 TTL 遗忘与 WAL checkpoint 的**覆盖面未验**（Sprint 3 #7）。
+> `--db <path> stats` 通路已实测（各库计数独立）；注意：`gc` / `curator --once` 对每库 TTL 遗忘与 WAL checkpoint 的**覆盖面未验**（Sprint 3「每用户库维护行为定档」）。
 
 ### 5.4 备份与配额
 
@@ -170,11 +172,11 @@ aimem-ssh ALL=(root) NOPASSWD: /usr/bin/docker exec -i ai-memory-mcp ai-memory m
 
 | # | 防线 | 为什么是「条件」 | 状态 |
 |---|---|---|---|
-| **D1** | fail-closed 断言：spawn 前断言 `AI_MEMORY_DB` 非空 + 以 `/data/users/` 开头 + 含该 `handle` | P1a 证明漏设时**无任何信号**；无此断言，一次模板笔误即静默串号 | 待落地：Sprint 3 #5 |
-| **D2** | 移除 `config.toml.tmpl` 的 `db` 键 | 该键是 R1 的**唯一落点**；移除后漏设退化为相对路径 → **fail-loud** | 待落地：Sprint 3 #5 |
-| **D3** | 一会话一子进程，**禁止跨用户复用/池化** | 单库方案写路径无 caller 边界（P6），会话复用即把边界交还给门户 | 待落地：Sprint 3 #5 / Sprint 4 #7 |
-| **D4** | 会话审计含**解析出的库路径** | 事后可对账；`doctor --json` 的 `source` 即现成来源 | 待落地：Sprint 3 #5 / Sprint 4 #4 |
-| **D5** | 上线前负向验收（不过则阻断） | 本 Sprint 只给本地预实证 | 待落地：Sprint 3 #6 |
+| **D1** | fail-closed 断言：spawn 前断言 `AI_MEMORY_DB` 非空 + 以 `/data/users/` 开头 + 含该 `handle` | 即使 D2 已让“漏设”失败，错设为存在且可写的他库仍不会报错；必须由门户绑定 handle 与路径 | 待落地：Sprint 4 #7「门户 ↔ MCP 会话桥」 |
+| **D2** | 移除 `config.toml.tmpl` 的 `db` 键；本地派生时机械剥离私有配置遗留的顶层 `db`；现存调用点审计见 §6.5 | 该键是 R1 的共享主库落点；移除后漏设退化为相对路径并 fail-loud | **已落地（本地 2026-09-21，Sprint 3 #2）**；生产复验随 Sprint 5 #8 |
+| **D3** | 一会话一子进程，**禁止跨用户复用/池化** | 单库方案写路径无 caller 边界（P6），会话复用即把边界交还给门户 | 待落地：Sprint 4 #7「门户 ↔ MCP 会话桥」 |
+| **D4** | 会话审计含**解析出的库路径** | 事后可对账；`doctor --json` 的 `source` 即现成来源 | 待落地：Sprint 4 #4「审计视图」 |
+| **D5** | 上线前负向验收（不过则阻断） | 本地门禁先定型，生产 forced-command 路径上线时复验 | 本地：Sprint 3 #3「隔离本地负向回归」；生产：Sprint 5 #8「上线验收」 |
 
 > D1/D2 不提升隔离**上限**（上限由物理分离给定），只保证**下限**：配置错一次不会静默串号。这是「可实现」与「可信」的分界。
 
@@ -182,10 +184,10 @@ aimem-ssh ALL=(root) NOPASSWD: /usr/bin/docker exec -i ai-memory-mcp ai-memory m
 
 | # | 验证 | 本地预实证 | 证据 | 生产级待办 |
 |---|---|---|---|---|
-| **V1** | 负向：漏设 `AI_MEMORY_DB` 必须失败 | 注意：预实证了「当前会**静默成功**」（D1/D2 未落地时的基线） | P1a | 落地 D1/D2 后重跑，断言**必须失败** |
-| **V2** | 正向：目标库 mtime 变化且共享主库不变 | 是（用户库 1/1，主库 7→7，mtime/size 未变） | P2 · P5 | 生产卷上复验 |
-| **V3** | 交叉：A 写后 B 检索不到、B `get <A id>` 不可见 | 是（双向未命中；`get` → `memory not found`） | P2 | 生产 forced command 路径复验 |
-| **V4** | 解析链自检：与模板相同的 env/argv 跑 `doctor --json`，`source` == 该用户库 | 是（`source=/data/users/iso-alice/ai-memory.db`） | P3 | 用**生产模板实际生成**的 env 再验 |
+| **V1** | 负向：漏设 `AI_MEMORY_DB` 必须失败 | **已通过（2026-09-21）**：`doctor` 非零；同一次响应的 `source` 规范化为绝对路径且非 `/data/ai-memory.db`；失败原因属于存储路径；共享主库记忆计数不变 | P1a | 生产模板上复验，并继续由门户 D1 拦截有效他库路径 |
+| **V2** | 正向：目标库写入且共享主库计数不变 | 是（2026-09-21：用户库非空且属主正确；主库计数保持不变；mtime 仅记录不作硬门禁） | P2 · P5 | 生产卷上复验 |
+| **V3** | 交叉：A 写后 B 检索不到、B `get <A id>` 不可见 | 是（2026-09-21 加固后重跑：双向未命中；`get` → `memory not found`） | P2 | 生产 forced command 路径复验 |
+| **V4** | 解析链自检：与模板**用户行相同的服务端 env**（四项含 attestation；`--profile` 只影响工具集、不参与判定）跑 `doctor --json`，`source` == 该用户库 | 是（2026-09-21：`source=/data/users/iso-alice/ai-memory.db`） | P3 | 用**生产模板实际生成**的 env 再验 |
 
 ### 6.3 验收清单（方案 ③）
 
@@ -195,7 +197,7 @@ aimem-ssh ALL=(root) NOPASSWD: /usr/bin/docker exec -i ai-memory-mcp ai-memory m
 - [x] 用户 A 写入后，用户 B 检索**命中不到**（且不报错）（P2 双向）
 - [x] 用户 B 显式 `memory_get <A 的记忆 id>` → **不可见**（P2：`memory not found`）
 - [x] `/data/users/<u>/ai-memory.db` 存在且属主 `aimem:aimem`（P2）
-- [ ] cron 维护对每个库都执行成功（日志无错）—— Sprint 3 #7
+- [ ] cron 维护对每个库都执行成功（日志无错）—— Sprint 3 #5「每用户库维护行为定档」
 - [ ] 备份脚本对全部库产出快照 + manifest（sha256 校验通过）—— Sprint 5 #3/#7
 - [ ] 吊销：删除该用户 `authorized_keys` 行后 SSH 立即失败 —— Sprint 5 #5
 
@@ -203,12 +205,29 @@ aimem-ssh ALL=(root) NOPASSWD: /usr/bin/docker exec -i ai-memory-mcp ai-memory m
 
 | # | 前提 | 归属 |
 |---|---|---|
-| 1 | 写路径泄露探针：去重/合成是否把他人私有内容回显给写入者（**只影响方案②**；方案③无跨库路径） | Sprint 3 #8 |
-| 2 | `gc` 是否覆盖每库的 TTL 遗忘 + WAL checkpoint | Sprint 3 #7 |
-| 3 | `AI_MEMORY_DB` 指向**有效但错误的**他库路径 —— 唯一能拦住它的是 D1 的路径断言 | Sprint 3 #5 |
+| 1 | 写路径泄露探针：去重/合成是否把他人私有内容回显给写入者（**只影响已排除的方案②**；方案③无跨库路径） | **已取消**（2026-09-21 范围校准） |
+| 2 | `gc` 是否覆盖每库的 TTL 遗忘 + WAL checkpoint | Sprint 3 #5「每用户库维护行为定档」 |
+| 3 | `AI_MEMORY_DB` 指向**有效但错误的**他库路径 —— 唯一能拦住它的是 D1 的路径断言 | Sprint 4 #7「门户 ↔ MCP 会话桥」 |
 | 4 | sudoers 无通配符 argv 匹配行为 | Sprint 5 前 |
-| 5 | 门户尚未存在（D1/D3/D4 的最终载体） | Sprint 3 #5 / Sprint 4 |
+| 5 | 门户尚未存在（D1/D3/D4 的最终载体） | Sprint 4 #7 / #4 |
 | 6 | `<handle>` 命名规范（大小写/长度/是否等于邮箱别名） | 门户设计 Sprint 4 |
+
+### 6.5 库路径调用点审计（D2 验收证据，2026-09-21）
+
+> **范围**：只核**现存**启动路径是否显式指定目标库（D2 的「调用点审计」）。**不含**每库维护命令 —— 那要等 §5.3 定档（Sprint 3 #5）。「错设为存在且可写的他库」也不在本表范围，由门户 D1 断言拦截（Sprint 4 #7）。
+>
+> **复跑方式**：`grep -n 'AI_MEMORY_DB' memory.agent-mate.ai/deploy/docker-compose.prod.yml memory.agent-mate.ai/specs/deployment.md memory.agent-mate.ai/specs/web-portal/web-design.md memory.agent-mate.ai/specs/mcp/mcp-design.md`
+
+| # | 调用点 | 启动方式 | 库路径来源 | 证据 |
+|---|---|---|---|---|
+| 1 | compose `ai-memory`（serve） | 容器级 env | 显式 `AI_MEMORY_DB=/data/ai-memory.db` | [`../../deploy/docker-compose.prod.yml`](../../deploy/docker-compose.prod.yml) 第 26 行 |
+| 2 | compose `curator` | 容器级 env | 显式 `AI_MEMORY_DB=/data/ai-memory.db` | 同上第 52 行 |
+| 3 | SSH 管理员行（主人默认库） | forced command → `docker exec` | **不写 `-e`**，依赖 #1 的容器级变量 | [`../deployment.md`](../deployment.md) §4.3 管理员行 · 本文 §5.1 |
+| 4 | SSH 用户行（一用户一库） | forced command → `docker exec -e …` | 逐行显式 `-e AI_MEMORY_DB=/data/users/<handle>/ai-memory.db` | [`../deployment.md`](../deployment.md) §4.3 用户行 · 本文 §5.2 |
+| 5 | 门户 spawn（β′ 子进程） | 子进程 env | 模板 `AI_MEMORY_DB=/data/users/{handle}/ai-memory.db` | [`../web-portal/web-design.md`](../web-portal/web-design.md) §3.3（运行时代码待 Sprint 4 #7） |
+| 6 | 每库维护（`gc` / `curator --once`） | CLI 参数 | **待定档**：必须显式 `--db <path>` | 本文 §5.3 · Sprint 3 #5「每用户库维护行为定档」 |
+
+**结论**：现存 5 条（#1–#5）**无一条**依赖 config 的库路径 —— 即 D2 移除顶层 `db` 后，没有任何调用点会受影响；#6 定档时须同样显式传 `--db`，且届时本表随之补行。
 
 ---
 
@@ -298,7 +317,7 @@ aimem-ssh ALL=(root) NOPASSWD: /usr/bin/docker exec -i ai-memory-mcp ai-memory m
 |---|---|---|---|---|
 | B1 | **`HOME=/data`** 是 config 路径的**唯一**输入（`$HOME/.config/ai-memory/config.toml`，无 env 能改写该路径） | 高·静默 | 与挂载点不一致 → config **静默忽略** → tier 退 `semantic`，llm/embeddings 全不生效 | `src/config.rs:6862-6872` |
 | B2 | `AI_MEMORY_DB=/data/ai-memory.db` | 中 | 路径变 → 建新空库（**记忆全不见了**） | `src/daemon_runtime.rs:88,137` |
-| B3 | **`AI_MEMORY_REQUIRE_AGENT_ATTESTATION=0`**（v0.9 起默认收紧） | 高 | 不设 → 写入 `403 ATTESTATION_FAILED` | `src/security_profile.rs:177,42` |
+| B3 | **`AI_MEMORY_REQUIRE_AGENT_ATTESTATION=0`**（v0.10.0 是 **surface-scoped**：MCP/CLI 缺省宽松、HTTP direct-write 缺省要求签名；`=1` 是**全局严格**） | 高 | 不设：v0.10.0 的 MCP/CLI 写入**仍然成功**（实测，静默宽松，不报错）；设 `=1` → 无签名写入被拒（`agent attestation failed: … this write is unsigned`）；**v0.11 起缺省翻转为全 surface required ⇒ 不设即被拒** | `src/security_profile.rs:177,42` |
 | B4 | **`DASHSCOPE_API_KEY`**（`QWEN_API_KEY` 等价回退） | 高·静默 | 缺失/失效 → embedder 静默降级 keyword + curator fail-open | `src/config.rs:6656,6715` |
 | B5 | **`AI_MEMORY_LLM_*` / `AI_MEMORY_EMBED_*` 优先级高于 config** | 高·静默 | `.env` 里误加 → **静默覆盖** config 的模型配置（文件看起来对，实际生效的是 env） | `src/config.rs:4443-4462,7721-7799` |
 | B6 | `AI_MEMORY_EMBED_BACKFILL_BATCH`（我方用 config） | 低 | 越界 WARN 回落 100 | `src/config.rs:4462` |
@@ -419,7 +438,6 @@ aimem-ssh ALL=(root) NOPASSWD: /usr/bin/docker exec -i ai-memory-mcp ai-memory m
 | L7 | 触顶行为：`hard_fail_at_cap=false`（默认）**驱逐最旧**，被驱逐记忆退化为关键词检索；`true` 则拒绝新插入但**不阻止 DB 落库**（`insert` 返回 `void`） | 高 | 收紧 `capacity` 会**不可逆驱逐**真实条目 ⇒ 容量类探针必须用一次性库 | `src/hnsw.rs:872-881`、`:925-939` |
 
 > **无必要 ADR**：本条结论是「按上游既有契约使用配置」，未引入我方架构选择；模板取值固定为编译默认亦属既有策略（`--profile core` 同源）的延续。
-
 
 ---
 

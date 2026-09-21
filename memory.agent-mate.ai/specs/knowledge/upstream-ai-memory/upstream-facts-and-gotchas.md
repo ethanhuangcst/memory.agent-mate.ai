@@ -12,6 +12,7 @@ tags:
   - retrieval
   - i18n
   - profile
+  - attestation
 related_spec: memory.agent-mate.ai/specs/deployment.md
 related:
   - memory.agent-mate.ai/specs/mcp/mcp-design.md
@@ -132,6 +133,19 @@ src/storage/migrations.rs:1507
 - 两个易算错的点：除 `full` 外各档 = 族计数 **+1**（`memory_capabilities` 属 Meta 族但 `ALWAYS_ON`）；`full` 的 101 已含它，**不加 1**。
 - 定档决议（对外 = `core` / 管理员入口 = `full`）在 `specs/mcp/mcp-design.md` §8.3。
 
+**agent attestation（2026-09-21 实测，v0.10.0，本地基线容器；可复跑探针 `memory.agent-mate.ai/scripts/mcp-smoke.sh` 会话 C）**
+
+| 事实 | 实测结论 | 证据 |
+| --- | --- | --- |
+| 该变量在 v0.10.0 是 **surface-scoped** | MCP / CLI 面**缺省即宽松**（`unset` 后 `memory_store` **成功**、无告警）；HTTP direct-write 缺省**要求**签名；`AI_MEMORY_REQUIRE_AGENT_ATTESTATION=1` 是**全局严格** | 探针会话 C；`unset` 对照单独验证 |
+| 被拒时的形状 | `tools/call` 回包 `result.isError=true`，文本 `agent attestation failed: agent attestation is required but this write is unsigned or the agent has no bound public key. …`（stdio 面没有 HTTP 状态码；`403` 是 HTTP 面的等价出口） | 同上 |
+| **`attest_level=claimed` 不可观测** | 该措辞出自上游文档与 daemon 的 `SECURITY POSTURE (#1798 R-12)` 启动告警 —— **仅**在 daemon 绑**非回环**地址且宽松时打印（本部署 `serve --host 127.0.0.1` ⇒ 从不打印） | 二进制内嵌文档字符串；容器日志 grep 无命中 |
+| 各出口均无该字段 | MCP `memory_store` 回包只有 `agent_id` / `id` / `namespace` / `tier` / `title`；`memory_get`、`ai-memory export`、`memories` 表同样没有 | 三处直取比对 |
+| 库内 `attest_level` 的真实归属 | 带该列的是 `memory_links` / `governance_rules` / `signed_events` / `signed_events_dlq` / `archived_memory_links` / `model_attestations`；**`memories` 表没有该列**（本库实测：`governance_rules` 4 行均 `unsigned`、`model_attestations` 1 行 `loader_observed`，其余为空） | 热备份快照（`ai-memory backup` + 只读遍历 45 张表） |
+| 可断言的判据 | **正负对照**：`=0` 写入成功（无 `isError`）∧ `=1` 同一写入被拒（`isError=true` 且原因含 `attestation`）。它同时能兜住「上游改名 / 移除该 env」 | 探针会话 C；`specs/mcp/mcp-test.md` §4-D TC-ATT-01 |
+
+> 该列在二进制里的定义含 `DEFAULT 'unsigned'` 与取值域注释 `unsigned / self_signed / peer_attested`（另有 `operator_signed` 出现在治理规则语境）—— 与 `claimed` **不是同一套取值**。所以「`claimed`」即便查库也反查不出来。
+
 **`[limits]` 容量与配额（2026-09-21 实测，v0.10.0）**
 
 | 键 | 编译默认 | 强制范围 |
@@ -198,6 +212,10 @@ src/storage/migrations.rs:1507
     实测 `memory_recall` 的 `description` 只有 "Recall memories relevant to a"（句子被砍断），`memory_store` 只有 "Store a memory"；回包的 key 也只有 `name` / `description` / `inputSchema` 三个，**没有** `docs`。
     完整说明在 `memory_capabilities` 的 **verbose drilldown**：`{family:<族>, include_schema:true, verbose:true}` ⇒ 响应的 `tools[]` 每项带完整 `docs`，且每个参数带 `description`；对 8 个族逐个取即可覆盖全部 101 项（实测 101/101 取到）。
     ⇒ 凡是要写「这个工具做什么」（对外文档、指引页、README），底稿一律取自这里，而不是 `tools/list`。
+19. **`attest_level=claimed` 是「文档 / 告警措辞」，不是可读字段**（2026-09-21 实测）：v0.10.0 里该变量的缺省姿态是 **surface-scoped**（MCP/CLI 宽松、HTTP direct-write 要求签名），
+    `claimed` 只在 daemon 绑**非回环**且宽松时由启动告警打印；MCP 响应、`memory_get`、`export`、`memories` 表都没有这个值。
+    ⇒ 验证「attestation 关掉了」**不要**去找该字段，用**正负对照**（`=0` 可写 ∧ `=1` 被拒）—— 它顺带能发现上游把该 env 改名或移除。
+    另：断言别写成「不设就会 `403`」，v0.10.0 的 MCP / CLI 缺省**不会**；翻转发生在 v0.11（见上方专表）。
 
 20. **`[limits]` 的「配置生效」不等于「行为生效」**（2026-09-21 实测，探针 `memory.agent-mate.ai/scripts/limits-probe.sh`）：
     ① 优先级 env > `[limits]` > 编译默认，且**任意层非正值视为未设**（`0` 不是「禁用配额」而是回落到编译默认；仅 `max_inflight_requests` 的 `0` 是「不装配 HTTP 准入层」的特殊语义）；
@@ -219,4 +237,5 @@ src/storage/migrations.rs:1507
 - 隔离探针（可重复）：`memory.agent-mate.ai/scripts/iso-probe.sh`（A 负向解析链 / B 方案③双用户隔离 / C 方案②对照）
 - 多语言检索边界探针（可重复）：`memory.agent-mate.ai/scripts/i18n-probe.sh`（三语言 × 三通路矩阵 + 简繁交叉 + STRICT 边界断言）
 - 档位实测探针（可重复）：`memory.agent-mate.ai/scripts/profile-probe.sh`（7 档独立进程；默认档 / core / graph / admin / power / full / `core,lifecycle` 的实际注册数与关键工具归属，只读）
+- attestation 开关判据（可重复）：`memory.agent-mate.ai/scripts/mcp-smoke.sh` 会话 C（正负对照：`=0` 可写 ∧ `=1` 被拒；失败退出码 50）
 - 相关 ADR：`adr/ADR-004-version-contract-single-source-of-truth.md`、`adr/ADR-005-upgrade-admission-gate-layering.md`、`adr/ADR-008-local-baseline-reuses-production-compose.md`、`adr/ADR-009-per-user-db-isolation-over-single-db-agent-id.md`（多用户隔离形态的决策，含"排除单库 per-agent"的实测理由）

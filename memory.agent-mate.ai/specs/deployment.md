@@ -11,7 +11,6 @@
 
 | 层 | 要求 |
 |---|---|
-| 2026-09-21 | **补 `[limits]` 容量与配额（Sprint 3 #4）**：§5.3 新增七键表（显式等于 v0.10.0 编译默认）与优先级 / 逐行盖章 / HTTP 面专属说明；模板 [`../deploy/config.toml.tmpl`](../deploy/config.toml.tmpl) 同步落盘；行为证据见 [`mcp/mcp-test.md`](./mcp/mcp-test.md) §4-D TC-LIMIT |
 | 服务器 | Ubuntu 22.04+，已装 Docker + Compose，能拉 `ghcr.io` |
 | 仓内 | `memory.agent-mate.ai/deploy/` 三个事实文件：`docker-compose.prod.yml`（compose 契约唯一真相源）· `config.toml.tmpl`（配置模板）· `.env.prod.example`（密钥样例） |
 | 密钥 | qwen MaaS API key（私有 workspace base_url）· 用户 SSH 公钥（Sprint 3+） |
@@ -422,6 +421,7 @@ bash scripts/pin-update.sh <ref> [--force]          # 更新锁文件（--force 
 
 | 日期 | 变更 |
 |---|---|
+| 2026-09-21 | **补 `[limits]` 容量与配额（Sprint 3 #4）**：§5.3 新增七键表（显式等于 v0.10.0 编译默认）与优先级 / 逐行盖章 / HTTP 面专属说明；模板 [`../deploy/config.toml.tmpl`](../deploy/config.toml.tmpl) 同步落盘；行为证据见 [`mcp/mcp-test.md`](./mcp/mcp-test.md) §4-D TC-LIMIT |
 | 2026-09-20 | **specs 整合**：`dev-plan.md` / `deployment_strategy.md` / `deploy/README.md` / `deploy/deployment-plan.md` 并入本文档；订正三处历史不一致 —— ① 健康探测**不用 curl**（镜像无 curl，改判 serve 日志 + `doctor`）；② 备份外迁频率统一为**每日**；③ 占位符统一 `<VPS4_IP>`（原文 `<vps4>` 混用）。删除 dev-plan 中误提的 gitleaks（本项目用 `make secret-check`） |
 | 2026-09-21 | **§4.4 改为「用户目录属主引导」**：一次性 `install -d -m 2775 -o root -g 999 /data/users`（setgid）使非 root 门户可自建 `0700` 用户目录，并**删除**原 `NOPASSWD: docker exec -u 0` root 规则（`aimem-ssh` 密钥一律带 forced command，不需要 sudo）；§4.5 改为「root 手工操作，保底」。§12.2 补门户 stack 的挂载/密钥/启动自检前置。§7.2 补 S1 的门户侧新触发路径（缺 `DASHSCOPE_API_KEY` ⇒ 401 + linear scan，工具仍成功）。依据 [`architecture.md`](./architecture.md) §2.3 与 [`knowledge/web-portal/portal-launch-mechanism.md`](./knowledge/web-portal/portal-launch-mechanism.md) |
 | 2026-09-21 | **§4.3 强制命令定档**：主人（默认库 = **管理员入口**）行 → `--profile admin`（22 项）；用户（一用户一库）行 → `--profile core`（8 项，显式声明 —— 不传时默认也是 core 且**不报错**）；补「档位口径」注与「改档须重连」。决议与理由 [`mcp/mcp-design.md`](./mcp/mcp-design.md) §8.3；实测依据 [`../scripts/profile-probe.sh`](../scripts/profile-probe.sh)（7 档全绿）；对外用户版说明 [`mcp/mcp-capabilities.md`](./mcp/mcp-capabilities.md) |

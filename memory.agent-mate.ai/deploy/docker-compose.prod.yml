@@ -24,7 +24,9 @@ services:
       # HF 模型缓存 = $HOME/.cache/huggingface（设 HOME 后 recreate 不重下）
       HOME: /data
       AI_MEMORY_DB: /data/ai-memory.db
-      # 可用性前提：v0.9 默认开启 attestation，无签名写入会 403
+      # 可用性前提（口径与实测判据见 specs/mcp/mcp-design.md §9 B3）：
+      #   v0.9 不设即拒写；v0.10.0 是 surface-scoped（MCP/CLI 缺省宽松）；
+      #   v0.11 起缺省翻转为全 surface required ⇒ 必须显式写死 = 0
       AI_MEMORY_REQUIRE_AGENT_ATTESTATION: "0"
 
     volumes:

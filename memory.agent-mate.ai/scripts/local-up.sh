@@ -10,11 +10,13 @@
 # 探针用的 ai_memory_local_data 是【不同卷】，即本地基线从全新库开始，不受历史测试数据干扰。
 #
 # 用法：bash memory.agent-mate.ai/scripts/local-up.sh
-# 幂等：可重复执行（复制 / 建网 / up -d 均幂等；已有容器则原地不动或按定义收敛）
-# 退出码：0 成功；10 前置缺失（docker 未运行 / 缺 .env.local 或 config.local.toml / 缺 IMAGE_TAG）；
+# 幂等：可重复执行（派生 / 建网 / up -d 均幂等；已有容器则原地不动或按定义收敛）
+# 退出码：0 成功；10 前置缺失或配置派生失败（docker 未运行 / 缺 .env.local 或
+#         config.local.toml / 缺 IMAGE_TAG / 运行时配置仍含顶层 db）；
 #         11 compose 启动失败；12 健康等待超时
 
 set -euo pipefail
+umask 077
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 DEPLOY_DIR="$REPO_ROOT/memory.agent-mate.ai/deploy"
@@ -31,9 +33,32 @@ docker info >/dev/null 2>&1 || die 10 "docker daemon 未运行"
 [ -f "$DEPLOY_DIR/config.local.toml" ] || die 10 "缺 $DEPLOY_DIR/config.local.toml（真实端点，gitignored）"
 
 # ── 1) 派生 compose 固定引用的文件名（.env / config.toml；两者已 gitignored，含真实值）──
-cp "$DEPLOY_DIR/.env.local" "$DEPLOY_DIR/.env"
-cp "$DEPLOY_DIR/config.local.toml" "$DEPLOY_DIR/config.toml"
-grep -q '^IMAGE_TAG=' "$DEPLOY_DIR/.env" || die 10 ".env.local 缺 IMAGE_TAG（对照 .env.prod.example 补齐）"
+# 私有 config.local.toml 可能保留旧版顶层 db；派生时机械剥离，避免漏设 AI_MEMORY_DB
+# 静默回落到共享主库。只处理首个 TOML table 之前的顶层键，不触碰 section 内同名键。
+ENV_TMP="$(mktemp "$DEPLOY_DIR/.env.XXXXXX")" || die 10 "无法创建 .env 临时文件"
+CONFIG_TMP="$(mktemp "$DEPLOY_DIR/.config.toml.XXXXXX")" || die 10 "无法创建运行时配置临时文件"
+trap 'rm -f "${ENV_TMP:-}" "${CONFIG_TMP:-}"' EXIT
+cp "$DEPLOY_DIR/.env.local" "$ENV_TMP"
+chmod 600 "$ENV_TMP"
+grep -q '^IMAGE_TAG=' "$ENV_TMP" || die 10 ".env.local 缺 IMAGE_TAG（对照 .env.prod.example 补齐）"
+mv "$ENV_TMP" "$DEPLOY_DIR/.env"
+ENV_TMP=""
+awk '
+  /^[[:space:]]*\[/ { in_table = 1 }
+  !in_table && /^[[:space:]]*(db|"db"|\047db\047)[[:space:]]*=/ { next }
+  { print }
+' "$DEPLOY_DIR/config.local.toml" > "$CONFIG_TMP" || die 10 "无法从 config.local.toml 派生运行时配置"
+if awk '
+  /^[[:space:]]*\[/ { exit }
+  /^[[:space:]]*(db|"db"|\047db\047)[[:space:]]*=/ { found = 1 }
+  END { exit found ? 0 : 1 }
+' "$CONFIG_TMP"; then
+  die 10 "派生后的 config.toml 仍含顶层 db（拒绝启动，防止共享库 fallback）"
+fi
+chmod 600 "$CONFIG_TMP"
+mv "$CONFIG_TMP" "$DEPLOY_DIR/config.toml"
+CONFIG_TMP=""
+log "已派生 config.toml，并确认不存在顶层 db fallback"
 
 # ── 2) compose 把网络声明为 external(portainer_network)；本机不存在则先建 ──
 #      不改生产 compose 文件本身，保持与服务器侧零差异

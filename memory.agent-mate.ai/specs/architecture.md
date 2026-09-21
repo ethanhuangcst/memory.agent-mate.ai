@@ -51,7 +51,7 @@ memory.agent-mate.ai = 上游 `ai-memory-mcp` 的**私有化部署 + 定制**（
 | 6 | 多用户 HTTP 接入 | 由 **admin portal** 承担（门户 spawn 子进程 + HTTP↔stdio 桥） | 上游**没有** MCP-over-HTTP | 新增公网面，需自建认证与限流 |
 | 7 | 隔离形态 | **一用户一 DB**（方案 ③） | 方案 ②（单库 + per-user env）写路径**可伪造**（实测） | 每库需各自维护与备份 |
 | 8 | 启动机制（门户） | **β′**（2026-09-21 用户确认定稿）：门户镜像内带上游二进制，子进程 spawn；**落地前置 3 条见 §2.3** | α 需 docker socket ≈ **宿主 root 等价**，且实测**无法用 socket 代理收窄**（§2.2）；门户是公网可达组件 | 上游升级须重建门户镜像；门户须持 MaaS key |
-| 9 | agent attestation | **关闭**（`AI_MEMORY_REQUIRE_AGENT_ATTESTATION=0`） | v0.9 默认开启会 403 拒写，是可用性前提 | 写入标记为 `claimed`（自称） |
+| 9 | agent attestation | **关闭**（`AI_MEMORY_REQUIRE_AGENT_ATTESTATION=0`） | **可用性前提**：v0.9 不设即拒写（HTTP 面等价出口 `403`）；**v0.10.0 改为 surface-scoped**（MCP / CLI 缺省宽松，`=1` 才全局严格）；**v0.11 起缺省翻转为全 surface required** ⇒ 必须显式写死。实测口径与判据见 [`mcp/mcp-design.md`](./mcp/mcp-design.md) §9 B3 · [`knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md`](./knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md) | 写入的 `attest_level` 在 v0.10.0 **不可观测**（MCP 响应 / `memory_get` / `export` / `memories` 表均无该字段）⇒ 验收用**正负对照**（`=0` 可写 ∧ `=1` 被拒），不断言 `claimed` |
 | 10 | 部署制品仓库 | **公开**仓 `ethanhuangcst/memory.agent-mate.ai` | 不污染上游 | 公开仓必须脱敏（§5.4） |
 
 ### 2.2 明确排除
@@ -218,15 +218,15 @@ memory.agent-mate.ai = 上游 `ai-memory-mcp` 的**私有化部署 + 定制**（
 
 ## 6. 阻断级风险索引（门户上线前必须关闭）
 
-| # | 风险 | 机制 | 级别 |
-|---|---|---|---|
-| **R1** | **多用户隔离静默失效 —— 所有用户共用同一个库** | `effective_db()` 只在「CLI/env 库路径**恰为默认值**」时才改用 config 的 `db`；而 config 写死共享主库 ⇒ 会话**漏设/写错** `AI_MEMORY_DB` 即落到共享主库，**无报错、无告警、无日志**（已获**行为级证据**：`rc=0` 且 `source=/data/ai-memory.db`） | 严重 |
-| **R2** | 隔离完全依赖门户一处正确性，无纵深 | 上游无任何多租户授权边界：写路径无可见性过滤；macaroon 能力令牌 **additive-only**（只放宽不收紧） | 高 |
-| **R3** | SSH 手工 forced command 的同类风险 | 每用户一条很长的单行命令，手工拼写易漏；且**难以审计**（逐行生效，错一次连带整文件） | 高 |
+本节只提供架构层薄索引。RID 的说明、影响、解决方案、处理说明与状态以 [`sprint_plan.md`](./sprint_plan.md) 的 RID Registry 为唯一真源；验证矩阵见 [`mcp/mcp-design.md`](./mcp/mcp-design.md) §6.2。
 
-> R1 定级「严重」的理由：多数故障会报错能被发现，**R1 表现为「功能正常」**，只是所有人共享同一份记忆。
+| # | 风险 |
+|---|---|
+| **R1** | [多用户隔离可能静默失效](./sprint_plan.md#rid-registryrisks--impediments--dependencies) |
+| **R2** | [隔离完全依赖门户一处正确性，无纵深](./sprint_plan.md#rid-registryrisks--impediments--dependencies) |
+| **R3** | [SSH forced command 手工配置易失准](./sprint_plan.md#rid-registryrisks--impediments--dependencies) |
 
-**防线与验证**：**D1** fail-closed 断言（`AI_MEMORY_DB` 非空 + 以 `/data/users/` 开头 + 含该 handle，否则拒绝启动会话）· **D2** 移除 config 模板的 `db` 键（消除 R1 落点，使漏设退化为 **fail-loud**）· **D3** 一会话一子进程禁池化 · **D4** 审计含解析出的库路径 · **D5** 上线前负向验收。对应验证 **V1（负向，准入门槛）/ V2 正向 / V3 交叉 / V4 解析链自检** —— 完整矩阵与探针见 [`mcp/mcp-design.md`](./mcp/mcp-design.md) §6。
+> 本节不复制级别、状态、防线、验证方法或处理过程；均以 RID Registry 为准。
 
 ---
 
@@ -239,9 +239,11 @@ memory.agent-mate.ai = 上游 `ai-memory-mcp` 的**私有化部署 + 定制**（
 | 2026-09-20 | **目录改名收口**：`hk_vps_4/` → `memory.agent-mate.ai/`，全仓路径引用同步；新增 `make doc-links` 防「删文档留悬空引用」复发 |
 | 2026-09-21 | **D1 定稿 β′（用户确认）+ 新增 §2.2 排除项与 §2.3 落地前置**：排除 α（门户挂 docker socket ≈ 宿主 root；且**主流 socket 代理不支持按容器/命令过滤**，放行 exec 必开 POST ⇒ 写面打开，故「α + 受限代理」一并排除）；新增三条硬前置（`/data/users` setgid 引导 / 门户持独立 MaaS key / 版本断言）。依据 [`knowledge/web-portal/portal-launch-mechanism.md`](./knowledge/web-portal/portal-launch-mechanism.md)（含 β′ 端到端探针实证）；决议记录 [`adr/ADR-012`](./adr/ADR-012-portal-launch-mechanism-no-docker-socket.md) |
 | 2026-09-21 | §4.1 高敏感速查补「**检索按语言分级**」：多语言探针（Sprint 2 #8）结论 = **部分支持**——存储 / 语义召回 / 按 id 直取不限语言；关键词通路按 FTS5 默认分词器（`unicode61`）只认完整词元（中文需标点界定整段、简繁不互通、无配置项）。证据：[`mcp/mcp-test.md`](./mcp/mcp-test.md) §4-E（L1.6 探针）与 [`knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md`](./knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md) |
+| 2026-09-21 | §6 改为 RID 薄索引，说明、影响、解决方案与状态统一指向 [`sprint_plan.md`](./sprint_plan.md)；新增过程文档体例 [`sdd-scrum-practices.md`](./sdd-scrum-practices.md)，决议见 [`ADR-013`](./adr/ADR-013-sdd-scrum-process-doc-boundaries.md) |
 
 | 相关 | 用途 |
 |---|---|
+| [`sdd-scrum-practices.md`](./sdd-scrum-practices.md) | RID Registry、Sprint Backlog 与 Product Backlog 的体例、状态和单一真源边界 |
 | [`deployment.md`](./deployment.md) | 部署 / 配置 / 升级 / 备份 / 回滚 / 排障 |
 | [`mcp/mcp-design.md`](./mcp/mcp-design.md) | MCP 能力、多用户隔离、档位与工具、上游契约面全量 |
 | [`mcp/mcp-test.md`](./mcp/mcp-test.md) | MCP 测试策略 + 计划 + 用例 |

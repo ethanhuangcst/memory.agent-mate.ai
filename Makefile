@@ -9,8 +9,9 @@ PREFLIGHT := memory.agent-mate.ai/scripts/upstream-preflight.sh
 SECRET_CHECK := memory.agent-mate.ai/scripts/secret-check.sh
 PRE_COMMIT_HOOK := memory.agent-mate.ai/scripts/git-hooks/pre-commit
 LINK_CHECK := memory.agent-mate.ai/scripts/link-check.sh
+ATTEST_CHECK := memory.agent-mate.ai/scripts/attestation-paths-check.sh
 
-.PHONY: help upstream pin pin-update preflight preflight-test backup restore-drill secret-check doc-links hooks-install
+.PHONY: help upstream pin pin-update preflight preflight-test backup restore-drill secret-check doc-links attestation-paths hooks-install
 
 help:
 	@grep -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*## "} {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
@@ -41,6 +42,9 @@ secret-check: ## 扫描已跟踪文件中的公网 IP（真实值应放 secrets.
 
 doc-links: ## 校验仓内 md 相对链接无悬空（防「删文档留悬空引用」复发）
 	bash $(LINK_CHECK)
+
+attestation-paths: ## 静态校验 attestation 四路径口径一致（compose ×2 / SSH / 门户）且无失准表述回流
+	bash $(ATTEST_CHECK)
 
 hooks-install: ## 安装 pre-commit 钩子到 .git/hooks/（不改 git config）
 	install -m 0755 $(PRE_COMMIT_HOOK) .git/hooks/pre-commit
