@@ -11,6 +11,7 @@ tags:
   - ghcr
   - retrieval
   - i18n
+  - profile
 related_spec: memory.agent-mate.ai/specs/deployment.md
 related:
   - memory.agent-mate.ai/specs/mcp/mcp-design.md
@@ -115,6 +116,22 @@ src/storage/migrations.rs:1507
 
 源码依据：`memories_fts` 建表 `USING fts5(title, content, tags, content=memories, content_rowid=rowid)` **无 `tokenize=`**（写入侧由 AFTER INSERT/UPDATE/DELETE 触发器同步入库，索引入库不受语言限制）；`sanitize_fts_query`（`src/storage/mod.rs:7030`）按空白切分、剥除全部 FTS5 特殊字符、逐词元短语化、隐式 AND；`[mcp]` 配置段仅 `profile` / `allowlist` / `profile_hint_in_errors` —— **无任何语言 / 分词 / 检索配置项**。客户端交叉证据标记 `i18n-cross-20260921`（主库 id `de386c65-…5680`）。用例登记 `specs/mcp/mcp-test.md` §4-E；契约面 `specs/mcp/mcp-design.md` §9 J4。
 
+**档位 `--profile` 实测（2026-09-21 实测，v0.10.0，本地基线容器；可复跑探针 `memory.agent-mate.ai/scripts/profile-probe.sh` —— 每档独立进程、只读、7 档全绿）**
+
+| 档位 | 实际注册数 | 构成与要点 |
+| --- | --- | --- |
+| 默认（不传 `--profile`） | 8 | = `core`，**且不报错、不告警**（模板漏写 `--profile` 即此档） |
+| `core` | 8 | Core 7 + 常驻 `memory_capabilities` |
+| `graph` | 20 | Core + Graph 12 + 1 |
+| `admin` | 22 | Core + Lifecycle 6 + Governance 8 + 1 |
+| `power` | 57 | Core + Power 49 + 1 |
+| `full` | 101 | 全部族，**101 已含** `memory_capabilities`（= 100 个 memory tools + 1 常驻；见 `ai-memory mcp --help` 自述与 issue #862 说明）⇒ **不再 +1** |
+| `core,lifecycle`（自定义） | 14 | Core + Lifecycle；含 `memory_delete` / `memory_forget` / `memory_gc`，**不含**治理面与自治编排面 |
+
+- 生效形式：`--profile` 与 `--tier smart` **并存有效**（CLI flag 直接生效，无需回退 env `AI_MEMORY_PROFILE`）；逗号分隔的自定义族列表被接受（实测 `core,lifecycle` = 14）。
+- 两个易算错的点：除 `full` 外各档 = 族计数 **+1**（`memory_capabilities` 属 Meta 族但 `ALWAYS_ON`）；`full` 的 101 已含它，**不加 1**。
+- 定档决议（对外 = `core` / 管理员入口 = `full`）在 `specs/mcp/mcp-design.md` §8.3。
+
 ## Lesson / guidance
 
 1. **不要用 git 谱系判断上游版本差异**。上游会重写历史；`git log <tag>..main` 与 `git diff` 会直接失效。
@@ -148,6 +165,8 @@ src/storage/migrations.rs:1507
 13. **档位是启动参数，不是运行时能力**：`--profile`（工具档）与 `--tier`（搜索档）彼此独立；
     且 Cursor 等 harness 不支持动态注册（`your_harness_supports_deferred_registration: false`），
     想用 core 之外的家族只能在客户端 args 里写死 `--profile` 再重连 —— 上线前必须在**客户端侧**确认档位，而不是只看服务端。
+    实测（2026-09-21，7 档逐档 `tools/list`）：`--profile` 与 `--tier` 可并存于同一命令行；默认档 = core = 8 且静默；
+    `core,lifecycle` = 14（开放删除的**最小增量**）；各档实际注册数见上方「档位实测」专表。
 14. **多用户隔离的失效形态是「功能正常」**：漏设 `AI_MEMORY_DB` 时进程 rc=0、无告警，所有用户静默共用 `config.toml` 指定的主库
     （上游 `AppConfig::effective_db()` 的优先级陷阱：CLI/env 库路径**恰为默认值**时改用 config 的 `db`）。
     因此多用户部署必须同时做两件事：**移除 config 的 `db` 键**（让"漏设"退化为相对路径 → fail-loud）+ **spawn 前 fail-closed 断言**（路径非空、以 `/data/users/` 开头、含该 handle）。
@@ -170,4 +189,5 @@ src/storage/migrations.rs:1507
 - 多用户隔离方案与结论（冻结机制 / D1–D5 / V1–V4 / 未决前提）：`memory.agent-mate.ai/specs/mcp/mcp-design.md` §0
 - 隔离探针（可重复）：`memory.agent-mate.ai/scripts/iso-probe.sh`（A 负向解析链 / B 方案③双用户隔离 / C 方案②对照）
 - 多语言检索边界探针（可重复）：`memory.agent-mate.ai/scripts/i18n-probe.sh`（三语言 × 三通路矩阵 + 简繁交叉 + STRICT 边界断言）
+- 档位实测探针（可重复）：`memory.agent-mate.ai/scripts/profile-probe.sh`（7 档独立进程；默认档 / core / graph / admin / power / full / `core,lifecycle` 的实际注册数与关键工具归属，只读）
 - 相关 ADR：`adr/ADR-004-version-contract-single-source-of-truth.md`、`adr/ADR-005-upgrade-admission-gate-layering.md`、`adr/ADR-008-local-baseline-reuses-production-compose.md`、`adr/ADR-009-per-user-db-isolation-over-single-db-agent-id.md`（多用户隔离形态的决策，含"排除单库 per-agent"的实测理由）

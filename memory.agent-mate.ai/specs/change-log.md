@@ -8,6 +8,38 @@
 
 ## 2026-09-21
 
+### `--profile` 定档收口（Sprint 2 #9）
+
+**问题**：对外（SSH 与门户）暴露哪一档工具集（8 / 20 / 22 / 57 / 101）一直未定 —— SSH 模板没写 `--profile` ⇒ 实际只暴露 core 且**不报错**；门户模板里同一项是注释掉的待定行。定档缺**实测**依据（AC 要求实测 v0.10.0 各档工具数）。
+
+**决议**：
+
+| 通道 | 档位 | 工具数 | 理由 |
+| --- | --- | --- | --- |
+| 对外（SSH + 门户，**统一**） | `core` | 8 | 最小面；不引入治理 / 图谱 / 自治编排面；代价见下方「已知限制」 |
+| 管理员入口（**独立**模板） | `full` | 101 | 排障需要 Meta 族（`memory_stats` / `memory_agent_list` / `memory_recall_observations`）与 Archive（`memory_archive_stats`）—— `admin`（22）档看不到这些；该通道仅管理员本人使用，提示词开销可接受 |
+
+**实测**（可复跑探针 [`../scripts/profile-probe.sh`](../scripts/profile-probe.sh)：隔离库 `/data/users/profile-probe/`、只读、每档独立进程、退出码 0）：
+
+| 档位 | 期望 | 实测 | 关键工具归属（实测） |
+| --- | --- | --- | --- |
+| 默认（不传 `--profile`） | 8 | 8 | 含 `memory_capabilities`，不含 `memory_delete` |
+| `core` | 8 | 8 | 含 store / recall / search / get / list；不含 delete / forget / gc |
+| `graph` | 20 | 20 | 含 `memory_kg_query` / `memory_link`；不含 delete |
+| `admin` | 22 | 22 | 含 update / delete / forget / gc；不含 `memory_stats` |
+| `power` | 57 | 57 | 含 `memory_consolidate` / `memory_share`；不含 delete |
+| `full` | 101 | 101 | 含 stats / delete / kg_query / archive_stats |
+| `core,lifecycle`（自定义） | 14 | 14 | 含 delete / forget / gc；不含 stats / pending_list |
+
+- **生效形式**：`--profile` CLI flag 与 `--tier smart` **并存有效** —— 7 档全部以 flag 形式生效，无需回退 env `AI_MEMORY_PROFILE`。
+- **默认档实证**：不传 `--profile` = 8 项 ⇒ 「模板不写 `--profile` = core」这一静默面被坐实（不报错、不告警）。
+
+**已知限制（本轮接受）**：`core` 档**不含删除类工具** ⇒ 用户无法自行删除 / 遗忘 / 整理自己的记忆。若日后要开放删除，**最小增量档位是 `core,lifecycle`（实测 14）**，而不是 `admin`（22）或 `full`（101）—— 后两者会同时引入治理面与自治编排面。是否开放、何时开放另开条目评估。
+
+**未做（显式移交）**：把 `--profile` 写进 SSH 模板与门户模板 = **Sprint 3 #2**（Backlog #12 AC「按 Sprint 2 的定档决议，把 `--profile` 写入门户模板与 SSH 模板」），本轮按「只完成 #9、范围最小化」口径不动模板；`product-backlog.md` #12 / #19 的描述列留待落地时一并回写（本轮未授权改 backlog）。
+
+**回写**：[`mcp/mcp-design.md`](mcp/mcp-design.md) §8.1（实测引文）+ §8.3（由「待决策」改为决议表 #1–#4）+ 变更记录 · [`sprint_plan.md`](sprint_plan.md) #9 完成态 + 变更记录 · [`knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md`](knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md)（档位实测表与教训）。
+
 ### 多语言探针结论 + 门户 key 收尾（Sprint 2 #8 / #6）
 
 **问题**：`product-backlog.md` #10「记忆内容的多语言支持」自立项起标为「待探针确认」—— 上游在保存 / 检索 memory 时是否支持多语言、有无配置项、有无已知限制，需要可复跑的行为级结论。连带收尾 #6：门户专用 MaaS key 已由用户填入，须实测注入路径可用。

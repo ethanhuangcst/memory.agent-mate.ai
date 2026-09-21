@@ -231,6 +231,8 @@ aimem-ssh ALL=(root) NOPASSWD: /usr/bin/docker exec -i ai-memory-mcp ai-memory m
 | `power` | Core + Power | 56 | **57** |
 | `full` | 全部族 | 101 | **101** |
 
+> **实测（2026-09-21，v0.10.0）**：探针 [`../../scripts/profile-probe.sh`](../../scripts/profile-probe.sh)（每档独立进程，只发 `initialize` + `tools/list` + 一次 `memory_capabilities`）实测注册数 —— `core=8` / `graph=20` / `admin=22` / `power=57` / `full=101`，与上表**逐档一致**；自定义 `core,lifecycle=14`（新增 Lifecycle 6 项，含 `memory_delete` / `memory_forget` / `memory_gc`，不含治理与自治面）；**默认档（不传 `--profile`）= 8 项，与 `core` 一致且不报错**。生效形式：`--profile` CLI flag，与 `--tier smart` **并存有效**（无需回退 env）。
+
 - **两个易算错的点**：① `memory_capabilities` 属 `Meta` 族但被列为 `ALWAYS_ON_TOOLS`，**所有档位**都加载 ⇒ 除 `full` 外各档**实际注册数 = 族计数 + 1**；② **默认档位是 `core` 不是 `full`** —— 模板不显式写 `--profile full` 就只暴露 8 项，**且不报错**。
 - 自定义档位：`--profile core,graph,archive`（逗号分隔族列表）。
 - 解析优先级：`--profile` > `AI_MEMORY_PROFILE` > `config.toml [mcp].profile` > `core`。
@@ -252,13 +254,14 @@ aimem-ssh ALL=(root) NOPASSWD: /usr/bin/docker exec -i ai-memory-mcp ai-memory m
 
 > 每项的功能描述以运行时 `memory_capabilities` 自述为准，此处只登记名称与归属（避免与上游漂移）。
 
-### 8.3 待决策
+### 8.3 档位决议与开放问题
 
 | # | 决策 | 现状 |
 |---|---|---|
-| 1 | 对用户暴露哪一档 | **未定**。现有 SSH 模板无 `--profile` ⇒ 实际只暴露 core（8 项）。选 `full` 需评估提示词开销与误用面 |
-| 2 | 门户模板与 SSH 模板是否统一档位 | 应一致，否则「SSH 能看到、门户看不到」 |
-| 3 | 选档后如何验收 | 用 `initialize` + `tools/list` 实测计数（[`./mcp-test.md`](./mcp-test.md) TC-TIER-xx） |
+| 1 | 对用户暴露哪一档 | **已定（2026-09-21）**：对外（SSH 与门户**统一**）= **`core`（8 项）**；管理员另设入口 = **`full`（101 项）**，两条模板分离。理由：对外取最小面（不开放删除，代价见 #4）；管理员排障需要 Meta 族（`memory_stats` / `memory_agent_list` / `memory_recall_observations`）与 Archive（`memory_archive_stats`）—— `admin`（22）档看不到这些，而管理员通道只有本人使用，提示词开销可接受。**模板落盘**（把 `--profile` 写进 SSH / 门户模板）= Sprint 3 #2（Backlog #12），本条只定档 |
+| 2 | 门户模板与 SSH 模板是否统一档位 | **已定**：统一为 `core`（同上 #1）；管理员入口单独一条，不与用户通道混用 |
+| 3 | 选档后如何验收 | 用 `initialize` + `tools/list` 实测计数 —— 能力已由 [`../../scripts/profile-probe.sh`](../../scripts/profile-probe.sh) 提供（7 档全绿）；对**门户 / SSH 模板本身**的验收（TC-TIER-01/02）随 Sprint 3 #2 执行，登记在 [`./mcp-test.md`](./mcp-test.md) §4-C |
+| 4 | `core` 档**不含删除类工具**（`memory_delete` / `memory_forget` / `memory_gc`） | **已知限制，本轮接受**：用户无法自行删除或遗忘自己的记忆。若要开放删除，**最小增量档位是 `core,lifecycle`（实测 14 项）**，不是 `admin`（22）或 `full`（101）——后者会同时引入治理面与自治编排面。是否开放、何时开放另开条目评估，**不在 #9 结论内** |
 
 ---
 
@@ -402,3 +405,4 @@ aimem-ssh ALL=(root) NOPASSWD: /usr/bin/docker exec -i ai-memory-mcp ai-memory m
 | 2026-09-20 | 订正：档位工具数统一写**实际注册数**（core=8 / graph=20 / admin=22 / power=57 / full=101），族计数另列；`minimal` 档位为笔误，正确是 `full`；`memory_capabilities` 已加 always-on 注；`capability init` 标注为 v1.0.0 特性；schema 版本并写 80（制品层）/81（参考层） |
 | 2026-09-21 | **§0.1 冻结机制「属主」行补前置**：2026-09-21 起门户路径由门户以 `aimem` 身份自建 `0700` 用户目录，**前置**为 `/data/users` = `root:aimem 2775`（setgid 一次性引导，[`../deployment.md`](../deployment.md) §4.4）；`docker exec -u 0 … mkdir/chown` 形式仅保留给 root 手工操作。背景：门户启动机制定稿 β′（[`../adr/ADR-012`](../adr/ADR-012-portal-launch-mechanism-no-docker-socket.md)），证据 [`../knowledge/web-portal/portal-launch-mechanism.md`](../knowledge/web-portal/portal-launch-mechanism.md) E3 |
 | 2026-09-21 | **多语言能力边界落盘（Sprint 2 #8）**：§2 新增「记忆内容多语言」行（部分支持——存储 / 语义通路不限语言；关键词通路按 FTS5 `unicode61` 完整词元匹配、简繁不互通、无配置项）；§9 新增契约点 **J4**（分词器行为 + `sanitize_fts_query` + 探针方式），供上游升级预检核对。依据：探针 [`../../scripts/i18n-probe.sh`](../../scripts/i18n-probe.sh)（L1.6，三语言 × 三通路矩阵 + STRICT 边界断言）+ 源码复核；用例登记 [`./mcp-test.md`](./mcp-test.md) §4-E |
+| 2026-09-21 | **档位定档收口（Sprint 2 #9）**：§8.1 补**实测**引文（探针 [`../../scripts/profile-probe.sh`](../../scripts/profile-probe.sh)：`core=8` / `graph=20` / `admin=22` / `power=57` / `full=101` / `core,lifecycle=14` / 默认档 `=8`，`--profile` 与 `--tier` 并存有效）；§8.3 由「待决策」改为「档位决议与开放问题」——#1 已定（对外 `core`、管理员 `full`，模板落盘归 Sprint 3 #2）、#2 已定（两条用户通道统一 `core`）、#3 验收方式落到 profile-probe、新增 #4（core 不含删除 = 已知限制，开放删除的最小增量是 `core,lifecycle`） |
