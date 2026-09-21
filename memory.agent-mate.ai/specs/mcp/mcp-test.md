@@ -28,6 +28,7 @@
 | L0 | 前置健康 | `docker exec ai-memory-mcp ai-memory doctor`（LLM/Embeddings 双 200、1024-dim、tier 生效）+ curator `--once --dry-run --json` | 三个**静默失败点**：embedder 降级 keyword / curator `tagged=0` / config 挂载错位退 semantic |
 | L1 | 协议冒烟 | [`../../scripts/mcp-smoke.sh`](../../scripts/mcp-smoke.sh)（stdio JSON-RPC：握手 / 工具断言 / 写入 / 召回） | MCP 协议通路本身（initialize → tools/list → tools/call） |
 | L1.5 | 隔离探针 | [`../../scripts/iso-probe.sh`](../../scripts/iso-probe.sh)（A/B/C 组，P1a–P6） | **R1**：会话漏设 `AI_MEMORY_DB` → 静默落共享主库（[`./mcp-design.md`](./mcp-design.md) §0） |
+| L1.6 | 多语言探针 | [`../../scripts/i18n-probe.sh`](../../scripts/i18n-probe.sh)（三语言写入 → 关键词 12 组对照 → 语义召回 + 按 id 直取 → 结论矩阵；退出码 0/10/20/30/40/50，`I18N_PROBE_STRICT=1` 把语言边界当断言） | 对 CJK 记忆**误用关键词通路** → 静默 count=0 假象「记忆丢了」（结论矩阵与用例见 §4-E） |
 | L2 | 客户端接入 | Cursor 加载（§3 配置），人肉核对工具清单与一次问答 | 真实客户端环境差异（env / 传输 / 重连） |
 | L3 | 生产通道 | 同 L1 模式，传输换成 `ssh ai-memory`（Sprint 5） | SSH forced command / `no-pty` / 密钥边界 |
 
@@ -37,7 +38,7 @@
 - **唯一标记**：每次写入带 `mcp-smoke-<epoch>-<pid>`，断言只匹配当次标记，历史数据不干扰。
 - **不泄密**：脚本不读 env、不打印容器环境；key 只存在于容器侧。
 - **近重复容忍**：上游 near-duplicate 去重会让重复写入返回 CONFLICT —— 改验既有标记（通路验证目的一致）。
-- **检索工具分工**：`memory_search` 是 ASCII 子串精确匹配 —— FTS 分词对 CJK 查询**不命中**（实测：中文子串「三层全绿」count=0，ASCII 标记同库 count=2）；**中文/语义查询必须走 `memory_recall`**。
+- **检索工具分工**：`memory_search` 关键词通路按 FTS5 默认分词器（`unicode61`，无 `tokenize=`）以**完整词元** AND 匹配——英文词元 = 单词；中文词元 = 标点/空白界定的**整段**，词元内子串与**简繁交叉**一律不命中（精确边界与实测矩阵见 §4-E，源码依据 [`./mcp-design.md`](./mcp-design.md) §9 J4）；**中文/语义查询必须走 `memory_recall`**。
 - **capabilities 优先，但认准口径**：`memory_capabilities`（core 档亦常驻）返回家族清单 / 装载状态 / features / models / 工具总数，是档位与能力核对的**首选探针**。注意其 `summary`「7 of 100」是**族计数口径**；实际 `tools/list` 注册数 core=**8**，源码 `registry::ALL`=**101**。**一切断言以 `tools/list` 实测为准**。
 - **档位只能启动时定**：客户端 harness（Cursor）回报 `deferred_registration: false` → `memory_load_family` **不会**把新家族注册进 harness；要用 core 之外的家族，必须在客户端 args 里写 `--profile <family>`（`--tier` 是搜索档，二者独立）。
 
@@ -50,6 +51,7 @@
 | Sprint 2 #4 | 本地基线：local-up 常驻 + L0 + L1（证据：8 工具断言、`mode:hybrid` 语义召回命中） | 已完成 2026-09-20 |
 | L2 客户端接入（即时） | Cursor 加载 `ai-memory-local`（8 工具 + 2 prompts）+ agent 直调（§4-B2） | 已完成 2026-09-20 |
 | Sprint 2 #5 | L1.5 隔离探针：本地预实证 A/B/C 三组全绿（P1a 静默证据 → D1/D2 的存在理由） | 已完成 2026-09-20 |
+| Sprint 2 #8 | L1.6 多语言探针：三语言 × 三通路结论矩阵（部分支持，§4-E）+ 客户端通路交叉复现一致 | 已完成 2026-09-21 |
 | Sprint 3 #2 | 档位核对（TC-TIER）：**双探针** `memory_capabilities` + `tools/list` 计数（core=8 / graph=20 / admin=22 / power=57 / full=101） | 待做 |
 | Sprint 3 #6 | 隔离负向验收（TC-ISO）：落地 D1/D2 后重跑 V1，断言**必须失败** | 待做 |
 | Sprint 3 #7 | 每库维护（TC-GC）：`gc` / `curator --once` 对每用户库的覆盖面对账 | 待做 |
@@ -151,9 +153,25 @@
 | TC-BAK-01 | 备份脚本遍历全部库产出快照 + manifest | `sha256sum` 与 manifest 一致；外迁后回读比对通过 | Sprint 5 #3/#7 |
 | TC-REV-01 | 恢复演练（在**临时库**上） | 恢复后原库被 rename 为 `pre-restore-*`（in-place 行为，契约面 I5） | Sprint 5 |
 | TC-LIMIT-01 | 配额 `agent_quotas` 生效 | 超限时被拒，不写爆盘 | Sprint 5 |
-| TC-I18N-01 | 多语言检索（`--tier` / locale 相关，若有） | CJK 走 `memory_recall` 命中；`memory_search` 中文子串不命中属**预期** | 待定 |
+| TC-I18N-01 | 多语言检索（占位 → 已由 §4-E 六用例扩展替代） | 见 §4-E（TC-I18N-01..06，2026-09-21 全通过） | 已完成 2026-09-21 |
 | TC-ATT-01 | `AI_MEMORY_REQUIRE_AGENT_ATTESTATION=0` 生效 | 写入返回 `attest_level=claimed`，非 403 | Sprint 5 |
 | TC-HTTP-01 | （仅当开放 HTTP 入口）url + api_key 接入；未带 key → 401；`X-API-Key` 头生效 | §0 #5 前置配置已落地 | Sprint 4 或 §0 #5 落地时 |
+
+### E. 多语言（L1.6 / Sprint 2 #8，2026-09-21 实测全通过）
+
+现役探针：[`../../scripts/i18n-probe.sh`](../../scripts/i18n-probe.sh)（无参数；隔离库 `/data/users/i18n-probe/`，不碰主库与 iso 库；`I18N_PROBE_STRICT=1` 把语言边界按本表登记值断言，防上游行为漂移；退出码 0/10/20/30/40/50）。源码依据与契约面：[`./mcp-design.md`](./mcp-design.md) §2「记忆内容多语言」/ §9 J4。
+
+| ID | 用例 | 期望 | 实测（2026-09-21） |
+|---|---|---|---|
+| TC-I18N-01 | 英文关键词命中 | ASCII 标记与英文**单词**（如 boundary）`memory_search` 命中；词元内子串（bound 查 boundary）**不命中** | 通过（标记与单词命中；子串 count=0） |
+| TC-I18N-02 | 简中关键词边界 | **标点/空白界定的整段**连续中文命中；词元内**子串**不命中 | 通过（整段命中；子串 count=0） |
+| TC-I18N-03 | 繁中关键词边界 + 简繁交叉 | 繁中整段命中；**简→繁 / 繁→简交叉一律不命中**（`unicode61` 不做简繁归一） | 通过（繁中整段命中；交叉双向 count=0） |
+| TC-I18N-04 | 简中语义召回 | 查询词不含标记字面量，`memory_recall` 命中且 `mode=hybrid` | 通过（score 约 0.83 居首） |
+| TC-I18N-05 | 繁中 / 英文语义召回 | 同上，三语言语义通路一律可用 | 通过（繁中 / 英文均 `mode=hybrid` 命中） |
+| TC-I18N-06 | 按标识直取 | `memory_get` 按 id 取回，与语言无关 | 通过（三语言 id 全命中） |
+
+> 首跑证据（标记前缀 `1789958920-48352`）：三语言写入 rc=0；关键词 12 组对照中硬断言 6 组全部一致，语言边界 6 组与登记值一致；结论矩阵 = 存储**支持**（三语言）/ 关键词**部分支持**（仅完整词元；词元内子串与简繁交叉**不支持**）/ 语义召回**支持** / 按 id 直取**支持**。默认复跑（`1789959024-49737`）与 STRICT 复跑（`1789959038-49972`）全绿（CONFLICT 幂等分支验证）。
+> 客户端通路交叉复现（排除 `docker exec` 假象）：Cursor `ai-memory-local` 直调，简中关键词 count=0 + 简中语义召回命中（主库标记 `i18n-cross-20260921`，id `de386c65-eb9d-4af2-8fef-6001b7115680`）—— 与探针通路结论**一致**。
 
 ---
 
@@ -165,3 +183,4 @@
 | 2026-09-20 | 增补 §4-B2 L2 客户端用例（TC-L2-01..04），首次执行全通过；§2 登记 L2 |
 | 2026-09-20 | 增补 §1 原则两条（capabilities 计数口径；档位只能启动时定）与 §3 改档说明；§2 Sprint 3 #2 改双探针；§4-B2 记录第二客户端交叉验证 |
 | 2026-09-20 | **specs 整合**：迁入 `specs/mcp/`（原 `specs/mcp-test.md`）；新增 **L1.5 隔离探针层**与 §4-C（TC-ISO / TC-GC / TC-LEAK / TC-TIER）、§4-D（TC-SSH / TC-BAK / TC-REV / TC-LIMIT / TC-I18N / TC-ATT / TC-HTTP）用例位；L0 补「镜像无 curl，改用 serve 日志 + doctor」 |
+| 2026-09-21 | **新增 L1.6 多语言探针层与 §4-E 用例（TC-I18N-01..06，Sprint 2 #8）**：三语言 × 三通路结论矩阵实测全通过（存储 / 语义召回 / 按 id 直取支持；关键词仅完整词元、词元内子串与简繁交叉不命中）；§1「检索工具分工」原则升级为精确边界；§2 登记 Sprint 2 #8 完成；§4-D TC-I18N-01 占位归并至 §4-E。探针 [`../../scripts/i18n-probe.sh`](../../scripts/i18n-probe.sh)，结论回写 [`../product-backlog.md`](../product-backlog.md) #10 |

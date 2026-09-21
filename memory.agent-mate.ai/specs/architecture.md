@@ -50,7 +50,7 @@ memory.agent-mate.ai = 上游 `ai-memory-mcp` 的**私有化部署 + 定制**（
 | 5 | 客户端接入 | **stdio-over-SSH**（主人路径） | 调用者零依赖、零公网暴露 | 每次启动一次 SSH 握手 |
 | 6 | 多用户 HTTP 接入 | 由 **admin portal** 承担（门户 spawn 子进程 + HTTP↔stdio 桥） | 上游**没有** MCP-over-HTTP | 新增公网面，需自建认证与限流 |
 | 7 | 隔离形态 | **一用户一 DB**（方案 ③） | 方案 ②（单库 + per-user env）写路径**可伪造**（实测） | 每库需各自维护与备份 |
-| 8 | 启动机制（门户） | **β′**：门户镜像内带上游二进制，子进程 spawn | α 需 docker socket ≈ root 等价，门户是公网组件 | 上游升级须重建门户镜像 |
+| 8 | 启动机制（门户） | **β′**（2026-09-21 用户确认定稿）：门户镜像内带上游二进制，子进程 spawn；**落地前置 3 条见 §2.3** | α 需 docker socket ≈ **宿主 root 等价**，且实测**无法用 socket 代理收窄**（§2.2）；门户是公网可达组件 | 上游升级须重建门户镜像；门户须持 MaaS key |
 | 9 | agent attestation | **关闭**（`AI_MEMORY_REQUIRE_AGENT_ATTESTATION=0`） | v0.9 默认开启会 403 拒写，是可用性前提 | 写入标记为 `claimed`（自称） |
 | 10 | 部署制品仓库 | **公开**仓 `ethanhuangcst/memory.agent-mate.ai` | 不污染上游 | 公开仓必须脱敏（§5.4） |
 
@@ -63,6 +63,19 @@ memory.agent-mate.ai = 上游 `ai-memory-mcp` 的**私有化部署 + 定制**（
 | federation | 上游标记 beta，不建议无人值守生产；最终一致而非实时 |
 | stdio→HTTP 转换网关 / 自研 REST→MCP 网关 | 违反「调用者零依赖」；或工作量最大且工具覆盖有缺口 |
 | 上游 clone 用 submodule / 分支 overlay / fork | 摩擦大或事实上 fork（§5.3） |
+| **α（门户挂 docker socket 用 `docker exec` 开会话）** | 门户是公网组件，挂 socket ≈ 交给它宿主 root（同机另有 Portainer / NPM 证书 / 其他 stack / 备份凭据）；其唯一收益「上游升级不必重建门户镜像」已由升级流程覆盖。**「α + 受限 socket 代理」一并排除**：主流代理按「HTTP 方法 + URL 前缀」放行、**不支持**按容器或命令过滤，而 exec 端点是 POST ⇒ 放行 exec 必然放开写面（`/containers/*` 下含可致宿主提权的创建容器端点） |
+
+### 2.3 β′ 的落地前置（2026-09-21 实测所得，3 条）
+
+> 三条都是「不做就静默失效 / 建不出东西」的硬前置；证据与可复跑配方见 [`knowledge/web-portal/portal-launch-mechanism.md`](./knowledge/web-portal/portal-launch-mechanism.md)（E1–E7）。
+
+| # | 前置 | 具体做法 | 不做的后果 |
+|---|---|---|---|
+| 1 | **`/data/users` 组可写（setgid）** | 一次性 `docker exec -u 0 ai-memory-mcp install -d -m 2775 -o root -g 999 /data/users`；据此**删除** [`deployment.md`](./deployment.md) §4.4 的 `NOPASSWD: docker exec -u 0` root 规则 | 非 root 门户**建不出**用户目录（实测 EACCES）⇒ 建用户动作直接失败 |
+| 2 | **门户容器持 MaaS key（独立 key）** | **2026-09-21 用户确认可增签 ⇒ 首选生效**：门户 compose 注入**同名** `DASHSCOPE_API_KEY`，值填 `portal.env`（服务器 `/opt/ai-memory/portal.env`、本机 `deploy/portal.env`，`chmod 600`，模板 [deploy/portal.env.example](../deploy/portal.env.example)）；key 须与主 key **同 workspace / 同模型权限**（同 workspace 建 ⇒ 模型与 1024 维天然一致）；门户启动自检 embeddings 可达（1024 维） | 缺 key（或跨 workspace 导致模型/维度不一致）⇒ `tier=semantic` **静默降级**为 linear scan（实测：401 + 仅一条 WARN，工具照常返回成功） |
+| 3 | **版本断言（fail-closed）** | 构建期注入 `IMAGE_TAG`；门户启动时与挂载的 `upstream.lock` 比对，不一致**拒绝启动** | 陈旧门户镜像在用户库被前向迁移后**静默**操作未知 schema（上游不拒绝旧二进制，[`adr/ADR-005`](./adr/ADR-005-upgrade-admission-gate-layering.md)） |
+
+> 另两条制品约束（门户镜像构建期，见 [`web-portal/web-design.md`](./web-portal/web-design.md) §3.4）：底座 `bookworm` 系 + `ca-certificates`；**显式** `useradd --system --uid 999 --gid 999 aimem`；构建平台钉 `linux/amd64`（上游镜像单平台）。
 
 ---
 
@@ -88,6 +101,7 @@ memory.agent-mate.ai = 上游 `ai-memory-mcp` 的**私有化部署 + 定制**（
                                                  AI_MEMORY_AGENT_ID=human:<handle>
                                                  AI_MEMORY_KEY_DIR=/data/users/<handle>/keys
                                                  AI_MEMORY_REQUIRE_AGENT_ATTESTATION=0
+                                                 DASHSCOPE_API_KEY=<门户专用 key>（来自门户 env，绝不来自请求）
 
 【SSH 面】ssh ai-memory（forced command）──> docker exec -i ai-memory-mcp ai-memory mcp --tier smart
 
@@ -96,6 +110,9 @@ memory.agent-mate.ai = 上游 `ai-memory-mcp` 的**私有化部署 + 定制**（
         ├─ .config/ai-memory/config.toml（HOME=/data 推导）· keys/ · .cache/huggingface/
         └─ backups/（本地快照，须外迁）
 常驻：ai-memory（serve，绑 127.0.0.1:9077，后台 GC / WAL checkpoint）+ curator（智能整理）
+
+前置（2026-09-21）：/data/users 为 root:aimem 2775（setgid）⇒ 门户以 aimem 身份自建 0700 用户目录，
+                  无需 root、无需 docker socket（§2.3）
 ```
 
 ### 3.2 两个 stack 的职责划分
@@ -130,7 +147,7 @@ memory.agent-mate.ai = 上游 `ai-memory-mcp` 的**私有化部署 + 定制**（
 
 > **静默失败是本部署的头号风险**，故敏感度按「是否静默」排序。三个经典静默失败点（embedder 降级 keyword / curator fail-open `tagged=0` / config 挂载错位退 semantic）+ 隔离侧的 **R1**（见 §6）构成「四个静默点」，每次改动后必查：[`deployment.md`](./deployment.md) §7。
 
-**高敏感（静默）速查**：`HOME=/data`（config 路径唯一输入）· `AI_MEMORY_DB` · `DASHSCOPE_API_KEY` · `AI_MEMORY_LLM_*`/`AI_MEMORY_EMBED_*` 优先级高于 config · `serve` 无 `--tier`（档位只认 config）· `[llm.auto_tag]` 继承规则 · `[embeddings].dim` 必须显式（qwen 不在 `KNOWN_EMBEDDING_DIMS` 表内）· 解析优先级 CLI > env > config > 编译默认 · `AI_MEMORY_NO_CONFIG` 绝不能设。
+**高敏感（静默）速查**：`HOME=/data`（config 路径唯一输入）· `AI_MEMORY_DB` · `DASHSCOPE_API_KEY` · `AI_MEMORY_LLM_*`/`AI_MEMORY_EMBED_*` 优先级高于 config · `serve` 无 `--tier`（档位只认 config）· `[llm.auto_tag]` 继承规则 · `[embeddings].dim` 必须显式（qwen 不在 `KNOWN_EMBEDDING_DIMS` 表内）· 解析优先级 CLI > env > config > 编译默认 · `AI_MEMORY_NO_CONFIG` 绝不能设 · **检索按语言分级**：中文一律走语义通路 `memory_recall`；`memory_search` 关键词通路按 FTS5 默认分词器（`unicode61`）只认完整词元——中文需标点/空白界定的整段、简繁不互通、无配置项（[`mcp/mcp-design.md`](./mcp/mcp-design.md) §2 / §9 J4）。
 
 ### 4.2 上游文档缺陷（本地记录，不向上游反馈）
 
@@ -220,6 +237,8 @@ memory.agent-mate.ai = 上游 `ai-memory-mcp` 的**私有化部署 + 定制**（
 | 2026-09-19→20 | 决议与部署方案的历次结论（存储 / 镜像 / tier / LLM / 接入 / 备份 / 脱敏 / 隔离 / 门户）已并入本文档 §2 与 [`deployment.md`](./deployment.md)；逐日流水交 git 历史与 `knowledge/` |
 | 2026-09-20 | **specs 整合**：`deployment_strategy.md` / `asset_isolation_plan.md` / `upstream_coupling_surface.md` / `dev-plan.md`（部分）并入本文档；决议集中为 §2 单点，契约面完整清单下沉 [`mcp/mcp-design.md`](./mcp/mcp-design.md) §9 |
 | 2026-09-20 | **目录改名收口**：`hk_vps_4/` → `memory.agent-mate.ai/`，全仓路径引用同步；新增 `make doc-links` 防「删文档留悬空引用」复发 |
+| 2026-09-21 | **D1 定稿 β′（用户确认）+ 新增 §2.2 排除项与 §2.3 落地前置**：排除 α（门户挂 docker socket ≈ 宿主 root；且**主流 socket 代理不支持按容器/命令过滤**，放行 exec 必开 POST ⇒ 写面打开，故「α + 受限代理」一并排除）；新增三条硬前置（`/data/users` setgid 引导 / 门户持独立 MaaS key / 版本断言）。依据 [`knowledge/web-portal/portal-launch-mechanism.md`](./knowledge/web-portal/portal-launch-mechanism.md)（含 β′ 端到端探针实证）；决议记录 [`adr/ADR-012`](./adr/ADR-012-portal-launch-mechanism-no-docker-socket.md) |
+| 2026-09-21 | §4.1 高敏感速查补「**检索按语言分级**」：多语言探针（Sprint 2 #8）结论 = **部分支持**——存储 / 语义召回 / 按 id 直取不限语言；关键词通路按 FTS5 默认分词器（`unicode61`）只认完整词元（中文需标点界定整段、简繁不互通、无配置项）。证据：[`mcp/mcp-test.md`](./mcp/mcp-test.md) §4-E（L1.6 探针）与 [`knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md`](./knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md) |
 
 | 相关 | 用途 |
 |---|---|

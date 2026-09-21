@@ -89,20 +89,26 @@ command="docker exec -i -e AI_MEMORY_DB=/data/users/alice/ai-memory.db -e AI_MEM
 
 > 逐行追加 = 最小侵入、易审计、可回滚（**不要**整文件重写，一次拼错会连带整个文件失效）。
 
-### 4.4 sudoers（受限）
+### 4.4 用户目录属主引导（替代原 sudoers root 规则）
+
+门户以 `aimem`（uid 999）身份创建用户目录，故 `/data/users` 必须**组可写**（一次性、幂等）：
 
 ```bash
-echo "aimem-ssh ALL=(root) NOPASSWD: /usr/bin/docker exec -u 0 -i ai-memory-mcp mkdir -p /data/users/*, /usr/bin/docker exec -u 0 -i ai-memory-mcp chown ai-memory /data/users/*" \
-  | sudo tee /etc/sudoers.d/aimem-ssh
-sudo chmod 440 /etc/sudoers.d/aimem-ssh && sudo visudo -c
+sudo docker exec -u 0 ai-memory-mcp install -d -m 2775 -o root -g 999 /data/users
+sudo docker exec -u 0 ai-memory-mcp ls -ld /data/users      # 期望 drwxrwsr-x root aimem
 ```
 
-### 4.5 目录与权限
+> **这不是权限放宽**：`/data` 根与共享主库本来就是 `aimem:aimem` 可写，能写它们的进程同样能写该目录；唯一新增的能力者就是门户（设计意图）。副产品：原 `NOPASSWD: docker exec -u 0 …` 的 sudoers 规则**已删除** —— `aimem-ssh` 账号的密钥一律带 forced command，**不需要**任何 sudo 权限。
+> 历史目录（`/data/users/iso-*` 等）不受影响。
+
+### 4.5 目录与权限（root 手工操作，保底）
 
 ```bash
-sudo docker exec -u 0 ai-memory-mcp mkdir -p /data/users/alice
-sudo docker exec -u 0 ai-memory-mcp chown ai-memory /data/users/alice
+sudo docker exec -u 0 ai-memory-mcp install -d -m 0700 /data/users/alice
+sudo docker exec -u 0 ai-memory-mcp install -d -m 0700 /data/users/alice/keys
 ```
+
+> 门户路径下这两步由门户自动完成（`0700`、属主 `aimem`，见 §4.4 前置）；本节留给 root 手工建库与排障。
 
 ---
 
@@ -223,6 +229,7 @@ make curl-probe                # 参考用：直连容器 HTTP API 探针（生�
 | **S3** | config 挂载失败（路径错/格式错/权限错） | 配置**静默落空**，档位**退化为 semantic**，接口仍返回成功 |
 
 > 加隔离侧 **R1**（会话漏设 `AI_MEMORY_DB` → 落共享主库）后共四个静默点，详见 [`architecture.md`](./architecture.md) §4.1 与 [`mcp/mcp-design.md`](./mcp/mcp-design.md) §0。
+> **S1 的门户侧新触发路径（2026-09-21 实测）**：门户容器漏注入 MaaS key（`DASHSCOPE_API_KEY`）时，子进程日志出现 `Embed failed (401 Unauthorized): No API-key provided` + `no embeddings for HNSW index, using linear scan`，而**工具照常返回成功** ⇒ 门户启动自检必须断言 **embeddings 可达（1024 维）**，不能只断言「变量非空」。
 
 ### 7.3 端到端冒烟七项
 
@@ -361,8 +368,13 @@ bash scripts/pin-update.sh <ref> [--force]          # 更新锁文件（--force 
 
 ### 12.2 门户接入部署（Sprint 4 起）
 
-- 门户**不依赖**既有容器运行（共享数据卷是唯一耦合点：`/data/users/<handle>/ai-memory.db` 需同时被两边读写）。
+- 门户**不依赖**既有容器运行（共享数据卷是唯一耦合点：`/data/users/<handle>/ai-memory.db` 需同时被两边读写）；**不挂 docker socket**（D1 = β′，[`architecture.md`](./architecture.md) §2.1 #8）。
 - 部署动作：新建 `/opt/ai-memory/` 下门户 compose；**两个 stack 独立**，可单独重启。
+- **前置（须先做，否则建用户必失败）**：§4.4 的 `/data/users` setgid 引导。
+- **门户 stack 的挂载与环境**：`ai_memory_data`(external) → `/data`；`config.toml` → `/data/.config/ai-memory/config.toml:ro`；自带卷 `admin_portal_data` → `/srv/portal`；env 注入**门户专用** `DASHSCOPE_API_KEY`（与主 key 同 workspace/同模型；见 [`architecture.md`](./architecture.md) §2.3 #2）。
+- **门户密钥文件**：`portal.env`（服务器 `/opt/ai-memory/portal.env`，`chmod 600`；本机开发用 `memory.agent-mate.ai/deploy/portal.env`，gitignored）—— 字段只有 `DASHSCOPE_API_KEY`，模板 [`../deploy/portal.env.example`](../deploy/portal.env.example)。**与主 stack 的 `.env` 分开**：门户是公网组件，独立 key 才能单独吊销/归因。
+- **门户 key 轮换/吊销**：控制台新建一把（标签 `memory-agent-mate-portal`）→ 改 `portal.env` → 重启门户 stack → 等启动自检的 embeddings 1024 维通过 → 再吊销旧的那把。**主 stack 的 `.env` 全程不动**，主线服务零中断。
+- **启动自检（fail-closed）**：`/data/users` 可写 · embeddings 可达且 1024 维 · 自身二进制版本 == `upstream.lock` —— 任一不满足**拒绝启动**（[`web-portal/web-design.md`](./web-portal/web-design.md) §3.4）。
 - 上线门禁：[`web-portal/web-test.md`](./web-portal/web-test.md) 的 L3（含 V1 负向隔离验收）全绿。
 
 ### 12.3 毕业路径（架构未变，只是扩展）
@@ -392,3 +404,4 @@ bash scripts/pin-update.sh <ref> [--force]          # 更新锁文件（--force 
 | 日期 | 变更 |
 |---|---|
 | 2026-09-20 | **specs 整合**：`dev-plan.md` / `deployment_strategy.md` / `deploy/README.md` / `deploy/deployment-plan.md` 并入本文档；订正三处历史不一致 —— ① 健康探测**不用 curl**（镜像无 curl，改判 serve 日志 + `doctor`）；② 备份外迁频率统一为**每日**；③ 占位符统一 `<VPS4_IP>`（原文 `<vps4>` 混用）。删除 dev-plan 中误提的 gitleaks（本项目用 `make secret-check`） |
+| 2026-09-21 | **§4.4 改为「用户目录属主引导」**：一次性 `install -d -m 2775 -o root -g 999 /data/users`（setgid）使非 root 门户可自建 `0700` 用户目录，并**删除**原 `NOPASSWD: docker exec -u 0` root 规则（`aimem-ssh` 密钥一律带 forced command，不需要 sudo）；§4.5 改为「root 手工操作，保底」。§12.2 补门户 stack 的挂载/密钥/启动自检前置。§7.2 补 S1 的门户侧新触发路径（缺 `DASHSCOPE_API_KEY` ⇒ 401 + linear scan，工具仍成功）。依据 [`architecture.md`](./architecture.md) §2.3 与 [`knowledge/web-portal/portal-launch-mechanism.md`](./knowledge/web-portal/portal-launch-mechanism.md) |

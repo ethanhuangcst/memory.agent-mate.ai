@@ -23,7 +23,7 @@
 |---|---|
 | 用户库路径 | `/data/users/<handle>/ai-memory.db` |
 | 用户密钥目录 | `/data/users/<handle>/keys/`（`AI_MEMORY_KEY_DIR`） |
-| 属主 | `aimem:aimem` —— `docker exec -u 0 ai-memory-mcp sh -c 'mkdir -p /data/users/<handle>/keys && chown -R aimem:aimem /data/users/<handle>'` |
+| 属主 | `aimem:aimem` —— `docker exec -u 0 ai-memory-mcp sh -c 'mkdir -p /data/users/<handle>/keys && chown -R aimem:aimem /data/users/<handle>'`。**2026-09-21 起**：门户路径下由门户以 `aimem` 身份自建 0700 目录，**前置**是 `/data/users` 为 `root:aimem 2775`（setgid，一次性引导见 [`deployment.md`](../deployment.md) §4.4）；`-u 0` 形式仅保留给 root 手工操作 |
 | 会话 env 三件套 | `AI_MEMORY_DB` / `AI_MEMORY_AGENT_ID=human:<handle>` / `AI_MEMORY_KEY_DIR` —— **全部钉在服务端**，客户端改不了 |
 | 接入方式 | 单 OS 账号 + N 密钥，`authorized_keys` 每用户一行 forced command（§5.2 模板） |
 | 每库维护 | `ai-memory --db /data/users/<handle>/ai-memory.db stats \| gc \| curator --once` |
@@ -63,6 +63,7 @@
 | 默认 `scope` | 注意：写入**默认即 `private`** | `src/mcp/tools/list.rs:251-252` |
 | 静态加密 | `AI_MEMORY_ENCRYPT_AT_REST=1` → 按 agent 的 X25519 ECDH + ChaCha20-Poly1305（per-node at-rest） | `src/encryption/mod.rs:1-20` |
 | 按 agent 配额 | `agent_quotas` / `ai-memory quota-status` | `src/cli/commands/quota_status.rs` |
+| 记忆内容多语言 | **部分支持** —— 存储与语义通路**不限语言**（简中 / 繁中 / 英文写入、`memory_recall` 语义召回 `mode=hybrid`、`memory_get` 按 id 直取均可用）；`memory_search` 关键词通路受 FTS5 默认分词器（`unicode61`，建表未指定 `tokenize=`）限制：只认**完整词元**（英文 = 单词、中文 = 标点/空白界定的整段），词元内子串与**简繁交叉**一律不命中；**无任何配置项**。工程口径：中文检索走 `memory_recall`，关键词通路只用于 ASCII 标记与整段引用 | 探针 [`../../scripts/i18n-probe.sh`](../../scripts/i18n-probe.sh)（L1.6，[`./mcp-test.md`](./mcp-test.md) §4-E）；源码依据本文件 §9 J4 |
 
 > **Ed25519 身份 ≠ 授权**：`metadata.agent_id` 是**自述值**，任何调用者可填，不得单独作授权闸门（只用于溯源/审计/过滤）。
 
@@ -376,6 +377,7 @@ aimem-ssh ALL=(root) NOPASSWD: /usr/bin/docker exec -i ai-memory-mcp ai-memory m
 | J1 | `CURRENT_SCHEMA_VERSION`：v0.10.0 = **80**（clone `main` = **81**）；文档滞后写 78 | 中 | 仅作「是否发生前向迁移」的信号；**文档不可用于版本判断** | `src/storage/migrations.rs:859` |
 | J2 | 迁移**前向-only**，v34 / v50 / v54 三个阶梯臂**不可逆** | 高 | 不可逆迁移后无法靠改回旧二进制降级 | `:1502-1519` |
 | J3 | 注意：**旧二进制启动于「比自身更新的库」时不会报错**（`migrate()` 在 `version >= CURRENT` 直接 `return Ok(())`；全 `src` 无「库过新则拒绝」逻辑） | 高·静默 | **回滚只改 `IMAGE_TAG` 是危险的**：旧二进制照常启动并操作不认识的 schema → **静默数据损坏**。⇒ **回滚必须用 pre-migration 快照覆盖 DB** | `:1507-1509`；全 src grep 无命中（2026-09-20 核实） |
+| J4 | **FTS5 全文索引用默认分词器 `unicode61`**：建表 `USING fts5(title, content, tags, content=memories, content_rowid=rowid)` **未指定 `tokenize=`** —— 不做 CJK 分词、不做简繁归一；查询串经 `sanitize_fts_query`（按空白切分、剥除全部 FTS5 特殊字符即**无通配**、逐词元短语化、隐式 AND）；`[mcp]` 段无任何语言 / 分词 / 检索配置键 | 高·静默 | 若上游改用 CJK 分词器 / 简繁归一 / 增加相关配置 → 「中文关键词只能整段命中、简繁不互通」的边界变化，依赖此行为的断言与文档口径**静默漂移** | 建表语句 `src/storage/mod.rs`（`memories_fts`，触发器同步入库）；`sanitize_fts_query` `src/storage/mod.rs:7030`；行为探针 [`../../scripts/i18n-probe.sh`](../../scripts/i18n-probe.sh)（`I18N_PROBE_STRICT=1` 把边界当断言，2026-09-21 实测全绿） |
 
 ### K. 凭证与授权面
 
@@ -398,3 +400,5 @@ aimem-ssh ALL=(root) NOPASSWD: /usr/bin/docker exec -i ai-memory-mcp ai-memory m
 |---|---|
 | 2026-09-20 | **specs 整合**：`multiuser_isolation.md` 全文（结论/冻结/D–V/能力边界/四档/配方/五坑/验收）+ `mcp_tool_inventory.md`（档位与工具清单、计数核对）+ 旧 `mcp-test.md` §0 传输形态核实 + `upstream_coupling_surface.md` 全量契约点，并入本文档；上游文档缺陷 6 条移入 [`../architecture.md`](../architecture.md) §4.2 |
 | 2026-09-20 | 订正：档位工具数统一写**实际注册数**（core=8 / graph=20 / admin=22 / power=57 / full=101），族计数另列；`minimal` 档位为笔误，正确是 `full`；`memory_capabilities` 已加 always-on 注；`capability init` 标注为 v1.0.0 特性；schema 版本并写 80（制品层）/81（参考层） |
+| 2026-09-21 | **§0.1 冻结机制「属主」行补前置**：2026-09-21 起门户路径由门户以 `aimem` 身份自建 `0700` 用户目录，**前置**为 `/data/users` = `root:aimem 2775`（setgid 一次性引导，[`../deployment.md`](../deployment.md) §4.4）；`docker exec -u 0 … mkdir/chown` 形式仅保留给 root 手工操作。背景：门户启动机制定稿 β′（[`../adr/ADR-012`](../adr/ADR-012-portal-launch-mechanism-no-docker-socket.md)），证据 [`../knowledge/web-portal/portal-launch-mechanism.md`](../knowledge/web-portal/portal-launch-mechanism.md) E3 |
+| 2026-09-21 | **多语言能力边界落盘（Sprint 2 #8）**：§2 新增「记忆内容多语言」行（部分支持——存储 / 语义通路不限语言；关键词通路按 FTS5 `unicode61` 完整词元匹配、简繁不互通、无配置项）；§9 新增契约点 **J4**（分词器行为 + `sanitize_fts_query` + 探针方式），供上游升级预检核对。依据：探针 [`../../scripts/i18n-probe.sh`](../../scripts/i18n-probe.sh)（L1.6，三语言 × 三通路矩阵 + STRICT 边界断言）+ 源码复核；用例登记 [`./mcp-test.md`](./mcp-test.md) §4-E |

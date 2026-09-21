@@ -7,6 +7,7 @@
 | `docker-compose.prod.yml` | 服务拓扑与 compose 契约（本地基线亦复用此文件） |
 | `config.toml.tmpl` | 配置模板；落地时改名为 `config.toml` 并改三个必改点 |
 | `.env.prod.example` | 密钥样例；落地时改名为 `.env`（`chmod 600`） |
+| `portal.env.example` | **门户 stack** 环境文件样例（Sprint 4）；落地时改名为 `portal.env`（`chmod 600`）—— 与主 `.env` 分离，只放门户专用 MaaS key |
 
-- `config.toml` / `.env` 为**派生文件**，路径无关忽略规则已覆盖（永不入仓）。
+- `config.toml` / `.env` / `portal.env` 为**派生文件**，路径无关忽略规则已覆盖（永不入仓）。
 - 合规性检查：`make secret-check`（密钥 / 公网 IP / 私有端点）。

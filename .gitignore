@@ -13,6 +13,8 @@ secrets.local*
 # 本地 compose 运行时派生文件（由上面两个文件复制而来，compose 固定引用 .env / config.toml）
 **/deploy/.env
 **/deploy/config.toml
+# 门户 stack 的环境文件（含门户专用 MaaS key，永不入库；模板见 deploy/portal.env.example）
+**/deploy/portal.env
 
 # IDE / 工具数据：Plan Mode 计划文件等（公开仓不入库，防 `git add .` 误带）
 .codebuddy/

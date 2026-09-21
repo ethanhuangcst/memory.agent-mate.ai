@@ -13,7 +13,7 @@
 
 | # | 决议 | 状态 |
 |---|---|---|
-| D1 | **启动机制 β′**：门户镜像内 `COPY` 上游二进制，直接 spawn（备选 α = `docker exec`，见 §9 附录） | 已定稿（可翻转） |
+| D1 | **启动机制 β′**：门户镜像内 `COPY` 上游二进制，直接 spawn（备选 α = `docker exec`，见 §9 附录） | **已定稿**（2026-09-21 用户确认；落地前置 §3.4） |
 | D2 | 接入方式：新增 HTTP MCP 路径；SSH 路径**保留**为运维/主人保底 | 已定稿 |
 | D3 | 隔离强度：**一用户一库** `/data/users/<handle>/ai-memory.db` | 已定稿 |
 | D4 | 密钥：`memo_` + 32 字节 CSPRNG；库内只存哈希 | 已定稿 |
@@ -22,7 +22,7 @@
 | D7 | 两 stack **不互相依赖**：门户自带二进制，不 exec 既有容器、不挂 docker socket | 已定稿 |
 | D8 | 认证边界：管理面 Cloudflare Access；MCP 面 `memo_` 令牌 | 已定稿 |
 
-> **唯一可翻转项是 D1**（涉及权限模型）。其余 7 条已锁定。
+> **8 条全部锁定**。D1 曾是唯一可翻转项（涉及权限模型），已于 2026-09-21 由用户确认定稿（[`../../adr/ADR-012`](../adr/ADR-012-portal-launch-mechanism-no-docker-socket.md)）。
 
 ---
 
@@ -106,7 +106,10 @@
 ### 3.2 门户构建（关键只有一行）
 
 ```dockerfile
-FROM node:22-bookworm-slim                        # 必须 bookworm 系
+FROM --platform=linux/amd64 node:22-bookworm-slim   # 上游镜像单平台 ⇒ 构建平台钉 amd64
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+RUN useradd --system --create-home --shell /bin/sh --uid 999 --gid 999 aimem  # 必须与镜像内 aimem 对齐
 COPY --from=ghcr.io/alphaonedev/ai-memory:<tag> \
      /usr/local/bin/ai-memory /usr/local/bin/ai-memory
 # <tag> 由 upstream.lock 的 IMAGE_TAG 注入（构建参数），不手写
@@ -142,6 +145,19 @@ launch:
 2. 替换后断言 `AI_MEMORY_DB` 非空、以 `/data/users/` 开头、且包含该 `handle` —— 否则**拒绝启动会话**（防 §5 的 S4）
 3. `AI_MEMORY_AGENT_ID` 必须由 `handle` 派生（不接受客户端传入值）
 4. 子进程**不得跨用户复用**（禁止会话池）
+
+### 3.4 落地前置：三条硬前置 + 一条启动自检（2026-09-21 实测所得）
+
+> 逐条依据（含可复跑探针配方）见 [`../knowledge/web-portal/portal-launch-mechanism.md`](../knowledge/web-portal/portal-launch-mechanism.md) E1–E7；决议单点见 [`../architecture.md`](../architecture.md) §2.3。
+
+| # | 前置 | 做法 | 不做的后果 |
+|---|---|---|---|
+| 1 | **`/data/users` 组可写（setgid）** | 一次性 `docker exec -u 0 ai-memory-mcp install -d -m 2775 -o root -g 999 /data/users`（[`../deployment.md`](../deployment.md) §4.4） | 非 root 门户**建不出**用户目录（实测 EACCES）⇒ 建用户动作直接失败 |
+| 2 | **门户容器持 MaaS key** | compose 注入**同名** `DASHSCOPE_API_KEY`，值用门户**专用** key（与主 key 同 workspace / 同模型权限）；`config.toml` 的 `api_key_env` 只写变量名 ⇒ 不改配置。**2026-09-21 已确认可增签 ⇒ 首选生效**；值填 `portal.env`（服务器 `/opt/ai-memory/portal.env`、本机 `deploy/portal.env`，模板 [`../../deploy/portal.env.example`](../../deploy/portal.env.example)） | 缺 key（或 key 的模型/维度不一致）⇒ `tier=semantic` **静默降级** linear scan，工具照常返回成功 |
+| 3 | **版本断言** | 构建期注入 `IMAGE_TAG`；启动时与挂载的 `upstream.lock` 比对，不一致**拒绝启动** | 陈旧门户镜像在用户库被前向迁移后**静默**操作未知 schema（上游不拒绝旧二进制） |
+| 4 | **启动自检（fail-closed）** | 启动时一次性断言：① `/data/users` 可写 ② embeddings 可达且 `1024` 维 ③ 自身二进制版本 == 锁文件 ④ `handle` 白名单与模板断言在位 | 上述三类失败会分别表现为「建用户报错 / 检索静默降级 / 库静默不兼容」，**都要在启动时炸掉，而不是在用户会话里** |
+
+> 另两条制品约束见 §3.2：底座必须 `bookworm` 系 + `ca-certificates`；镜像内 `aimem` 必须显式 `--uid 999 --gid 999`（否则 SSH 路径写不进门户建的目录）。
 
 ---
 
@@ -271,7 +287,9 @@ launch:
 
 ### 附录：α 方案（备选，不采用）
 
-若将来接受「门户持有 root 等价权限」以换取「上游升级不动门户镜像」，改用 α：模板改用 `docker exec -i -e AI_MEMORY_DB=… ai-memory-mcp ai-memory mcp --tier smart`，门户容器挂载 `/var/run/docker.sock`。差异：权限 root 等价 · 容器名成为契约（需新增探针 C9）· 会话需显式回收否则泄漏 exec 进程 · 若采用建议用受限 socket 代理（仅放行 exec 端点）替代裸 socket。
+若将来接受「门户持有 root 等价权限」以换取「上游升级不动门户镜像」，改用 α：模板改用 `docker exec -i -e AI_MEMORY_DB=… ai-memory-mcp ai-memory mcp --tier smart`，门户容器挂载 `/var/run/docker.sock`。差异：权限 root 等价 · 容器名成为契约（需新增探针 C9）· 会话需显式回收否则泄漏 exec 进程。
+
+**2026-09-21 定稿：α 已排除，且其缓解措施被证不成立。** ① 主流 socket 代理（Tecnativa/docker-socket-proxy）按「HTTP 方法 + URL 前缀」放行，**不支持**按容器名/命令过滤；而 exec 端点是 POST ⇒ 放行 exec 必须开 `POST=1`，`/containers/*` 前缀内的创建容器端点随之可用（可致宿主提权）⇒ 原「建议用受限 socket 代理（仅放行 exec）」**在本项目可达范围内做不到**，α 实质 = 裸 socket。② 门户是**公网可达组件**，β′ 已实测端到端可行（[`../knowledge/web-portal/portal-launch-mechanism.md`](../knowledge/web-portal/portal-launch-mechanism.md) E2），α 的唯一收益「上游升级不必重建门户镜像」已由升级流程覆盖。决议见 [`../adr/ADR-012`](../adr/ADR-012-portal-launch-mechanism-no-docker-socket.md) 与 [`../architecture.md`](../architecture.md) §2.2。
 
 ---
 
@@ -312,3 +330,4 @@ launch:
 |---|---|
 | 2026-09-20 | **specs 整合**：由 `admin_portal_design.md` 迁入 `web-portal/`；**去重** —— 全链路数据流与两 stack 职责表已上移 [`../architecture.md`](../architecture.md) §3，本文档只保留门户内部设计；静默失败点 S4 与 architecture 的 R1 互指不重复叙述；耦合面 C1–C8 与 [`../mcp/mcp-design.md`](../mcp/mcp-design.md) §9（A–K）分工：C* 是门户对上游的 8 个依赖点，A–K 是全量契约清单 |
 | 2026-09-20 | 已关闭的既有矛盾：门户代码位置定为本仓 `admin_portal/`（推翻「本仓不承载」）；「无公网入口」决议**部分修订**为「ai-memory 本体无公网入口，门户面有」；自有资产根增为两个（`memory.agent-mate.ai/` + `admin_portal/`）；升级七步增「门户镜像随 `upstream.lock` 重建」 |
+| 2026-09-21 | **D1 定稿（β′，用户确认）+ 新增 §3.4 落地前置 + §9 附录更新**：§0 的 D1 由「可翻转」转**已定稿**；§3.2 构建片段补 `--platform=linux/amd64` / `ca-certificates` / 显式 `--uid 999 --gid 999`；新增 §3.4「三条硬前置 + 一条启动自检」（`/data/users` setgid 引导、门户持独立 MaaS key、版本断言、启动自检 fail-closed）；§9 附录补「α 的缓解措施被证不成立 + α 已排除」。依据 [`../knowledge/web-portal/portal-launch-mechanism.md`](../knowledge/web-portal/portal-launch-mechanism.md) E1–E7 |

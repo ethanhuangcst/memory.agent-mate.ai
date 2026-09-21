@@ -2,13 +2,15 @@
 title: 上游 ai-memory-mcp 的事实与坑（版本拓扑 / schema / 回滚语义）
 type: research-note
 status: active
-as_of: 2026-09-20
+as_of: 2026-09-21
 tags:
   - ai-memory
   - upstream
   - versioning
   - rollback
   - ghcr
+  - retrieval
+  - i18n
 related_spec: memory.agent-mate.ai/specs/deployment.md
 related:
   - memory.agent-mate.ai/specs/mcp/mcp-design.md
@@ -76,9 +78,10 @@ src/storage/migrations.rs:1507
 | 默认档位 | 不写 `--profile` 时是 **core**，工具恰 **8 个**（core 7 + always-on `memory_capabilities`）；不是 full | `tools/list` 回包计数 |
 | `memory_store.source` | **枚举字段**：`user / nhi / claude / hook / api / cli / import / consolidation / system / chaos / notify`；传其他值被**明确拒绝**并列出合法值（响亮，不静默） | 传 `codebuddy` → 报错，改 `user` 成功 |
 | 近重复写入 | 语义相近的写入返回 **CONFLICT（near-duplicate 去重）**，非 bug | 冒烟二次运行命中；`mcp-smoke.sh` 按「改验既有标记」容忍 |
-| `memory_search` | **ASCII 子串精确匹配**：ASCII 标记可靠命中；**中文查询一律 count=0**（FTS 分词不吃 CJK），即使该串在 title/content 中连续存在 | 「三层全绿」（content 连续子串）count=0；对照 `l2-client-20260920` count=2 |
+| `memory_search` | **按完整词元 AND 匹配**（FTS5 默认分词器 `unicode61`，建表未指定 `tokenize=`；`sanitize_fts_query` 剥除全部特殊字符即**无通配**）：ASCII 标记与英文单词可靠命中；中文**词元内子串一律不命中**，唯一可命中的中文形态是「标点/空白界定的整段」；简繁交叉不命中（精确边界见下方多语言专表） | 「三层全绿」（content 连续子串）count=0；对照 `l2-client-20260920` count=2；`i18n-probe.sh` 12 组对照（2026-09-21） |
 | `memory_recall` | 语义/hybrid 检索，中文查询质量高（实测 score 0.887 / 0.893 居首），`mode:hybrid` | 查询词不含标记字面量仍命中 |
 | 传输 | 服务端**无** `/mcp`、`/sse` HTTP 端点；`serve` 的 9077 仅绑容器内回环 → 客户端只能走 stdio（`docker exec -i`，**不加 `-t`**） | `specs/mcp/mcp-test.md` §0；`-t` 会破坏 stdio 帧 |
+| 响应格式 | `memory_search` / `memory_recall` 的 `tools/call` 响应是**纯文本表格**（首行 `count:N` / `count:N\|mode:…\|tokens_used:N`；结果行 = UUID 竖线 + 标题摘要），**不是 JSON**——解析不能假设 JSON；`memory_get` 才返回 JSON | `i18n-probe.sh` 首跑 count=None 假失败后 peek 原文实证（2026-09-21） |
 | `memory_capabilities` | core 档亦常驻的能力清单探针（家族/装载状态/features/models/工具总数）；其 `summary` 用**族计数口径**（「7 of 100 … under core」）——实际 `tools/list` 注册数 = **8**，源码 `registry::ALL` = **101**（v0.10.0 与 main 实测同；manifest 自称 100 的上游口径差未定因） | 2026-09-20 真实客户端 manifest + 源码计数 |
 | 家族与工具数 | core 7 / lifecycle 6 / graph 12 / governance 8 / power 49 / meta 6 / archive 4 / other 9 = **101**；`full`=101，其余档 +1 always-on（core 实注册 8） | capabilities manifest 与 `specs/mcp/mcp-design.md` §8 一致 |
 | harness 延迟注册 | 客户端回报 `your_harness_supports_deferred_registration: false` → `memory_load_family` 对 Cursor **无效**，档位只能在启动参数 `--profile` 定死 | manifest 原文 |
@@ -96,6 +99,21 @@ src/storage/migrations.rs:1507
 | 读路径授权边界 | 存在但**只认 env**（`AI_MEMORY_AGENT_ID`，不接受工具参数）；同库下 B 读不到 A 的 private 行 | 探针 P6；`src/identity/mod.rs:160/333-345` |
 | 用户库目录 | 属主必须是容器进程用户 `aimem:aimem`；创建须 `docker exec -u 0 … mkdir` + `chown` | 探针 P0/P2 |
 | 每用户库的后台维护 | compose 常驻 serve/curator **只服务默认库**；`ai-memory --db <path> stats` 调用形态可用 | 探针 P5；`specs/mcp/mcp-design.md` §5.3 |
+
+**多语言检索（2026-09-21 实测，v0.10.0，本地基线容器；可重复探针 `memory.agent-mate.ai/scripts/i18n-probe.sh`，`I18N_PROBE_STRICT=1` 把边界当断言）**
+
+结论矩阵（简中 / 繁中 / 英文 × 通路；双通路交叉验证：`docker exec` 探针 + Cursor `ai-memory-local` 客户端直调结论一致）：
+
+| 通路 | 简体中文 | 繁体中文 | 英文 |
+| --- | --- | --- | --- |
+| 存储（`memory_store`） | 支持 | 支持 | 支持 |
+| 关键词·完整词元（`memory_search`） | 支持（须标点/空白界定**整段**） | 支持（同左） | 支持（单词） |
+| 关键词·词元内子串 | 不支持 | 不支持 | 不支持（bound 查 boundary 不命中） |
+| 关键词·简繁交叉 | 不支持（`unicode61` 不做简繁归一，双向不命中） | 同左 | 不适用 |
+| 语义召回（`memory_recall`） | 支持（`mode=hybrid`） | 支持 | 支持 |
+| 按 id 直取（`memory_get`） | 支持（语言无关） | 支持 | 支持 |
+
+源码依据：`memories_fts` 建表 `USING fts5(title, content, tags, content=memories, content_rowid=rowid)` **无 `tokenize=`**（写入侧由 AFTER INSERT/UPDATE/DELETE 触发器同步入库，索引入库不受语言限制）；`sanitize_fts_query`（`src/storage/mod.rs:7030`）按空白切分、剥除全部 FTS5 特殊字符、逐词元短语化、隐式 AND；`[mcp]` 配置段仅 `profile` / `allowlist` / `profile_hint_in_errors` —— **无任何语言 / 分词 / 检索配置项**。客户端交叉证据标记 `i18n-cross-20260921`（主库 id `de386c65-…5680`）。用例登记 `specs/mcp/mcp-test.md` §4-E；契约面 `specs/mcp/mcp-design.md` §9 J4。
 
 ## Lesson / guidance
 
@@ -120,8 +138,10 @@ src/storage/migrations.rs:1507
    可重复探针：`memory.agent-mate.ai/scripts/qwen-verify.sh`（决策见 ADR-007）。
 9. **MCP 默认档位是 core，工具恰 8 个**：档位不会在输出里自证，唯一可靠判据是 `tools/list` 回包的工具**计数**；
    把「= 8」写死进冒烟脚本，档位一旦漂移就响亮失败（否则只表现为"某个高级工具不见了"的困惑）。
-10. **中文检索只能走 `memory_recall`，`memory_search` 只认 ASCII 子串**：写断言时标记一律用 ASCII
-    （如 `mcp-smoke-<epoch>`），语义验证用 recall 的中文查询词；两者职责对调会出现「明明存进去了却搜不到」的假故障。
+10. **中文检索只能走 `memory_recall`，`memory_search` 只认完整词元**（2026-09-21 探针实证升级，精确边界见上方多语言专表）：
+    FTS5 `unicode61` 分词下，中文唯一可命中的形态是「标点/空白界定的整段」，词元内子串与简繁交叉一律 count=0，
+    且**无任何配置项可调**。写断言时标记一律用 ASCII（如 `mcp-smoke-<epoch>`），语义验证用 recall 的中文查询词；
+    两者职责对调会出现「明明存进去了却搜不到」的假故障。边界探针：`scripts/i18n-probe.sh`（STRICT 模式断言边界漂移）。
 11. **写元数据前先按 `inputSchema` 构造参数**：`source` 等是枚举字段，凭字段名猜值会被响亮拒绝（好）但白耗一轮往返。
 12. **批量/重复写入必须容忍 CONFLICT**：near-duplicate 去重让语义相近的写入返回 CONFLICT，
     脚本若不处理，第二次运行就会假失败（正解：改验既有标记，见 `specs/mcp/mcp-test.md` §1 原则）。
@@ -149,4 +169,5 @@ src/storage/migrations.rs:1507
 - MCP 测试策略 / 计划 / 用例（L0–L3 分层、客户端接入配置、工具行为原则）：`memory.agent-mate.ai/specs/mcp/mcp-test.md`
 - 多用户隔离方案与结论（冻结机制 / D1–D5 / V1–V4 / 未决前提）：`memory.agent-mate.ai/specs/mcp/mcp-design.md` §0
 - 隔离探针（可重复）：`memory.agent-mate.ai/scripts/iso-probe.sh`（A 负向解析链 / B 方案③双用户隔离 / C 方案②对照）
+- 多语言检索边界探针（可重复）：`memory.agent-mate.ai/scripts/i18n-probe.sh`（三语言 × 三通路矩阵 + 简繁交叉 + STRICT 边界断言）
 - 相关 ADR：`adr/ADR-004-version-contract-single-source-of-truth.md`、`adr/ADR-005-upgrade-admission-gate-layering.md`、`adr/ADR-008-local-baseline-reuses-production-compose.md`、`adr/ADR-009-per-user-db-isolation-over-single-db-agent-id.md`（多用户隔离形态的决策，含"排除单库 per-agent"的实测理由）

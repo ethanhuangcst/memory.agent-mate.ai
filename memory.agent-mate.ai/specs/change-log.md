@@ -8,6 +8,27 @@
 
 ## 2026-09-21
 
+### 多语言探针结论 + 门户 key 收尾（Sprint 2 #8 / #6）
+
+**问题**：`product-backlog.md` #10「记忆内容的多语言支持」自立项起标为「待探针确认」—— 上游在保存 / 检索 memory 时是否支持多语言、有无配置项、有无已知限制，需要可复跑的行为级结论。连带收尾 #6：门户专用 MaaS key 已由用户填入，须实测注入路径可用。
+
+**结论（#8）= 部分支持**：
+
+| 通路 | 简体中文 | 繁体中文 | 英文 |
+| --- | --- | --- | --- |
+| 存储（`memory_store`） | 支持 | 支持 | 支持 |
+| 关键词·完整词元（`memory_search`） | 支持（须标点/空白界定整段） | 支持（同左） | 支持（单词） |
+| 关键词·词元内子串 | 不支持 | 不支持 | 不支持 |
+| 关键词·简繁交叉 | 不支持（双向） | 同左 | 不适用 |
+| 语义召回（`memory_recall`） | 支持（`mode=hybrid`） | 支持 | 支持 |
+| 按 id 直取（`memory_get`） | 支持 | 支持 | 支持 |
+
+- **源码依据**：`memories_fts` 建表 `USING fts5(…)` 未指定 `tokenize=` → 默认分词器 `unicode61`（不做 CJK 分词、不做简繁归一）；`sanitize_fts_query`（`src/storage/mod.rs:7030`）剥除全部 FTS5 特殊字符（无通配）、逐词元短语化、隐式 AND；`[mcp]` 配置段仅 profile / allowlist / profile_hint_in_errors —— **无任何语言 / 分词 / 检索配置项**。
+- **复现**：`bash memory.agent-mate.ai/scripts/i18n-probe.sh`（隔离库 `/data/users/i18n-probe/`，不碰主库与 iso 库；三阶段分进程；退出码 0/10/20/30/40/50；`I18N_PROBE_STRICT=1` 把语言边界当断言防上游漂移）。首跑 `1789958920-48352` / 默认复跑 `1789959024-49737` / STRICT 复跑 `1789959038-49972` 全绿（含 CONFLICT 幂等分支）。交叉验证：Cursor `ai-memory-local` 客户端直调结论一致（标记 `i18n-cross-20260921`）。
+- **工程口径**：中文检索一律走 `memory_recall`；关键词通路只用于 ASCII 标记与中文整段引用。
+- **#6 key 验证**：`qwen-verify.sh --key` → `embed_model=qwen3.7-text-embedding-flash`、`dim=1024`（同工作空间、同模型）；另以 `-e DASHSCOPE_API_KEY` 覆盖注入隔离会话复核 —— 写入成功 + 跨进程召回 `mode=hybrid`（embedder 未降级）、stderr 无鉴权失败。
+- **回写**：[`product-backlog.md`](product-backlog.md) #10（ToDo → Done；改动授权来源 = 该行验收条件「给出明确结论并回写本行描述」）· [`sprint_plan.md`](sprint_plan.md) #6/#8 + 变更记录 · [`mcp/mcp-test.md`](mcp/mcp-test.md) §1 L1.6 + §4-E（TC-I18N-01..06）+ §5 · [`mcp/mcp-design.md`](mcp/mcp-design.md) §2 能力边界 + §9 契约点 J4 + §10 · [`knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md`](knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md) 多语言专表 + 教训 #10 升级 · [`architecture.md`](architecture.md) §4.1 + §7。
+
 ### 文档风格收口：自有全仓文档去 emoji / 图标
 
 **背景**：文档混用 ✅ ❌ ⚠️ 🟠 🔴 ☐ ⛔ 🚧 🆕 ⭐ ★ ▼ 等图标承担「状态 / 是否 / 告警 / 级别」语义 —— 渲染依赖字体、`grep` 检索不到、diff 里看不出语义变化。风格目标：**干净 · geeky · neat**，语义一律由**文字**承载。
@@ -36,6 +57,32 @@
 - 新增 [`adr/ADR-011-doc-style-text-over-icons.md`](adr/ADR-011-doc-style-text-over-icons.md)：风格规则固化为决议 —— 状态 / 是否 / 告警 / 级别一律由**文字**承载，含替换映射表、三个被否备选（统一图例 / 只删圆点 / Markdown 复选框）、范围边界（不动 vendored 上游）与「原文引用不可单方面改」例外。
 - 更新 `knowledge/git-tooling/gotchas.md` 增第 5 条：**全仓文本类批处理的三个坑** —— ① 必须按自有资产目录划界（排除 `ai-memory-mcp/`，否则污染上游 rebase）② 文档里引用的**程序输出 / 固定话术**不能只改文档（要么同批改脚本，要么显式登记例外）③ 批量替换的次生瑕疵要复查（相邻粗体 / 双冒号 / 被删空的单元格）。
 - 跳过归档：本次无新的上游事实、无环境类坑、无架构取舍变更 —— 除上述一条外无可沉淀内容。
+
+### 门户启动机制定稿 β′（Sprint 2 #6）
+
+**背景**：门户必须存在「启动器」——上游**没有** MCP-over-HTTP（只有 stdio），所以必须是门户按用户拼 env/argv 并把子进程接上 HTTP↔stdio 桥。备选两条：**β′**（门户镜像内带上游二进制、自己 spawn）vs **α**（门户挂 `/var/run/docker.sock`，用 `docker exec` 在既有容器里开会话）。
+
+**决议（2026-09-21 用户确认）**：**β′**。落点：[`architecture.md`](architecture.md) §2.1 #8（定稿）+ §2.2（排除 α 与「α + 受限 socket 代理」）+ §2.3（三条落地前置）；[`adr/ADR-012`](adr/ADR-012-portal-launch-mechanism-no-docker-socket.md) 转 Accepted。
+
+**实证（本地，证据与可复跑配方见 [`knowledge/web-portal/portal-launch-mechanism.md`](knowledge/web-portal/portal-launch-mechanism.md)）**
+
+| # | 结论 | 关键证据 |
+| --- | --- | --- |
+| E1 | 镜像契约成立 | `amd64` 单平台；`USER aimem`、`uid:gid = 999:999`；二进制 `/usr/local/bin/ai-memory` 32 MB `--version` = `0.10.0`；底座 Debian 12.14（bookworm），`ldd` 在 `node:22-bookworm-slim` 内**全部解析** |
+| E2 | **β′ 端到端跑通** | 4 行 Dockerfile（外来 bookworm 底座 + `COPY --from` 上游二进制）⇒ `initialize` ok / **8 工具** / 写入回显 `agent_id=human:beta-probe` / 库**自动创建**在 `/data/users/beta-probe/ai-memory.db` / 共享主库**未出现** / 新进程 `mode:hybrid` 语义召回命中 + 关键词命中 |
+| E3 | 缺口 A：非 root 门户建不出用户目录 | `/data/users` = `root:root 0755` ⇒ `mkdir` **EACCES**；`install -d -m 2775 -o root -g 999` 后成功（产物 `aimem:aimem`）⇒ 一次性 setgid 引导 |
+| E4 | 缺口 B：门户必须持 MaaS key | 不带 `--env-file` ⇒ `Embed failed (401): No API-key provided` + `no embeddings … linear scan`，**工具仍返回成功**（静默降级）；带则正常 |
+| E5 | **α 的代理缓解不成立**（否定性结论） | 主流代理（Tecnativa/docker-socket-proxy）按「HTTP 方法 + URL 前缀」放行、**不支持**按容器/命令过滤；exec 端点是 POST ⇒ 放行 exec 必然放开写面 ⇒ α 实质 = 裸 socket |
+| E6 | α 的机制本仓已在跑 | `mcp-smoke.sh` / `iso-probe.sh` 的会话即 `docker exec -i [-e …] ai-memory-mcp ai-memory mcp --tier smart`（差别只在「谁发起」） |
+| E7 | β′ 的陈旧镜像风险有上游依据 | 上游**不拒绝**旧二进制操作更新的 schema（`migrations.rs:1507`，见 [ADR-005](adr/ADR-005-upgrade-admission-gate-layering.md)）⇒ 需**版本断言** |
+
+**连带文档同步**：[`deployment.md`](deployment.md) §4.4（setgid 引导**替代** `NOPASSWD: docker exec -u 0` root 规则，净减一处 root 授权）· §4.5 · §7.2（S1 的门户侧新触发路径）· [`web-portal/web-design.md`](web-portal/web-design.md) §0/§3.2/§9 附录 · [`web-portal/web-stories.md`](web-portal/web-stories.md) AC1.1 · [`mcp/mcp-design.md`](mcp/mcp-design.md) §0.1。
+
+**验证**：`make doc-links` 无悬空；`make secret-check` 干净；探针卷已删除（内含 `config.toml` 副本）。
+
+**未做（明确留待）**：[`web-design.md`](web-portal/web-design.md) §10 #1（`--profile` 全档口径）与 #7（门户镜像重建自动化）仍开放；`scripts/portal-probe.sh` 待 Sprint 4 按 E2 配方落地。
+
+**同日补记：门户专用 key 可增签 ⇒ §2.3 #2 首选生效。** 用户 2026-09-21 确认可在该私有 MaaS 工作空间（`llm-…`，`cn-beijing`）再签一把 key ⇒ 门户用**独立 key**（与主 key 同工作空间 ⇒ 模型与 1024 维天然一致），备用的「共用主 key + 残余风险」口径不启用。落地位置：服务器 `/opt/ai-memory/portal.env`（`chmod 600`）、本机开发 `memory.agent-mate.ai/deploy/portal.env`（gitignored）—— 新增模板 [`deploy/portal.env.example`](../deploy/portal.env.example)，`.gitignore` 增 `**/deploy/portal.env`，本机留档位在 `secrets.local.hk_vps_4.md` 的 `QWEN_API_KEY_PORTAL`。轮换/吊销步骤见 [`deployment.md`](deployment.md) §12.2（改 `portal.env` → 重启门户 stack → 自检通过 → 吊销旧 key；主 `.env` 不动）。
 
 ---
 

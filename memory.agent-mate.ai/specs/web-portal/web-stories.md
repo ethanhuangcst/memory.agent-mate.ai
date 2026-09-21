@@ -14,7 +14,7 @@
 
 | AC | Given / When / Then |
 |---|---|
-| AC1.1 | 管理员在建用户界面提交合法 handle → 创建成功，并**同时创建** `/data/users/<handle>/`（mode `0700`，属主对齐容器内 `aimem`） |
+| AC1.1 | 管理员在建用户界面提交合法 handle → 创建成功，并**同时创建** `/data/users/<handle>/`（mode `0700`，属主对齐容器内 `aimem`）。**前置**：`/data/users` 为 `root:aimem 2775`（setgid 一次性引导，[`../deployment.md`](../deployment.md) §4.4）⇒ 门户以 `aimem` 身份即可创建，**无需 root**；门户启动自检不可写即拒绝启动 |
 | AC1.2 | handle 不匹配 `^[a-z0-9_-]{1,32}$` 或已存在 → 拒绝并给出明确原因 |
 | AC1.3 | handle 含 `../`、`/` 等路径穿越字符 → 拒绝（**不得**创建出预期外的目录） |
 | AC1.4 | 非管理员（无 CF Access 身份 / 在 MCP 域名请求管理 API）→ 拒绝，且**无法**创建任何用户或 key |
@@ -121,3 +121,4 @@
 | 日期 | 变更 |
 |---|---|
 | 2026-09-20 | **specs 整合**：由 `admin_portal_design.md` §1 需求表（用户逐字答复）与 `product-backlog.md` 的 web portal 条目重写为 S1–S9 故事 + AC；`product-backlog.md` **未被修改** |
+| 2026-09-21 | **D1 定稿（β′）+ AC1.1 补前置**：用户确认 β′（[`../adr/ADR-012`](../adr/ADR-012-portal-launch-mechanism-no-docker-socket.md)），AC1.1 增加「`/data/users` 为 `root:aimem 2775`（setgid）」前置与「门户启动自检不可写即拒绝启动」；AC8.3（不挂 docker socket）不变。落地前置三条见 [`../architecture.md`](../architecture.md) §2.3 |
