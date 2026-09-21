@@ -19,6 +19,32 @@ tier = "smart"
 db = "/data/ai-memory.db"
 
 # ---------------------------------------------------------------------------
+# [limits] — 容量与配额
+#
+# 七项均显式固定为 ai-memory v0.10.0 的编译默认值；这不会收紧现有行为，
+# 但可防止升级时上游默认值静默漂移。环境变量优先于本段配置：
+#   AI_MEMORY_MAX_MEMORIES_PER_DAY / AI_MEMORY_MAX_STORAGE_BYTES
+#   AI_MEMORY_MAX_LINKS_PER_DAY / AI_MEMORY_MAX_PAGE_SIZE
+#   AI_MEMORY_MAX_INFLIGHT_REQUESTS
+#   AI_MEMORY_VECTOR_INDEX_CAPACITY / AI_MEMORY_VECTOR_INDEX_HARD_FAIL
+# 非正数会被视为未设置并继续回落。前三项配额会在新 (agent_id, namespace)
+# 首次写入时固化到配额行，修改本段不会追溯已有身份；CLI 一次性写入不计费。
+# max_page_size 与 max_inflight_requests 只作用于 HTTP 面，本部署的 stdio MCP
+# 不经过对应路径。向量索引触顶时 hard_fail_at_cap=false 会驱逐最旧向量，
+# 被驱逐记忆仍可走关键词检索。本地 config.local.toml 即使暂未包含本段，
+# 也会因取值等于编译默认而与生产模板保持行为等价。
+# ---------------------------------------------------------------------------
+[limits]
+max_memories_per_day     = 1000
+max_storage_bytes        = 104857600 # 100 MiB
+max_links_per_day        = 5000
+max_page_size            = 1000
+max_inflight_requests    = 0         # 0 = 不装配 HTTP 并发准入层
+vector_index_capacity    = 100000
+vector_index_hard_fail_at_cap = false
+
+
+# ---------------------------------------------------------------------------
 # [llm] — smart 档的整理能力后端
 #
 # backend = "qwen" 是官方一等别名（等价 dashscope），但它默认指向公网端点：

@@ -144,7 +144,13 @@ done
 ### 5.4 备份与配额
 
 - 备份脚本**遍历所有库**：逐库 `ai-memory --db <each> backup --to /data/backups/<user> --keep 48`，外迁用 `tenants/<user>/` 前缀
-- 配额：`agent_quotas` 给每用户/命名空间设上限，防写爆盘
+- 配额走上游 `[limits]` 段，按 **`(agent_id, namespace)` 逐行盖章**：配额行在首次写入时由**当次进程**的默认值固化，事后改 `[limits]` **不追溯**已有行；CLI 一次性写入（`ai-memory store`）**故意不计费** ⇒ 只能用 MCP `memory_store` / `memory_link` 验证。我方「一用户一库 + 一 agent」⇒ 天然等价于 **per-用户配额**
+  - 七键与编译默认（v0.10.0）：`max_memories_per_day=1000` · `max_storage_bytes=104857600`（100 MiB）· `max_links_per_day=5000` · `max_page_size=1000` · `max_inflight_requests=0`（禁用）· `vector_index_capacity=100000` · `vector_index_hard_fail_at_cap=false`
+  - 优先级 **env > `[limits]` > 编译默认**；任意层**非正值（≤0）视为未设**并继续回落。环境变量有**两套前缀**：`AI_MEMORY_MAX_{MEMORIES_PER_DAY,STORAGE_BYTES,LINKS_PER_DAY,PAGE_SIZE,INFLIGHT_REQUESTS}` 与 **`AI_MEMORY_VECTOR_INDEX_{CAPACITY,HARD_FAIL}`**（后者**不是** `AI_MEMORY_MAX_*`）
+  - 超限形态：MCP 面错误串含 `QUOTA_EXCEEDED`；HTTP 面为 `429` + `{"error":"QUOTA_EXCEEDED","limit","current","max"}`
+  - **面归属**：`max_page_size`（每请求内存上限，非限流）与 `max_inflight_requests`（准入并发层）是 **HTTP 面专属**，stdio MCP **不经过** ⇒ 实测对 stdio 无副作用，见 [`./mcp-test.md`](./mcp-test.md) §4-D TC-LIMIT-02
+  - 核对命令：`ai-memory quota-status --agent-id <id> --namespace <ns> --json`（顶层 `agent_id` / `namespace` / `quota`，字段在 `quota` 对象内）
+  - 模板口径：`[limits]` **显式写全 7 键并等于编译默认** —— 与 `--profile core`、`AI_MEMORY_REQUIRE_AGENT_ATTESTATION=0` 同源策略：不写就等于把行为交给上游默认值，而改变是**静默**的
 - 可选加固：`AI_MEMORY_ENCRYPT_AT_REST=1` → 外迁快照非明文（运维仍可解，密钥在容器内）
 
 ### 5.5 sudoers 加固（可选，优于 docker 组）
@@ -397,6 +403,23 @@ aimem-ssh ALL=(root) NOPASSWD: /usr/bin/docker exec -i ai-memory-mcp ai-memory m
 | K6 | 密钥目录解析 `--key-dir` > `AI_MEMORY_KEY_DIR` > `$HOME/.config/ai-memory/keys`；私钥 0600。因 `HOME=/data`，密钥随持久卷留存（收益） | 中 | 改到卷外 → 丢失导致既有令牌全部不可验证 | `src/cli/capability.rs`；`src/identity/keypair.rs:170` |
 
 > 上游共约 90 个 `AI_MEMORY_*`（常量 SSOT `src/config.rs:4230-4470`）。本清单只登记**我方实际依赖**的点 —— 这正是「最小耦合」的含义。
+
+### L. 容量与配额（`[limits]`，2026-09-21 本地实测）
+
+> 我方**只依赖其中 4 类强制行为**（写入量 / 存储字节 / 链接 / 向量容量）；另 2 键是 **HTTP 面专属**（stdio MCP 不经过），1 键是触顶策略开关。行为证据：[`../../scripts/limits-probe.sh`](../../scripts/limits-probe.sh)。
+
+| # | 依赖什么 | 敏感度 | 错了会怎样 | 上游位置 |
+|---|---|---|---|---|
+| L1 | 优先级阶梯 **env > `[limits]` > 编译默认**，且任意层**非正值视为未设**并继续回落 | 中 | 误以为写 `0` 能「禁用」某配额 —— 实际回落到编译默认（仅 `max_inflight_requests` 的 `0` 是「不装配准入层」的特殊语义） | `src/config.rs:8420-8477` |
+| L2 | 配额按 **`(agent_id, namespace)` 逐行盖章**，行在首次写入时固化**当次进程**的默认值；事后改配置**不追溯**已有行。另：**MCP `memory_store` 的默认 namespace 是 `global`**，而 `quota-status` 对**不存在的** `(agent, namespace)` **会现场建行**并按当前 env / 默认值盖章 | 高·静默 | ① 调大 `[limits]` 后老身份仍被旧阈值拒 → 误判「配置没生效」；② 用错 namespace 查配额 → 读到的是**新建行的默认值**（看似「注入没生效」），实际写入落在别的命名空间；③ 查询若与写入**带着同一注入 env**，会变成**自证式**断言（查询自己把值写进新行） | `src/quotas.rs`（`ensure_row` / `check_quota`）；2026-09-21 实测（探针已修正为「去掉 env + `--namespace global`」） |
+| L3 | **CLI 一次性写入不计费** —— 只有 daemon 面（MCP `memory_store` / `memory_link` 与 HTTP 写路径）调用 `check_and_record` | 高 | 用 `ai-memory store` 验证配额 → 永远「通过」，得出配额失效的错误结论 | `src/mcp/tools/store/*`；上游自带测试即以 `QUOTA_EXCEEDED` 断言 |
+| L4 | 向量容量环境变量前缀是 **`AI_MEMORY_VECTOR_INDEX_*`**，**不是** `AI_MEMORY_MAX_*`；布尔只认 `1`/`0`/`true`/`false`（大小写不敏感），其余回落 | 中 | 写成 `AI_MEMORY_MAX_VECTOR_INDEX_CAPACITY` → **静默**不生效（回落默认 100000） | `src/config.rs:4252-4258`、`:8466-8477` |
+| L5 | 触顶日志 target = **`hnsw.eviction`**，而默认日志过滤器是 `ai_memory=info`，**不覆盖**该 target | 中 | 断言「触顶被拒」时观测不到日志 → 误判为功能失效（须显式放宽 `RUST_LOG`） | `src/hnsw.rs:30`、`src/logging.rs:46`、`src/mcp/mod.rs:3341-3348` |
+| L6 | `max_page_size` 与 `max_inflight_requests` **仅 HTTP 面**生效（准入层在 HTTP router 装配，值为 `0` 时该层根本不装配） | 中 | 以为能给 stdio 会话做并发限流 → 该层永不触发 | `src/handlers/*`、HTTP router 装配点 |
+| L7 | 触顶行为：`hard_fail_at_cap=false`（默认）**驱逐最旧**，被驱逐记忆退化为关键词检索；`true` 则拒绝新插入但**不阻止 DB 落库**（`insert` 返回 `void`） | 高 | 收紧 `capacity` 会**不可逆驱逐**真实条目 ⇒ 容量类探针必须用一次性库 | `src/hnsw.rs:872-881`、`:925-939` |
+
+> **无必要 ADR**：本条结论是「按上游既有契约使用配置」，未引入我方架构选择；模板取值固定为编译默认亦属既有策略（`--profile core` 同源）的延续。
+
 
 ---
 

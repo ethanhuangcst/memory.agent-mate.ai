@@ -8,6 +8,33 @@
 
 ## 2026-09-21
 
+### Sprint 3 #4 收口：上游 `[limits]` 容量与配额（模板显式定默认 + 行为探针）
+
+**做了什么**：把上游 `[limits]` 段落进生产模板并给出**行为级**证据，同时把「配置生效」与「行为生效」两件事分开证明。
+
+- **模板（策略：显式等于编译默认）**：`deploy/config.toml.tmpl` 新增 `[limits]`，**写全 7 键且取值等于 ai-memory v0.10.0 编译默认**（`1000` / `104857600` / `5000` / `1000` / `0` / `100000` / `false`），注释说明优先级（env > section > 编译默认）、非正值视为未设、逐 `(agent_id, namespace)` 盖章、CLI 写入不计费、`max_page_size` 与 `max_inflight_requests` 为 HTTP 面专属，以及本地 `config.local.toml` 缺该段时的**行为等价性**。选「写死默认值」而非「留空靠上游」与 `--profile core`、`AI_MEMORY_REQUIRE_AGENT_ATTESTATION=0` 同源：不写就等于把行为交给上游默认值，而改变是**静默**的。
+- **探针（不污染生产默认值）**：新增 [`../scripts/limits-probe.sh`](../scripts/limits-probe.sh)（Bash 3.2；退出码 10/20/30/40/50/60/70；含 `--self-test` 负向自测）。**只经 env 注入小阈值**，在**独立一次性库**（`/data/users/limits-probe/`，退出时按唯一时间戳前缀连同 `deferred-audit` 旁路日志一并清理）上用**每轮全新身份**运行：
+  1. 三类配额各取一个全新 `agent_id`：`AI_MEMORY_MAX_MEMORIES_PER_DAY=1` → 第 2 条 `memory_store` 被拒；`AI_MEMORY_MAX_STORAGE_BYTES=1` → 首条即被拒；`AI_MEMORY_MAX_LINKS_PER_DAY=1`（会话内 `--profile graph`）→ 第 2 条 `memory_link` 被拒。错误串均含 `QUOTA_EXCEEDED`，并以 `quota-status --namespace global --json`（**刻意去掉注入 env**）交叉核对配额行**仍等于注入值** —— 同时证明「配额行在首次写入时盖章」与「注入阈值确实生效」。
+  2. 向量容量：`capacity=1` + `hard_fail=true`，**跨进程**预热 ≥1 条后插入被拒（先断言阻塞预热已落地），同时断言**记忆行仍落库**（`insert` 返回 `void`，不回滚）。
+  3. 面归属：`max_page_size=1` / `max_inflight_requests=1` 下 stdio 会话的写入与列表**均正常** ⇒ 二者确为 HTTP 面专属。
+  4. 探针内还机械断言模板七键恒等于编译默认、且未混入测试阈值（防「测试值污染生产」）。
+- **结论回写唯一真源**：[`mcp/mcp-design.md`](mcp/mcp-design.md) §5.4（配额契约）+ §9 新增「**L. 容量与配额**」7 条依赖与陷阱 · [`mcp/mcp-test.md`](mcp/mcp-test.md) §4-D（`TC-LIMIT-01` 具体化 + 新增 `TC-LIMIT-02`）· [`deployment.md`](deployment.md) §5.3 七键表 + §14 · [`sprint_plan.md`](sprint_plan.md) #4 完成态 · [`product-backlog.md`](product-backlog.md) #17（两套前缀更正）· [`knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md`](knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md) 实测表 + 教训 20。
+
+**三个只能实测得到的坑**（已全部沉淀）：
+1. **默认日志过滤器看不见触顶** —— 触顶日志 target 是 `hnsw.eviction`，而 MCP 默认 directive 只有 `ai_memory=info`；不显式放宽 `RUST_LOG` 就永远观测不到，容易被误判为「功能失效」。首轮断言失败即栽在这里。
+2. **配额逐 `(agent_id, namespace)` 盖章** —— 行在首次写入时固化**当次进程**的默认值，事后改配置**不追溯**；这条决定了探针必须「新身份 + 一次性库」，否则会得出「配置没生效」的错觉。
+3. **CLI 一次性写入不计费** —— 用 `ai-memory store` 永远验不出配额失效；只有 daemon 面 MCP 写路径调用 `check_and_record`。
+4. **`quota-status` 查错 namespace 会「自建行 + 报默认值」** —— MCP `memory_store` 默认写入 **`global`** 命名空间，而 `quota-status --namespace <ns>` 对**不存在的** `(agent, namespace)` 会**现场建行**并按当前 env 盖章。首版探针查 `default` 且**带着同一注入 env**，等于自己把值写进了新行 —— 是一条**自证式（恒真）断言**。终审时用「去掉 env 复读」把它试出来，修正为「去掉 env + `--namespace global`」后该断言才真正可失败。
+
+**可复跑验证**：`bash memory.agent-mate.ai/scripts/limits-probe.sh`（退出码 0）· `--self-test` · 回归 `mcp-smoke.sh` / `iso-probe.sh` · `make doc-links` / `make secret-check` / `make attestation-paths` / `make preflight-test` · `git diff --check`。
+
+**边界**：HTTP 面超限（`max_page_size` / `max_inflight_requests` 真正触发）本地**无法验证**（容器不发布端口、镜像内无 curl/wget）⇒ 留 Sprint 5 生产通道；生产 SSH 通道的配额复核同属 Sprint 5。
+
+**用户验收**：2026-09-21，Robert Smith 确认可用。
+
+**ADR：无新增** —— 本轮是「按上游既有契约使用配置 + 显式固定默认值」，属既有策略（ADR-009 隔离、档位定档同源）的执行层，未引入新的架构或流程取舍。
+
+
 ### Sprint 2 #11 收口：引用治理 + 能力文档体例定稿
 
 **做了什么**：把 `sprint_plan.md` / `product-backlog.md` 中指向已合并旧 spec 的 85 处引用全部改指合并后文档与对应章节，删除 `link-check.allow` 的两份整文件豁免，并同步因能力文档体例变更而失准的转述。

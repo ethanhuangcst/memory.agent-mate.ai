@@ -29,6 +29,7 @@
 | L1 | 协议冒烟 | [`../../scripts/mcp-smoke.sh`](../../scripts/mcp-smoke.sh)（stdio JSON-RPC：握手 / 工具断言 / 写入 / 召回） | MCP 协议通路本身（initialize → tools/list → tools/call） |
 | L1.5 | 隔离探针 | [`../../scripts/iso-probe.sh`](../../scripts/iso-probe.sh)（A/B/C 组，P1a–P6） | **R1**：会话漏设 `AI_MEMORY_DB` → 静默落共享主库（[`./mcp-design.md`](./mcp-design.md) §0） |
 | L1.6 | 多语言探针 | [`../../scripts/i18n-probe.sh`](../../scripts/i18n-probe.sh)（三语言写入 → 关键词 12 组对照 → 语义召回 + 按 id 直取 → 结论矩阵；退出码 0/10/20/30/40/50，`I18N_PROBE_STRICT=1` 把语言边界当断言） | 对 CJK 记忆**误用关键词通路** → 静默 count=0 假象「记忆丢了」（结论矩阵与用例见 §4-E） |
+| L1.7 | 配额探针 | [`../../scripts/limits-probe.sh`](../../scripts/limits-probe.sh)（一次性库 `/data/users/limits-probe/` + 每轮全新身份 + **仅 env 注入**小阈值；退出码 0/10/20/30/40/50/60/70，`--self-test` 负向自测） | 上游 `[limits]` **改配置不等于行为生效**：配额逐 `(agent_id, namespace)` 盖章、且 **CLI 一次性写入不计费**，用错验证方式会得出「配额失效」的假结论（用例见 §4-D TC-LIMIT） |
 | L2 | 客户端接入 | Cursor 加载（§3 配置），人肉核对工具清单与一次问答 | 真实客户端环境差异（env / 传输 / 重连） |
 | L3 | 生产通道 | 同 L1 模式，传输换成 `ssh ai-memory`（Sprint 5） | SSH forced command / `no-pty` / 密钥边界 |
 
@@ -54,11 +55,12 @@
 | Sprint 2 #8 | L1.6 多语言探针：三语言 × 三通路结论矩阵（部分支持，§4-E）+ 客户端通路交叉复现一致 | 已完成 2026-09-21 |
 | Sprint 3 #2 | 档位核对（TC-TIER）：**双探针** `memory_capabilities` + `tools/list` 计数（core=8 / graph=20 / admin=22 / power=57 / full=101） | 已完成 2026-09-21（提前落地：定档 + 模板四处已写 `--profile`；各档计数实测 7 档全绿，证据见 §4-C） |
 | Sprint 3 #6 | 隔离负向验收（TC-ISO）：落地 D1/D2 后重跑 V1，断言**必须失败** | 待做 |
+| Sprint 3 #4「上游 `[limits]` 配置与行为验证」 | TC-LIMIT：三类配额 `QUOTA_EXCEEDED` + `quota-status` 交叉核对 + 向量触顶拒绝 + HTTP 专属项对 stdio 无副作用 | 已完成本地验收 2026-09-21（`limits-probe.sh` 退出码 0；HTTP 面超限与生产通道复验待 Sprint 5） |
 | Sprint 3 #7 | 每库维护（TC-GC）：`gc` / `curator --once` 对每用户库的覆盖面对账 | 待做 |
 | Sprint 3 #8 | 写路径泄露探针（TC-LEAK）：去重/合成是否回显他人私有内容 | 待做 |
 | Sprint 4 | 门户 / 公网入口若引入：先回到 §0 #5 增补远程接入用例（TC-HTTP） | 待做 |
 | Sprint 5 | 服务器冒烟 L3（ssh 通道跑同构 jsonl）+ 生产 doctor 三静默失败点；备份（TC-BAK）/ 恢复（TC-REV）/ 吊销（TC-SSH-03） | 待做 |
-| 回归触发 | 每次改动 config / 镜像 tag / 档位 / forced command 后重跑 L0 + L1 + L1.5 | 持续 |
+| 回归触发 | 每次改动 config（含 `[limits]`）/ 镜像 tag / 档位 / forced command 后重跑 L0 + L1 + L1.5 + L1.7（TC-LIMIT） | 持续 |
 
 ---
 
@@ -156,7 +158,8 @@
 | TC-SSH-03 | 吊销：删除该用户 `authorized_keys` 行 | 该密钥 SSH **立即失败** | Sprint 5 #5 |
 | TC-BAK-01 | 备份脚本遍历全部库产出快照 + manifest | `sha256sum` 与 manifest 一致；外迁后回读比对通过 | Sprint 5 #3/#7 |
 | TC-REV-01 | 恢复演练（在**临时库**上） | 恢复后原库被 rename 为 `pre-restore-*`（in-place 行为，契约面 I5） | Sprint 5 |
-| TC-LIMIT-01 | 配额 `agent_quotas` 生效 | 超限时被拒，不写爆盘 | Sprint 5 |
+| TC-LIMIT-01 | **`[limits]` 三类配额行为**（本地基线，Sprint 3 #4） | 探针 [`../../scripts/limits-probe.sh`](../../scripts/limits-probe.sh) 在**独立一次性库 + 每轮全新身份**上只经 env 注入小阈值（模板零污染）：① `AI_MEMORY_MAX_MEMORIES_PER_DAY=1` → 第 2 次 `memory_store` 返回 `QUOTA_EXCEEDED`；② `AI_MEMORY_MAX_STORAGE_BYTES=1` → 首次写入即 `QUOTA_EXCEEDED`；③ `AI_MEMORY_MAX_LINKS_PER_DAY=1`（会话内 `--profile graph`）→ 第 1 条 `memory_link` 成功、第 2 条被拒；④ 三类均以 `ai-memory quota-status --namespace global --json`（**刻意去掉注入 env**，namespace 与 `memory_store` 默认值一致）交叉核对配额行**仍等于注入值** —— 证明配额行在首次写入时已被盖章，而非重读 env；若查错 namespace，会读到现场新建行的默认值而误报「注入没生效」 | **已完成本地验收 2026-09-21**（退出码 0；`--self-test` 负向自测通过）。生产 SSH 通道复核留 Sprint 5 |
+| TC-LIMIT-02 | **向量索引容量 + HTTP 专属项对 stdio 的非生效对照** | ① `AI_MEMORY_VECTOR_INDEX_CAPACITY=1` + `AI_MEMORY_VECTOR_INDEX_HARD_FAIL=true`：跨进程预热 ≥1 条后，插入被上游拒绝（stderr 出现 `hnsw.eviction` 的 `vector index at capacity: rejecting insert (hard-fail-at-cap mode)` ERROR），且记忆行仍落库（上游 `insert` 返回 `void`，不回滚写入）。**注意**：该 target 不在默认 `ai_memory=info` 过滤器内，探针须显式放宽 `RUST_LOG` 才能观测，且须先断言阻塞预热已落地；② `AI_MEMORY_MAX_PAGE_SIZE=1` / `AI_MEMORY_MAX_INFLIGHT_REQUESTS=1` 下 stdio 会话的 `memory_store` 与 `memory_list` **均正常** | **已完成本地验收 2026-09-21**；HTTP 面超限行为本地**无法触发**（容器不发布端口、镜像无 curl/wget）→ 留 Sprint 5 |
 | TC-I18N-01 | 多语言检索（占位 → 已由 §4-E 六用例扩展替代） | 见 §4-E（TC-I18N-01..06，2026-09-21 全通过） | 已完成 2026-09-21 |
 | TC-ATT-01 | `AI_MEMORY_REQUIRE_AGENT_ATTESTATION=0` 生效 | 写入返回 `attest_level=claimed`，非 403 | Sprint 5 |
 | TC-HTTP-01 | （仅当开放 HTTP 入口）url + api_key 接入；未带 key → 401；`X-API-Key` 头生效 | §0 #5 前置配置已落地 | Sprint 4 或 §0 #5 落地时 |
@@ -190,3 +193,4 @@
 | 2026-09-21 | **新增 L1.6 多语言探针层与 §4-E 用例（TC-I18N-01..06，Sprint 2 #8）**：三语言 × 三通路结论矩阵实测全通过（存储 / 语义召回 / 按 id 直取支持；关键词仅完整词元、词元内子串与简繁交叉不命中）；§1「检索工具分工」原则升级为精确边界；§2 登记 Sprint 2 #8 完成；§4-D TC-I18N-01 占位归并至 §4-E。探针 [`../../scripts/i18n-probe.sh`](../../scripts/i18n-probe.sh)，结论回写 [`../product-backlog.md`](../product-backlog.md) #10 |
 | 2026-09-21 | **档位定档 + 模板落盘（Sprint 2 #9 收尾）**：§2 Sprint 3 #2 提前完成；§3 本地基线 `args` 显式 `--profile core`（生产条不写 —— 由服务端 forced command 决定），并注明「不传时默认也是 core 且**不报错**」；§4-C TC-TIER-01/02 标为已完成（探针 [`../../scripts/profile-probe.sh`](../../scripts/profile-probe.sh)：7 档独立进程 + 默认档对照 + `core,lifecycle`=14，退出码 0），新增 TC-TIER-03（对外模板档位核对：门户 `core` / SSH 用户行 `core` / 主人行 `admin`）；新增面向最终用户的能力文档 [`./mcp-capabilities.md`](./mcp-capabilities.md)（工具功能说明的底稿取自 `memory_capabilities` verbose drilldown） |
 | 2026-09-21 | **能力文档体例定稿 + 与实测逐项对齐（Sprint 2 #11）**：`./mcp-capabilities.md` 体例定为「**6 张档位表 + 每张只列本档新增 + 编号全档连续 1–101 + 示例列**」；新增 **§4-C TC-TIER-04**（能力文档 ↔ 实测 `full` 101 项集合相等 + 编号连续唯一），该断言拦住了手工补录写入的不存在工具（`memory_gc_hard` / `memory_demote`）。同步：`../change-log.md`「Sprint 2 #11 收口」小节 · [`../web-portal/web-stories.md`](../web-portal/web-stories.md) AC6.4 · [`./mcp-design.md`](./mcp-design.md) §8 顶部引文 |
+| 2026-09-21 | **Sprint 3 #4：`[limits]` 容量与配额落盘 + 行为探针**：`../deploy/config.toml.tmpl` 补 `[limits]` 七键（**显式等于 v0.10.0 编译默认**，防升级静默漂移）；新增探针 [`../../scripts/limits-probe.sh`](../../scripts/limits-probe.sh)（**独立一次性库 + 每轮全新身份 + 仅 env 注入**小阈值，退出码 0）实测 ① 写入量 / 存储字节 / 链接三类返回 `QUOTA_EXCEEDED` 且 `quota-status` 配额行等于注入值；② 向量 `capacity=1` + `hard_fail=true` 触发上游 `hnsw.eviction` 拒绝日志而**记忆行仍落库**；③ `max_page_size` / `max_inflight_requests` 对 stdio **无副作用**（HTTP 面专属）。§4-D `TC-LIMIT-01` 具体化 + 新增 `TC-LIMIT-02`。同步：`./mcp-design.md` §5.4 / §9 L · `../deployment.md` §5.3 · `../product-backlog.md` #17 · [`../knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md`](../knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md) 实测表 + 教训 20 |

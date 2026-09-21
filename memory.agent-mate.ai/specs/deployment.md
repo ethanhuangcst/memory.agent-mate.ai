@@ -11,6 +11,7 @@
 
 | 层 | 要求 |
 |---|---|
+| 2026-09-21 | **补 `[limits]` 容量与配额（Sprint 3 #4）**：§5.3 新增七键表（显式等于 v0.10.0 编译默认）与优先级 / 逐行盖章 / HTTP 面专属说明；模板 [`../deploy/config.toml.tmpl`](../deploy/config.toml.tmpl) 同步落盘；行为证据见 [`mcp/mcp-test.md`](./mcp/mcp-test.md) §4-D TC-LIMIT |
 | 服务器 | Ubuntu 22.04+，已装 Docker + Compose，能拉 `ghcr.io` |
 | 仓内 | `memory.agent-mate.ai/deploy/` 三个事实文件：`docker-compose.prod.yml`（compose 契约唯一真相源）· `config.toml.tmpl`（配置模板）· `.env.prod.example`（密钥样例） |
 | 密钥 | qwen MaaS API key（私有 workspace base_url）· 用户 SSH 公钥（Sprint 3+） |
@@ -159,6 +160,20 @@ sudo docker exec -u 0 ai-memory-mcp install -d -m 0700 /data/users/alice/keys
 | `[server]` | `api_key` | **不设置**（不对外暴露 HTTP API） |
 
 > **两个静态常量，改了必须重建**：`[embeddings].dim` 与 `[storage].embedding_dim`。
+
+#### `[limits]` 容量与配额（显式等于 v0.10.0 编译默认）
+
+| 字段 | 值 | 说明 |
+|---|---|---|
+| `max_memories_per_day` | `1000` | 每 `(agent_id, namespace)` 每日写入条数 |
+| `max_storage_bytes` | `104857600` | 100 MiB（**库内计数**，不覆盖 WAL 与临时文件） |
+| `max_links_per_day` | `5000` | 链接写入配额 |
+| `max_page_size` | `1000` | **HTTP 面专属**（每请求内存上限，不是限流） |
+| `max_inflight_requests` | `0` | **HTTP 面专属**；`0` = 不装配准入层 |
+| `vector_index_capacity` | `100000` | 内存向量索引驻留条目上限 |
+| `vector_index_hard_fail_at_cap` | `false` | `false` = 触顶驱逐最旧；`true` = 拒绝新插入（仍落库） |
+
+> 七键**显式写死**（等于编译默认）以防升级时默认值静默漂移；env 覆盖优先，**非正值视为未设**。配额行按 `(agent_id, namespace)` 逐行盖章，改配置不追溯已有行。行为证据见 [`mcp/mcp-test.md`](./mcp/mcp-test.md) §4-D TC-LIMIT。
 
 ### 5.4 `.env` 只设本轮用到的 key
 

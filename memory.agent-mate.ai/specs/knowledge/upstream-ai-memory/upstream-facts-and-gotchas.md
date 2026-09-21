@@ -132,6 +132,22 @@ src/storage/migrations.rs:1507
 - 两个易算错的点：除 `full` 外各档 = 族计数 **+1**（`memory_capabilities` 属 Meta 族但 `ALWAYS_ON`）；`full` 的 101 已含它，**不加 1**。
 - 定档决议（对外 = `core` / 管理员入口 = `full`）在 `specs/mcp/mcp-design.md` §8.3。
 
+**`[limits]` 容量与配额（2026-09-21 实测，v0.10.0）**
+
+| 键 | 编译默认 | 强制范围 |
+|---|---|---|
+| `max_memories_per_day` | `1000` | MCP `memory_store` / HTTP 写路径（**CLI `store` 豁免**） |
+| `max_storage_bytes` | `104857600`（100 MiB） | 同上；**库内计数**，不覆盖 WAL / 临时文件 |
+| `max_links_per_day` | `5000` | MCP `memory_link` / HTTP 写路径 |
+| `max_page_size` | `1000` | **HTTP handler 专属**（stdio 不经过） |
+| `max_inflight_requests` | `0`（禁用） | **HTTP router 准入层**（值为 `0` 时不装配） |
+| `vector_index_capacity` | `100000` | 内存 HNSW 驻留条目；触顶驱逐最旧（被驱逐记忆退化为关键词检索） |
+| `vector_index_hard_fail_at_cap` | `false` | `true` ⇒ 触顶拒绝新插入（记 `hnsw.eviction` ERROR），但**不阻止** DB 落库 |
+
+- 超限形态：MCP 错误串含 `QUOTA_EXCEEDED`；HTTP 面 `429` + `{"error":"QUOTA_EXCEEDED","limit","current","max"}`。
+- 核对命令：`ai-memory quota-status --agent-id <id> --namespace <ns> --json`（字段在 `quota` 对象内）。
+- 探针：`memory.agent-mate.ai/scripts/limits-probe.sh`（一次性库 + 每轮全新身份 + **仅 env 注入**小阈值）。
+
 ## Lesson / guidance
 
 1. **不要用 git 谱系判断上游版本差异**。上游会重写历史；`git log <tag>..main` 与 `git diff` 会直接失效。
@@ -182,6 +198,15 @@ src/storage/migrations.rs:1507
     实测 `memory_recall` 的 `description` 只有 "Recall memories relevant to a"（句子被砍断），`memory_store` 只有 "Store a memory"；回包的 key 也只有 `name` / `description` / `inputSchema` 三个，**没有** `docs`。
     完整说明在 `memory_capabilities` 的 **verbose drilldown**：`{family:<族>, include_schema:true, verbose:true}` ⇒ 响应的 `tools[]` 每项带完整 `docs`，且每个参数带 `description`；对 8 个族逐个取即可覆盖全部 101 项（实测 101/101 取到）。
     ⇒ 凡是要写「这个工具做什么」（对外文档、指引页、README），底稿一律取自这里，而不是 `tools/list`。
+
+20. **`[limits]` 的「配置生效」不等于「行为生效」**（2026-09-21 实测，探针 `memory.agent-mate.ai/scripts/limits-probe.sh`）：
+    ① 优先级 env > `[limits]` > 编译默认，且**任意层非正值视为未设**（`0` 不是「禁用配额」而是回落到编译默认；仅 `max_inflight_requests` 的 `0` 是「不装配 HTTP 准入层」的特殊语义）；
+    ② 配额按 **`(agent_id, namespace)` 逐行盖章** —— 行在首次写入时固化**当次进程**的默认值，事后改配置**不追溯**已有身份（探针因此必须「新身份 + 一次性库」）；
+    ③ **CLI 一次性写入不计费**（`ai-memory store` 不走 `check_and_record`）⇒ 只有 daemon 面 MCP `memory_store` / `memory_link` 能验证配额，用 CLI 验会得出「配额失效」的假结论；
+    ④ 环境变量有**两套前缀**：`AI_MEMORY_MAX_{MEMORIES_PER_DAY,STORAGE_BYTES,LINKS_PER_DAY,PAGE_SIZE,INFLIGHT_REQUESTS}` 与 **`AI_MEMORY_VECTOR_INDEX_{CAPACITY,HARD_FAIL}`**（后者**不是** `AI_MEMORY_MAX_*`，写错静默不生效）；
+    ⑤ **触顶日志 target 是 `hnsw.eviction`，而 MCP 默认 directive 只有 `ai_memory=info`，不覆盖它** ⇒ 断言「触顶被拒」时必须显式放宽 `RUST_LOG`，否则观测不到日志而误判功能失效（本条是首轮探针假失败的实际原因）；
+    ⑥ `max_page_size` 与 `max_inflight_requests` **仅 HTTP 面**生效（准入层在 HTTP router 装配）⇒ 不能借它们给 stdio 会话做并发限流；
+    ⑦ **`quota-status` 查错 namespace 会「自建行 + 报默认值」**：MCP `memory_store` 的默认 namespace 是 **`global`**（写入响应的 `namespace` 字段即证据，且用量计数 `current_memories_today` 记在该行），而 `quota-status --namespace <ns>` 对**不存在的** `(agent, namespace)` **会现场建行**并按当前 env / 编译默认盖章 ⇒ 用 `default` 去查落在 `global` 的写入，会得到一行「看起来注入没生效」的假数据（`max_memories_per_day=1000`、用量 0）。交叉核对必须与写入用**同一 namespace**；本仓探针曾因此写出**自证式**断言（查询本身带着注入 env，于是自己把值写进了新行），已修正为「去掉 env + `--namespace global`」。
 
 ## Links
 
