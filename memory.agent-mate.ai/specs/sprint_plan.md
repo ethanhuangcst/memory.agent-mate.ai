@@ -12,32 +12,23 @@
 
 > 本节是**独立风险登记**，不属于任何 Sprint —— 风险不随 Sprint 结束而消失。详细设计见 [`admin_portal_design.md`](./admin_portal_design.md) §9 与 §4.3。
 
-| # | 风险 | 机制（已核实的源码依据） | 影响 | 级别 |
-| --- | --- | --- | --- | --- |
-| **R1** | **多用户隔离可能静默失效 —— 所有用户共用同一个库文件** | 库路径解析存在**优先级陷阱**：`AppConfig::effective_db()` 只在「CLI/env 的库路径**恰为默认值** `ai-memory.db`」时才**改用 config 的 `db`**（`src/config.rs:7506-7516`；默认值 `src/daemon_runtime.rs:88`）。而本部署的 `config.toml` 写死 `db = "/data/ai-memory.db"`（`deploy/config.toml.tmpl:13`）。⇒ 任何一条会话**漏设或写错** `AI_MEMORY_DB`，它就会落到**共享的主库**上 | 隔离**读写双向**彻底失效 —— 用户看到并写入的是**别人的记忆**；且 `daemon_runtime.rs:980` 是全子命令唯一解析点，**无报错、无告警、无日志** | **严重** |
-| **R2** | **隔离完全依赖门户一处正确性，无纵深** | 上游不提供任何多租户授权边界：**写路径无可见性过滤**（`store`/`atomise`/`promote` 命中 0）；macaroon 能力令牌 **additive-only**（只放宽、不收紧） | 门户任一缺陷（跨用户复用子进程、会话池化、缓存命错用户）即造成串号，同样无感知 | 高 |
-| **R3** | **SSH 手工 forced command 的同类风险** | `authorized_keys` 里每用户是一条**很长的单行命令**（含 `-e AI_MEMORY_DB=…`，手工拼写）；比门户的配置模板更易写漏（`multiuser_isolation.md` §5.2） | 与 R1 同源同后果；且长单行**难以审计**（逐行生效，权限错一次会连带废掉整文件所有密钥） | 高 |
+| # | 级别 | 类型 | 标题 | 说明 | 影响 | 解决方案 | 验证方法 | 关联文档 | 状态 | 更新日期 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| **R1** | **致命** | 风险 | 多用户隔离可能静默失效 —— 所有用户共用同一个库文件 | 库路径解析存在**优先级陷阱**：`AppConfig::effective_db()` 只在「CLI/env 的库路径**恰为默认值** `ai-memory.db`」时才**改用 config 的 `db`**（`src/config.rs:7506-7516`；默认值 `src/daemon_runtime.rs:88`）。而本部署的 `config.toml` 写死 `db = "/data/ai-memory.db"`（`deploy/config.toml.tmpl:13`）。⇒ 任何一条会话**漏设或写错** `AI_MEMORY_DB`，它就会落到**共享的主库**上 | 隔离**读写双向**彻底失效 —— 用户看到并写入的是**别人的记忆**；且 `daemon_runtime.rs:980` 是全子命令唯一解析点，**无报错、无告警、无日志** | **D1 + D2** | **V1 + V4** | [`admin_portal_design.md`](./admin_portal_design.md) §9 / §4.3 · [`multiuser_isolation.md`](./multiuser_isolation.md) §6 | 未关闭（待 Sprint 3 #5 / #6） | 2026-09-20（2026-09-21 重整） |
+| **R2** | **严重** | 风险 | 隔离完全依赖门户一处正确性，无纵深 | 上游不提供任何多租户授权边界：**写路径无可见性过滤**（`store` / `atomise` / `promote` 命中 0）；macaroon 能力令牌 **additive-only**（只放宽、不收紧） | 门户任一缺陷（跨用户复用子进程、会话池化、缓存命错用户）即造成串号，同样无感知 | **D1 + D3 + D4** | **V3 + V4** | [`admin_portal_design.md`](./admin_portal_design.md) §9 · [`multiuser_isolation.md`](./multiuser_isolation.md) §6 | 未关闭（待 Sprint 3 #5、Sprint 4 #7） | 2026-09-20（2026-09-21 重整） |
+| **R3** | **严重** | 风险 | SSH 手工 forced command 的同类风险 | `authorized_keys` 里每用户是一条**很长的单行命令**（含 `-e AI_MEMORY_DB=…`，手工拼写）；比门户的配置模板更易写漏 | 与 R1 同源同后果；且长单行**难以审计**（逐行生效，权限错一次会连带废掉整文件所有密钥） | **D1 + D2 + D4** | **V1 + V4** | [`multiuser_isolation.md`](./multiuser_isolation.md) §5.2 | 未关闭（待 Sprint 3 #5） | 2026-09-20（2026-09-21 重整） |
+| **D1** | **阻塞** | 依赖 | **fail-closed 不变量**（门户 spawn 前断言） | 断言 `AI_MEMORY_DB` 非空 + 以 `/data/users/` 开头 + 含该 `handle`；不满足则**拒绝启动会话** | 不做则「落错库」无从拦截，R1 / R2 没有兜底 | 设计已定（`admin_portal_design.md` §4.3）；**实施**落 Sprint 3 #5 | **V1** | [`admin_portal_design.md`](./admin_portal_design.md) §4.3 | 设计已定，**未落地** | 2026-09-20（2026-09-21 重整） |
+| **D2** | **阻塞** | 依赖 | **移除 `config.toml.tmpl` 的 `db` 键** | 直接**消除 R1 的落点**：该键一旦不存在，「默认值 → config」这条路径就无路可走，漏设 env 只会退化为相对路径 → **报错（fail-loud）**，而不是静默共用主库。已核实本部署**所有**调用点都显式传库路径（compose 的 `AI_MEMORY_DB`、forced command 的 `-e`、cron 的 `--db`、门户模板），该键冗余 | 不移除则「漏设」这一支**无法**被任何断言覆盖 —— 移除是唯一能覆盖它的手段 | **实施**落 Sprint 3 #5（须实测 `serve` / `curator` / forced command 不受影响） | **V1 + V4** | [`multiuser_isolation.md`](./multiuser_isolation.md) §6（坑 #6 待补） | 未开始（Sprint 3 #5） | 2026-09-20（2026-09-21 重整） |
+| **D3** | **严重** | 依赖 | **一会话一子进程，禁止跨用户复用 / 池化** | 消除 R2 的主要触发面（跨用户复用子进程、会话池化） | 复用即串号，且无感知 | **实施**落 Sprint 3 #5，**固化**在 Sprint 4 #7（会话桥） | **V3** | [`admin_portal_design.md`](./admin_portal_design.md) §4.3 | 未落地（Sprint 3 #5 / Sprint 4 #7） | 2026-09-20（2026-09-21 重整） |
+| **D4** | **中** | 依赖 | **会话审计含解析出的库路径** | 事后可对账「这次会话落在哪个库」 | 缺则事后无法定位串号范围与追责 | **实施**落 Sprint 3 #5，**视图**落 Sprint 4 #4（审计视图） | **V4** | [`admin_portal_design.md`](./admin_portal_design.md) §6 | 未落地（Sprint 3 #5 / Sprint 4 #4） | 2026-09-20（2026-09-21 重整） |
+| **D5** | **阻塞** | 依赖 | **上线前负向验收门禁** | 未通过 V1（负向）就不算通过；不过则阻断 Sprint 5 上线 | 缺则「看起来通过」的上线可能带着 R1 | 门禁落 Sprint 3 #6，**执行**在 Sprint 5 #8 | **V1** | 本文件 Sprint 3 #6 / Sprint 5 #8 | 未落地（Sprint 3 #6） | 2026-09-20（2026-09-21 重整） |
+| **V1** | **阻塞** | 其他 | **负向验证**：漏设 `AI_MEMORY_DB` 的会话必须失败 | 故意注入「漏设 `AI_MEMORY_DB`」的模板启动会话 | 上线**准入门槛**（D5）：不过则不得上线 | 判定：会话**必须失败**；**不得**落到 `/data/ai-memory.db` | 本项即验证方法，不适用 | 本文件 Sprint 3 #6 · [`multiuser_isolation.md`](./multiuser_isolation.md) §7 | 本地预实证：当前会**静默成功**（待 D1 / D2 落地后转失败） | 2026-09-20（2026-09-21 重整） |
+| **V2** | **中** | 其他 | **正向验证**：文件时间戳比对 | 会话结束后比对 mtime | 证明写入落在自己的库（而非共享主库） | 判定：`/data/users/<u>/ai-memory.db` 的 mtime **变化**，且共享主库 `/data/ai-memory.db` **未变化** | 本项即验证方法，不适用 | [`multiuser_isolation.md`](./multiuser_isolation.md) §7 | 本地版已通过（Sprint 2 #5），生产待执行 | 2026-09-20（2026-09-21 重整） |
+| **V3** | **中** | 其他 | **交叉验证**：A 写入后用 B 检索 | A 的 key 写入后，用 B 的 key 检索 | 证明跨用户不可见 | 判定：B **命中不到**；B 显式 `memory_get <A 的记忆 id>` **不可见** | 本项即验证方法，不适用 | [`multiuser_isolation.md`](./multiuser_isolation.md) §7 | 本地版已通过（Sprint 2 #5），生产待执行 | 2026-09-20（2026-09-21 重整） |
+| **V4** | **中** | 其他 | **解析链自检**：`doctor --json` 的 `source` 字段 | 用**与模板完全相同的 env/argv** 跑 `ai-memory doctor --json` | 证明模板实际解析出的库路径正确 | 判定：其 `source` 字段（`src/cli/doctor.rs:117-119`、`:591`）**等于**该用户库路径 | 本项即验证方法，不适用 | [`multiuser_isolation.md`](./multiuser_isolation.md) §7 | 本地版已通过（Sprint 2 #5），生产待执行 | 2026-09-20（2026-09-21 重整） |
 
-**为什么定级「严重」**：多数故障会报错、能被发现；R1 **不会** —— 它表现为「功能正常」，只是所有用户共享同一份记忆。等到有人发现「我读到了别人的记忆」时，数据已经串了很久。
-
-### 必须落地的防线
-
-| # | 防线 | 说明 | 状态 |
-| --- | --- | --- | --- |
-| **D1** | **fail-closed 不变量** | 门户 spawn 前断言 `AI_MEMORY_DB` 非空 + 以 `/data/users/` 开头 + 含该 `handle`；不满足则**拒绝启动会话** | 设计已定（`admin_portal_design.md` §4.3），未落地 |
-| **D2** | **移除 `config.toml.tmpl` 的 `db` 键** | 直接**消除 R1 的落点**：该键一旦不存在，「默认值 → config」这条路径就无路可走，漏设 env 只会退化为相对路径 → **报错（fail-loud）**，而不是静默共用主库。已核实本部署**所有**调用点都显式传库路径（compose 的 `AI_MEMORY_DB`、forced command 的 `-e`、cron 的 `--db`、门户模板），该键冗余 | 未开始：**未落地**（Sprint 3「多用户数据隔离实施」） |
-| **D3** | **一会话一子进程，禁止跨用户复用/池化** | 消除 R2 的主要触发面 | 未落地（Sprint 3 实施、Sprint 4 会话桥固化） |
-| **D4** | **会话审计含解析出的库路径** | 事后可对账「这次会话落在哪个库」 | 未落地（Sprint 3 实施、Sprint 4 审计视图） |
-| **D5** | **上线前负向验收** | 未通过 V1（负向）就不算通过 | 未落地（见 **Sprint 3「多用户隔离端到端验证」**；不过则阻断 Sprint 5 上线） |
-
-### 验证方法（可执行）
-
-| # | 验证 | 判定 |
-| --- | --- | --- |
-| **V1** | **负向**：故意注入「漏设 `AI_MEMORY_DB`」的模板启动会话 | 会话**必须失败**；**不得**落到 `/data/ai-memory.db`（验证 D1 + D2 生效） |
-| **V2** | 正向：会话结束后比对文件时间戳 | `/data/users/<u>/ai-memory.db` 的 mtime **变化**，且共享主库 `/data/ai-memory.db` **未变化** |
-| **V3** | 交叉：A 的 key 写入后，用 B 的 key 检索 | B **命中不到**；B 显式 `memory_get <A 的记忆 id>` **不可见** |
-| **V4** | 解析链自检：用**与模板完全相同的 env/argv** 跑 `ai-memory doctor --json` | 其 `source` 字段（= 实际解析出的库路径，`src/cli/doctor.rs:117-119`、`:591`）**等于**该用户库路径 |
+> **级别口径**（2026-09-21 由原「严重 / 高」换算，变更记录留痕）：**致命** = 不报错 + 后果为跨用户数据串号（发现时已污染）；**阻塞** = 不解决则不得上线；**严重** = 单点失效即串号或安全边界失效；**中** = 影响可审计性 / 可观测性。
+> **类型口径**：风险 = 可能发生的失效；依赖 = 关闭风险所依赖的落地项；其他 = 验证方法（可执行判据）。风险行 R 的「解决方案」指向防线行 D、「验证方法」指向验证行 V；**R / D / V 编号沿用原登记**，以便 Sprint 2 #5、Sprint 3 #5 / #6、Sprint 5 #5 / #8 按编号引用。
 
 ---
 
@@ -58,6 +49,20 @@ Sprint Goal: 制定产品化计划
 | 5 | 多用户隔离方案 | 研究 | MCP | 四档方案对比（含 11 条源码依据）；单账号 N 密钥澄清；5 个坑；档位定为「一用户一 DB」 | [`multiuser_isolation.md`](./multiuser_isolation.md) | 已完成 |
 | 6 | admin portal 设计方案 | 任务 | Web App | 两 stack 职责与数据流、密钥模型、CF Access 边界、耦合面 C1–C8、静默失败点 S4、威胁模型 T1–T10 全部成文 | [`admin_portal_design.md`](./admin_portal_design.md) | 已完成 |
 | 7 | 完善并评审 `product-backlog.md` | 任务 | 产品 | 占位符全部填实；评审改进点逐条确认；**已定稿**（三层结构 + 26 条 Backlog + 工具清单 [`mcp_tool_inventory.md`](./mcp_tool_inventory.md)） | [`product-backlog.md`](./product-backlog.md) | 已完成 |
+
+### Retrospective
+
+**本轮学到**
+
+- 先立「版本坐标 + 契约点」再谈功能：上游发版会重写历史、改 schema、且不拒绝更新的库，没有 [`../upstream.lock`](../upstream.lock) 与 `make preflight-test` 做护栏，后面每条结论都会漂移。
+- 研究类条目必须留下**可复跑的证据**（探针脚本 + 源码锚点），否则下一轮无法复核，只能重新讨论一遍。
+- 方案对比要写在文档里（隔离四档对比 + 11 条源码依据），不写就会在下游以「口头结论」的形式被反复推翻。
+- 决议只留**一个单点**：同一事实写在多处，改一处漏一处就是隐性矛盾。
+
+**下轮改进**
+
+- 每条结论标注「实证 / 推断」，推断项单独列成待验清单，不混在结论里。
+- 文档改名 / 合并必须配防复发护栏（本仓后续补了 `make doc-links`）。
 
 ---
 
@@ -80,13 +85,31 @@ Sprint Goal: 本地启动 + 探针明确方案
 | 7 | **`tmp_user_key_option1.md` 处置**（移入 `specs/` 或加 `.gitignore`） | 任务 | 安全 | 仓根目录不再有未跟踪的留档文件 | [`asset_isolation_plan.md`](./asset_isolation_plan.md) §10 | 已完成（2026-09-20：三选一由用户拍板为**直接删除**，文件已从仓根移除；内容不含真实密钥，无需留档） |
 | 8 | **探针：上游保存 memory 时是否支持多语言** | 研究 | MCP | 给出明确结论（是否支持多语言存储 / 检索、有无相关配置项、有无已知限制）；结论回写 `product-backlog.md` 的「记忆内容的多语言支持」条目 | `product-backlog.md` #10 · 上游源码 | 已完成（2026-09-21：**结论 = 部分支持**——① 存储不限语言（简中/繁中/英文写入全成功）；② 语义召回 `mode=hybrid` 与按 id 直取三语言一律可用；③ `memory_search` 关键词通路受 FTS5 默认分词器 `unicode61`（建表无 `tokenize=`）限制，只认**完整词元**（英文=单词、中文=标点界定整段），词元内子串与**简繁交叉**不命中；④ **无任何**语言/分词/检索配置项。可复跑探针 [`../scripts/i18n-probe.sh`](../scripts/i18n-probe.sh)（三语言×三通路矩阵，退出码 0；STRICT 边界断言全绿）；客户端通路（`ai-memory-local`）交叉复现一致；源码依据（建表 + `sanitize_fts_query` + `[mcp]` 段）落 [`mcp/mcp-design.md`](./mcp/mcp-design.md) §9 J4。回写：[`product-backlog.md`](./product-backlog.md) #10（Done）· [`mcp/mcp-test.md`](./mcp/mcp-test.md) §1 L1.6 / §4-E · [`knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md`](./knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md) 多语言专表 · [`architecture.md`](./architecture.md) §4.1） |
 | 9 | **`--profile` 定档**：对外暴露哪一档；SSH / 门户模板是否补写 `--profile` | 研究 | MCP | 实测 `v0.10.0` 各档工具数（本地 clone 实测：core 7 / graph 19 / admin 21 / power 56 / **full 101**；`memory_capabilities` 所有档位 always-on，故实际注册数 +1）；决议写入门户模板、SSH 模板与公开文档 | [`mcp_tool_inventory.md`](./mcp_tool_inventory.md) §5 · `product-backlog.md` #12 | 已完成（2026-09-21：**决议 = 对外（SSH / 门户统一）`core`（8 项）；管理员另设 **`admin`（22 项）**入口，两条模板分离**）。理由：对外取最小面；管理员要在自身通道里做删除 / 遗忘 / 清理与治理审批（Lifecycle + Governance），`core` 做不到；而 Meta / Archive 族（`memory_stats` / `memory_archive_stats`）属 `full` 档、**不随 `admin` 开放**，管理员确需只读统计类工具时另开条目评估。**实测**（探针 [`../scripts/profile-probe.sh`](../scripts/profile-probe.sh)，7 档全绿、退出码 0）：默认档（不传 `--profile`）= **8**（与 core 一致且**不报错**）/ core=8 / graph=20 / admin=22 / power=57 / full=101 / 自定义 `core,lifecycle`=**14**；`--profile` 与 `--tier smart` **并存生效**（CLI flag 形式，无需 env 回退）。**回写**：[`mcp/mcp-design.md`](./mcp/mcp-design.md) §8.1（实测引文）+ §8.3 #1–#4（由「待决策」转为决议表；新增 #4 已知限制：core 档不含 `memory_delete` / `memory_forget` / `memory_gc`，日后若要开放删除，最小增量档是 `core,lifecycle`（14）而非 admin / full）；[`change-log.md`](./change-log.md) 2026-09-21 小节。**模板落盘已于 2026-09-21 收尾完成**（原「移交 Sprint 3 #2」）：四处模板均已写 `--profile` —— SSH 主人行 `admin` / 用户行 `core`（[`deployment.md`](./deployment.md) §4.3 与 [`mcp/mcp-design.md`](./mcp/mcp-design.md) §5.1–§5.2）、门户 `launch.argv`（[`web-portal/web-design.md`](./web-portal/web-design.md) §3.3）、本地客户端条目（[`mcp/mcp-test.md`](./mcp/mcp-test.md) §3）；另新增面向最终用户的能力文档 [`mcp/mcp-capabilities.md`](./mcp/mcp-capabilities.md)（档位 + 全量 101 项工具说明 + 例子，门户接入指引页唯一内容源）；`product-backlog.md` #12 标 Done、#19 描述补决议（本轮已授权改 backlog）。**剩余**：生产上线后用 `initialize` 回包复核一次） |
-| 10 | **MCP 对外能力清单定稿**（档位 / i18n 范围 / LLM 与备份选择的最终决议） | 任务 | MCP | 清单定稿并落入公开文档；档位与 **#9** 的决议一致 | [`mcp_tool_inventory.md`](./mcp_tool_inventory.md) · `product-backlog.md` #19 | 未开始 |
-| 11 | **更新 `memory.agent-mate.ai/specs/` 相关技术方案（明确方案部分）** | 任务 | 文档 | 受本次重排影响的技术 spec 全部同步（编号引用去耦合、排期指向正确）；各文件追加变更记录 | `memory.agent-mate.ai/specs/` 全目录 | 未开始 |
+| 10 | **MCP 对外能力清单定稿**（档位 / i18n 范围 / LLM 与备份选择的最终决议） | 任务 | MCP | 清单定稿并落入公开文档；档位与 **#9** 的决议一致 | [`mcp_tool_inventory.md`](./mcp_tool_inventory.md) · `product-backlog.md` #19 | **已完成（2026-09-21 核查）**：四项最终决议**均已定稿且有落点** —— ① 档位 = 对外 `core`（8）/ 管理员 `admin`（22）：[`mcp/mcp-design.md`](./mcp/mcp-design.md) §8.1 + §8.3，且已写入四处模板（[`deployment.md`](./deployment.md) §4.3 / [`mcp/mcp-design.md`](./mcp/mcp-design.md) §5.1–§5.2 / [`web-portal/web-design.md`](./web-portal/web-design.md) §3.3 / [`mcp/mcp-test.md`](./mcp/mcp-test.md) §3）② i18n 范围 = 部分支持（存储与语义召回可用、关键词通路按 FTS5 词元、无配置项）：`product-backlog.md` #10（Done）+ [`mcp/mcp-design.md`](./mcp/mcp-design.md) §2 / §9 J4 + [`mcp/mcp-test.md`](./mcp/mcp-test.md) §1 L1.6 / §4-E + 探针 [`../scripts/i18n-probe.sh`](../scripts/i18n-probe.sh) ③ LLM 选择 = `tier smart` + `qwen-plus` + `qwen3.7-text-embedding`（`dim 1024`）+ 显式 `base_url`：[`architecture.md`](./architecture.md) §2.1 #3/#4 · [`adr/ADR-007`](./adr/ADR-007-qwen-private-maas-endpoint-and-measured-embedding-dim.md) · [`deployment.md`](./deployment.md) §5.3 ④ 备份选择 = OSS 私有桶 + 每日外迁 + sha256 校验 + RPO ≤ 24h / RTO ≤ 2h：`product-backlog.md` #9 · [`deployment.md`](./deployment.md) §8。清单已落入公开文档 [`mcp/mcp-capabilities.md`](./mcp/mcp-capabilities.md)（用户版，门户接入页唯一内容源）；`product-backlog.md` #19 → Done。**唯一剩余**：生产环境上线后用 `initialize` 回包核对实际暴露工具数 —— 已并入 **Sprint 5 #8 上线验收**，不阻断本条 |
+| 11 | **更新 `memory.agent-mate.ai/specs/` 相关技术方案（明确方案部分）** ② [`mcp/mcp-capabilities.md`](./mcp/mcp-capabilities.md) 结构重构（§1+§2 合并并补 `mcp.json` 示例；工具说明改为**按档位**逐档一张表，新增「示例」列） ③ 本文件体例改造（阻断级风险三表合并为单表；每个 Sprint 后新增 `Retrospective` 章节） | 任务 | 文档 | ① 受本次重排影响的技术 spec 全部同步（编号引用去耦合、排期指向正确），各文件追加变更记录 ② 能力文档按档位矩阵化：6 张档位表（core 8 / admin 22 / graph 20 / power 57 / full 101 / `core,lifecycle` 14）逐项含「做什么 / 什么时候用 / 示例」，工具数与 [`../scripts/profile-probe.sh`](../scripts/profile-probe.sh) 实测一致 ③ 风险单表化（R/D/V 全部成行、保留编号锚点）+ 每个 Sprint 有 Retrospective 章节；**无 emoji、相对链接可解析、对外示例一律占位符** | `memory.agent-mate.ai/specs/` 全目录 · [`mcp/mcp-capabilities.md`](./mcp/mcp-capabilities.md) · 本文件 | 进行中（2026-09-21：完成 ② ③ 与 Sprint 2 #10 回写；① 的剩余同步项待续） |
 | 12 | **目录改名收口 + specs 整合**（`hk_vps_4/` → `memory.agent-mate.ai/`；16 份 spec 合并为 8 份） | 任务 | 文档 | ① git 以 rename（R100）记录且全仓路径引用同步（Makefile / `.gitignore` / CI / 脚本 / specs / adr / knowledge）；② 含密与派生文件仍被忽略（`git check-ignore` 逐条断言 + `make secret-check` 干净）；③ `make doc-links` / `make preflight-test` / `iso-probe.sh` 全绿；④ specs 唯一真源 = `memory.agent-mate.ai/specs/`（产品级 2 + `mcp/` 2 + `web-portal/` 3） | [`architecture.md`](./architecture.md) · [`deployment.md`](./deployment.md) · [`mcp/mcp-design.md`](./mcp/mcp-design.md) · [`web-portal/web-design.md`](./web-portal/web-design.md) · [`../scripts/link-check.sh`](../scripts/link-check.sh) | 已完成（2026-09-20：41 个 R100 rename；新增 `make doc-links` 防「删文档留悬空引用」复发） |
 | 13 | **需求覆盖审计 + 回溯引用**（产品概述 / 需求层 → Backlog） | 任务 | 产品 | ① `# 需求` 节 26 条与 Backlog #1–#26 **逐条对应、无遗漏** ② 「产品概述」层（需求边界 / 用户模型 / 鉴权）带验收条件却原无条目的 5 项补入 **#27–#31**，Backlog 由 26 条扩为 **31 条** ③ 第一部分每项需求后追加 `→ [Backlog #N 名称](#product-backlog)`，共 **44 处**（表格行的链接落在**末列单元格内**，不破坏表格）④ 新增「覆盖要求 / 回溯引用」约定：**条目名为主、编号为辅**（编号会随重排失效） | [`product-backlog.md`](./product-backlog.md) | 已完成（2026-09-21：44 处回溯引用 + 5 项补录全数落地；后续改第一部分需求须同步检查第二部分） |
 | 14 | **文档风格收口：自有文档去 emoji / 图标** | 任务 | 文档 | 全仓自有 spec + `.codebuddy/plans/` 共 **14 个文件、180 处** emoji / 图标改为**文字承载**（状态 → 已完成 / 进行中 / 待决策 / 待提供 / 未开始；是否 → `是` / `否`，后接文字已自解释则直接删；告警 → `注意：`；级别 → 阻断 / 高危 / warn / info）；`ai-memory-mcp/`（上游 vendored、自带 `.git`）**未改**；`make doc-links` / `make secret-check` 全绿 | [`change-log.md`](./change-log.md) `## 2026-09-21` | 已完成（2026-09-21：仅剩 **1 处显式例外** —— `adr/ADR-005`「提示话术」代码块内的 `❌ 准入判定：不通过` 系 `scripts/upstream-preflight.sh` 输出原文，改文档须与改脚本同批） |
 
 > **执行本 Sprint 时须核对的静默失败点**：`dev-plan.md` §3.4 的三个（embedder 降级、curator fail-open `tagged=0`、config 挂载路径错误导致 tier 退回 semantic）+ 本文件「**阻断级风险**」的 **R1**（会话漏设/写错 `AI_MEMORY_DB` → 所有用户静默共用同一库）。**R1 是其中唯一不报错、且后果是数据串号的一项。**
+
+### Retrospective
+
+> 截至 2026-09-21 的阶段性回顾（#10 已完成、#11 进行中）。
+
+**本轮学到**
+
+- **上游 `tools/list` 的 `description` 是被截断的短描述**（≤ 50 cl100k token，实测 `memory_recall` 只有 "Recall memories relevant to a"）。写对外说明必须改走 `memory_capabilities` 的 verbose drilldown（`family` + `include_schema` + `verbose`）取完整 `docs` —— 照抄短描述会写出残缺句子。已归档 `knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md`。
+- **`--profile` 不传时默认就是 `core` 且完全不报错** ⇒ 模板必须**显式写档位**（用户行 `core`、管理员行 `admin`），否则「看起来对了」其实随时可能静默漂移；同一口径要在 SSH / 门户 / 客户端 / 对外文档**四处一致**。
+- **先想「要做哪些事」再选档**：管理员入口先定 `full`（101）后收敛到 `admin`（22）—— Meta / Archive 这类只读统计不该随管理员入口整体开放。
+- **研究类条目以「只读探针 + 退出码契约化」为默认起点**（i18n / profile / iso 三支探针同构、只读、可复跑），结论才能被复核，而不是靠一次性手工观察。
+- **隔离的失效模式是「静默」**：R1 不报错、不告警、无日志，只能靠**负向验证 V1**（漏设 env 必须失败）+ **D2 移除 config 的 `db` 键**来消除落点；正向用例证明不了它。
+
+**下轮改进**
+
+- 决议回写时同步检查「是否存在第二处口径」，避免同一事实在多份文档里各写一份（档位数字、工具数一律指向探针实测）。
+- **只有生产环境才成立的验证**（如 `initialize` 回包核对）单独登记到上线验收，不要挂在执行条目里当「未完成」，否则会长期假性阻塞。
+- 对外文档（用户可阅读的部分）示例一律占位符化，不出现真实地址 / 端口 / 密钥。
 
 ---
 
@@ -111,6 +134,14 @@ Sprint Goal: MCP 本地实现并验证
 
 > **执行本 Sprint 时须核对的静默失败点**：`dev-plan.md` §3.4 的三个 + 本文件「**阻断级风险**」的 **R1**。凡涉及「会话落库路径」的验证，一律以 **V1（负向）** 为准入门槛。
 
+### Retrospective
+
+**本轮学到**
+- 待填（本 Sprint 结束时补）。
+
+**下轮改进**
+- 待填。
+
 ---
 
 ## Sprint 4
@@ -131,6 +162,14 @@ Sprint Goal: 门户开发并与 MCP 集成
 | 8 | 定制 — **公网入口与认证边界**落地 | 功能 | 部署 | 两个域名分流正确（管理面 CF Access / MCP 面令牌）；跨面调用被拒；新增公网入口的决议已同步到 `deployment_strategy.md` §0 | `product-backlog.md` #16 · [`admin_portal_design.md`](./admin_portal_design.md) §7 / §12 | 未开始 |
 | 9 | 定制 — **升级治理：门户镜像随上游重建** | 功能 | 治理 | 门户镜像的构建从 [`../upstream.lock`](../upstream.lock) 注入 tag；升级清单含「重建门户镜像」一步并被演练过，避免门户与部署制品版本漂移 | `product-backlog.md` #18 · [`admin_portal_design.md`](./admin_portal_design.md) §4.2 | 未开始 |
 
+### Retrospective
+
+**本轮学到**
+- 待填（本 Sprint 结束时补）。
+
+**下轮改进**
+- 待填。
+
 ---
 
 ## Sprint 5
@@ -148,9 +187,17 @@ Sprint Goal: 生产上线与备份闭环
 | 5 | **admin portal 部署 + 多用户隔离落地** | 功能 | 部署 | 走通「签发 key → 建立会话 → 隔离生效」；通过 [`multiuser_isolation.md`](./multiuser_isolation.md) §7 与 [`admin_portal_design.md`](./admin_portal_design.md) §13；**且必须先通过 Sprint 3 的隔离端到端验证（含负向 V1）** | `product-backlog.md` #4 / #26 · 本文件 Sprint 3 #6 | 未开始 |
 | 6 | 定制 — **接入面**落地（HTTP MCP + SSH stdio） | 功能 | 部署 | 两条路径都能完成 MCP 握手并成功读写；**停掉门户后 SSH 路径仍可用**（降级不失效） | `product-backlog.md` #14 · [`admin_portal_design.md`](./admin_portal_design.md) §3.1 | 未开始 |
 | 7 | 定制 — **备份与恢复**落地（含门户自身库）+ 首次外迁 + 恢复演练 | 功能 | 部署 | 每用户库逐一快照 + manifest；**门户自身库**（与用户记忆库分离存放）纳入同一外迁流程；按 RPO ≤ 24h / RTO ≤ 2h / 日备 30 代 + 月备 12 代 落地；恢复演练可重复执行且通过 | `product-backlog.md` #9 · [`multiuser_isolation.md`](./multiuser_isolation.md) §5.4 | 未开始 |
-| 8 | **上线验收** | 任务 | 部署 | 三份验收清单全部通过：`dev-plan.md` §3.3 冒烟 + [`multiuser_isolation.md`](./multiuser_isolation.md) §7 + [`admin_portal_design.md`](./admin_portal_design.md) §13 | `product-backlog.md` #26 | 未开始 |
+| 8 | **上线验收** | 任务 | 部署 | 三份验收清单全部通过：`dev-plan.md` §3.3 冒烟 + [`multiuser_isolation.md`](./multiuser_isolation.md) §7 + [`admin_portal_design.md`](./admin_portal_design.md) §13；**另用 `initialize` 回包核对对外模板实际暴露的工具数**（用户 `core` = 8 / 管理员 `admin` = 22）—— 承接 **Sprint 2 #10** 的唯一剩余项；同时作为 **D5 / V1** 的执行点 | `product-backlog.md` #26 | 未开始 |
 
 > **执行本 Sprint 时须核对的静默失败点**：`dev-plan.md` §3.4 的三个（embedder 降级、curator fail-open `tagged=0`、config 挂载路径错误导致 tier 退回 semantic）+ 本文件「**阻断级风险**」的 **R1**。**上线前 D5 必须关闭**：Sprint 3 的负向验证未通过则不得上线。
+
+### Retrospective
+
+**本轮学到**
+- 待填（本 Sprint 结束时补）。
+
+**下轮改进**
+- 待填。
 
 ---
 
@@ -167,6 +214,14 @@ Sprint Goal: 升级治理闭环
 | 3 | **最低耦合、尽量自动化的升级方案** | 功能 | 治理 | 一次升级可在「改 [`../upstream.lock`](../upstream.lock) → 跑预检 → 重建/重启」内完成，无需手工比对版本号；门户镜像重建纳入同一条链路 | `product-backlog.md` #23 · `adr/ADR-004-version-contract-single-source-of-truth.md` | 未开始 |
 | 4 | **制定部署/升级方案与脚本** | 任务 | 治理 | 相关脚本落地且可重复执行 | `product-backlog.md` #24 · `dev-plan.md` §5 | 未开始 |
 | 5 | **升级方案端到端验证并文档化** | 任务 | 治理 | 完整演练一次升级（预检 → 部署 → 验收 → **回滚演练**）并留痕。**注意**：回滚**必须**用快照覆盖 —— 上游不拒绝「比自身更新的库」（旧二进制会静默读写不认识的 schema） | `product-backlog.md` #25 · `knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md` | 未开始 |
+
+### Retrospective
+
+**本轮学到**
+- 待填（本 Sprint 结束时补）。
+
+**下轮改进**
+- 待填。
 
 ---
 
@@ -193,3 +248,4 @@ Sprint Goal: 升级治理闭环
 | 2026-09-21 | **Sprint 2 #8 完成（多语言探针结论）+ #6 key 收尾**：#8 结论 = **部分支持**（存储 / 语义召回 / 按 id 直取三语言全可用；关键词通路按 FTS5 `unicode61` 只认完整词元，词元内子串与简繁交叉不命中；无配置项），可复跑探针 [`../scripts/i18n-probe.sh`](../scripts/i18n-probe.sh) 三次运行全绿（含 STRICT 边界断言与 CONFLICT 幂等），客户端通路交叉复现一致；回写 [`product-backlog.md`](./product-backlog.md) #10（ToDo → Done，授权来源 = 该行 AC「结论回写本行描述」）· [`mcp/mcp-test.md`](./mcp/mcp-test.md) §1 L1.6 + §4-E（TC-I18N-01..06）· [`mcp/mcp-design.md`](./mcp/mcp-design.md) §2 + §9 J4 · [`knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md`](./knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md) 多语言专表 · [`architecture.md`](./architecture.md) §4.1。#6 门户专用 key 已填入并双重实测（`qwen-verify.sh --key` → 1024 维同模型；`-e DASHSCOPE_API_KEY` 覆盖注入隔离会话 → 写入 + `mode=hybrid` 召回，无鉴权失败） |
 | 2026-09-21 | **Sprint 2 #9 完成（`--profile` 定档）**：决议 = **对外（SSH / 门户统一）`core`（8 项）；管理员另设 `full`（101 项）入口，两条模板分离**。新增只读探针 [`../scripts/profile-probe.sh`](../scripts/profile-probe.sh)（7 档独立进程，只发 `initialize` + `tools/list` + `memory_capabilities`）：实测 core=8 / graph=20 / admin=22 / power=57 / full=101 / `core,lifecycle`=14 / 默认档（不传 `--profile`）= 8 **且不报错**；`--profile` 与 `--tier smart` 并存生效（CLI flag，无需 env 回退）。决议落 [`mcp/mcp-design.md`](./mcp/mcp-design.md) §8.1（实测引文）+ §8.3（#1 / #2 由待决策转为已定、#3 验收方式落到 profile-probe、新增 #4 已知限制：core 档不含 `memory_delete` / `memory_forget` / `memory_gc`，日后开放删除的最小增量档是 `core,lifecycle`（14）而非 admin / full）；[`change-log.md`](./change-log.md) 2026-09-21 小节。**AC 的另一半「决议写入门户 / SSH 模板」按用户「只完成 #9、范围最小化」口径移交 Sprint 3 #2（Backlog #12）**，届时一并回写 `product-backlog.md` #12 / #19 描述列（本行未授权改 backlog，故不动） |
 | 2026-09-21 | **Sprint 2 #9 收尾（模板定档落盘 + 用户版能力文档）**：管理员入口档位由 `full`（101）改定 **`admin`（22）**（理由：覆盖删除 / 遗忘 / 清理 / 审批即可，Meta / Archive 只读统计类不随管理员入口开放）；`--profile` 已写入四处模板 —— [`deployment.md`](./deployment.md) §4.3、[`mcp/mcp-design.md`](./mcp/mcp-design.md) §5.1–§5.2、[`web-portal/web-design.md`](./web-portal/web-design.md) §3.3、[`mcp/mcp-test.md`](./mcp/mcp-test.md) §3；Sprint 3 #2 标记**提前完成**；新增 [`mcp/mcp-capabilities.md`](./mcp/mcp-capabilities.md)（面向最终用户：档位 + 全量 101 项工具说明 + 例子，门户接入指引页唯一内容源）；`product-backlog.md` #12 → Done、#19 描述补决议（本轮授权改 backlog）；[`change-log.md`](./change-log.md) 2026-09-21 新小节 |
+| 2026-09-21 | **Sprint 2 #10 定稿核查 + 两处文档体例改造（#11 扩展）**：① **#10 判定已完成** —— 四项最终决议（档位 `core`（8）/ `admin`（22）、i18n 部分支持、LLM `qwen-plus` + `dim 1024`、备份 OSS 私有桶 + 每日外迁）**均已定稿且有落点**，清单已落入 [`mcp/mcp-capabilities.md`](./mcp/mcp-capabilities.md)；`product-backlog.md` #19 → Done；唯一剩余「生产环境 `initialize` 回包核对」并入 **Sprint 5 #8 上线验收** ② 「阻断级风险」三表（风险 / 防线 / 验证）合并为**单表 11 列**（编号 / 级别 / 类型 / 标题 / 说明 / 影响 / 解决方案 / 验证方法 / 关联文档 / 状态 / 更新日期），R1–R3 + D1–D5 + V1–V4 **全部成行并保留编号**（维持 Sprint 2 #5、Sprint 3 #5/#6、Sprint 5 #5/#8 的引用锚点）；级别由原「严重 / 高」换算为 **致命 / 阻塞 / 严重 / 中**，口径写在表下 ③ **Sprint 1–6 各新增 `Retrospective` 章节**（Sprint 1 / 2 写实际内容，3–6 留占位待填）④ **#11 事项扩展**为含上述 ②③ 与能力文档重构，状态置「进行中」 |

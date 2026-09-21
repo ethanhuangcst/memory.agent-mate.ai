@@ -8,6 +8,52 @@
 
 ## 2026-09-21
 
+### Sprint 2 #10 定稿核查 + 两处文档体例改造（#11 扩展）
+
+**做了什么**：核查「MCP 对外能力清单定稿」是否真的完成（结论：**已完成**），并把用户要求的两处文档改造登记进 Sprint 2 #11、本轮一并做完。
+
+**一、#10 的四项最终决议 —— 均已定稿且有落点**
+
+| 决议 | 结论 | 落点 |
+| --- | --- | --- |
+| 档位 | 对外 = `core`（8 项）；管理员入口 = `admin`（22 项） | [`mcp/mcp-design.md`](mcp/mcp-design.md) §8.1 / §8.3 + 四处模板（[`deployment.md`](deployment.md) §4.3 · [`mcp/mcp-design.md`](mcp/mcp-design.md) §5.1–§5.2 · [`web-portal/web-design.md`](web-portal/web-design.md) §3.3 · [`mcp/mcp-test.md`](mcp/mcp-test.md) §3） |
+| i18n 范围 | **部分支持**（存储与语义召回可用；关键词通路受 FTS5 `unicode61` 限制、简繁不归一；无任何配置项） | `product-backlog.md` #10（Done）· [`mcp/mcp-design.md`](mcp/mcp-design.md) §2 / §9 J4 · [`mcp/mcp-test.md`](mcp/mcp-test.md) §1 L1.6 / §4-E · 探针 [`../scripts/i18n-probe.sh`](../scripts/i18n-probe.sh) |
+| LLM 选择 | `tier = smart` + `qwen-plus` + `qwen3.7-text-embedding`（`dim = 1024`）+ 显式 `base_url` | [`architecture.md`](architecture.md) §2.1 #3/#4 · [`adr/ADR-007`](adr/ADR-007-qwen-private-maas-endpoint-and-measured-embedding-dim.md) · [`deployment.md`](deployment.md) §5.3 |
+| 备份选择 | OSS 私有桶（香港 + SSE）+ 每日外迁 + sha256 校验 + RPO ≤ 24h / RTO ≤ 2h | `product-backlog.md` #9 · [`deployment.md`](deployment.md) §8 |
+
+清单已落入公开文档 [`mcp/mcp-capabilities.md`](mcp/mcp-capabilities.md)；`product-backlog.md` #19 → **Done**。**唯一剩余**：生产环境上线后用 `initialize` 回包核对实际暴露工具数 —— 已并入 `sprint_plan.md` **Sprint 5 #8 上线验收**，不再挂在执行条目里造成假性阻塞。
+
+**二、[`mcp/mcp-capabilities.md`](mcp/mcp-capabilities.md) 结构重构（用户视角）**
+
+| 改动 | 说明 |
+| --- | --- |
+| §1 与 §2 合并 | 合并为「这是什么，怎么接上」，并新增 `mcp.json` **三种形态**示例：托管门户（HTTP）/ 本机自托管（stdio via `docker exec`）/ SSH 通道；示例一律占位符（`<MCP_HOST>` / `<你的令牌>`），并注明「档位由服务端决定、改完必须重连」 |
+| 工具说明改为**按档位** | 原「按族」的 8 个小节取消，改为 **6 张档位详表**：`core` 8 / `admin` 22 / `graph` 20 / `power` 57 / `full` 101 / 自定义 `core,lifecycle` 14；每张表列固定为「工具 / 做什么 / 什么时候用 / **示例**」 |
+| 例子进表格 | 原独立的「一个完整的例子」章节**删除**，示例并入表格的「示例」列（一句自然语言用法） |
+
+工具数与成员**以运行时实测为准**，非手工整理：档位计数用 [`../scripts/profile-probe.sh`](../scripts/profile-probe.sh)（7 档全绿），成员清单用逐档 `tools/list`，功能说明用 `memory_capabilities` 的 verbose drilldown（8 族，101/101 取到完整 `docs`）—— 裸 `tools/list` 的 `description` 是被截断的短描述，不可用于对外说明。
+
+**三、[`sprint_plan.md`](sprint_plan.md) 体例改造**
+
+- **阻断级风险单表化**：原「风险 / 必须落地的防线 / 验证方法」三张表合并为**一张 11 列表**（编号 / 级别 / 类型 / 标题 / 说明 / 影响 / 解决方案 / 验证方法 / 关联文档 / 状态 / 更新日期）；**R1–R3 + D1–D5 + V1–V4 全部成行并保留编号**，风险行的「解决方案」指向 D 行、「验证方法」指向 V 行，维持跨条目引用锚点。
+- **级别换算**（原用「严重 / 高」，新体系为 致命 / 阻塞 / 严重 / 中 / 低）：
+
+| 编号 | 原级别 | 新级别 | 理由 |
+| --- | --- | --- | --- |
+| R1 | 严重 | **致命** | 不报错、不告警，后果是跨用户数据串号（发现即已污染） |
+| R2 | 高 | **严重** | 单点失效即串号（隔离无纵深） |
+| R3 | 高 | **严重** | 与 R1 同源同后果 |
+| D1 / D2 / D5 | — | **阻塞** | 不落地则不得上线（D2 是唯一能覆盖「漏设」的手段） |
+| D3 | — | **严重** | 跨用户复用 / 池化即串号 |
+| D4 | — | **中** | 影响可审计性 / 可观测性 |
+| V1 | — | **阻塞** | 上线准入门槛（负向） |
+| V2–V4 | — | **中** | 本地版已通过，生产待执行 |
+
+- **每个 Sprint 后新增 `Retrospective` 章节**（本轮学到 / 下轮改进）：Sprint 1 与 Sprint 2 写实际内容（含「`tools/list` 短描述不可用于对外说明」「`--profile` 不写会静默等于 core、口径须四处一致」「先想做什么再选档」「研究类条目以只读探针 + 退出码契约为起点」「R1 只能靠负向验证」），Sprint 3–6 留占位待填。
+- **#11 扩展**：事项追加上述两处改造，验收条件加「档位表工具数与探针实测一致 / 无 emoji / 相对链接可解析 / 对外示例一律占位符」，状态置「进行中」。
+
+**可复跑验证**：`make doc-links`（相对链接）· `make secret-check`（无真实地址与密钥）· `make preflight-test` · `bash memory.agent-mate.ai/scripts/profile-probe.sh`（7 档计数）。
+
 ### 模板定档落盘 + 用户版能力文档（Sprint 2 #9 收尾）
 
 **做了什么**：把 #9 的档位决议真正写进模板；管理员入口档位由 `full`（101）**改定为 `admin`（22）**；新增面向最终用户的能力文档。
