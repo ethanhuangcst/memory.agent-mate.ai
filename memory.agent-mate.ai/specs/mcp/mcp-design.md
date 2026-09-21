@@ -130,18 +130,49 @@ command="docker exec -i -e AI_MEMORY_DB=/data/users/alice/ai-memory.db -e AI_MEM
 - **逐行追加**（最小侵入、易审计、可回滚）—— 不要整文件重写，一次拼错会连带整个文件失效
 - 目录准备命令见 §0.1（属主必须 `aimem:aimem`）
 
-### 5.3 每库背景维护（必补）
+### 5.3 每库背景维护（Sprint 3 #5 定档，2026-09-21 实测）
 
-compose 常驻的 `serve` 与 `curator` **只服务默认库**；每用户库需等价周期维护，否则 TTL 遗忘 / 压缩 / GC 不会跑：
+compose 常驻的 `serve` / `curator` **只服务默认库**（`/data/ai-memory.db`）；每用户库需等价周期维护，否则过期记忆与 WAL 不会被回收。
+
+**调度定档 = 宿主机 cron**，唯一入口是逐库维护脚本（不再用文档内联片段 —— 脚本才能被 cron 稳定调用、被探针静态审计、被路径一致性护栏覆盖）：
 
 ```bash
-for db in /data/users/*/ai-memory.db; do
-  docker exec ai-memory-mcp ai-memory --db "$db" gc
-  docker exec ai-memory-mcp ai-memory --db "$db" curator --once --max-ops 50
-done
+bash memory.agent-mate.ai/scripts/maintain-user-dbs.sh            # 逐库 gc + curator --once
+bash memory.agent-mate.ai/scripts/maintain-user-dbs.sh --dry-run  # 只列出目标库与将执行的命令
+make maintain-user-dbs                                            # 同上（Makefile 入口；可加 ARGS=--dry-run）
 ```
 
-> `--db <path> stats` 通路已实测（各库计数独立）；注意：`gc` / `curator --once` 对每库 TTL 遗忘与 WAL checkpoint 的**覆盖面未验**（Sprint 3「每用户库维护行为定档」）。
+脚本内部形态为**逐 (库, 命令) 独立 `docker exec`**，使失败可精确定位到库：
+
+```bash
+docker exec -e AI_MEMORY_DB=<库> -e AI_MEMORY_REQUIRE_AGENT_ATTESTATION=0 \
+  ai-memory-mcp ai-memory --db <库> gc --json
+docker exec -e AI_MEMORY_DB=<库> -e AI_MEMORY_REQUIRE_AGENT_ATTESTATION=0 \
+  ai-memory-mcp ai-memory --db <库> curator --once --max-ops 50 --json
+```
+
+**覆盖面（实测结论，替代此前「覆盖面未验」注记）**：
+
+| 维护项 | 由谁负责 | 可观测证据 |
+|---|---|---|
+| TTL 驱逐（显式） | `gc` 正文：先折叠 recall-access 延期，再驱逐 `expires_at < now` | `gc --json` 的 `expired_deleted`；gc 后按 id 取不到；存活行保留 |
+| TTL 驱逐（惰性） | **读/写路径也会清扫**：`db::gc_if_needed` 被 `store` / `list` / `recall` / `import` 与 MCP `memory_recall` fire-and-forget 调用 | `list` 之后过期行已在归档中、随后 `gc` 报 0 |
+| WAL 回收 | `gc` **已覆盖**：`gc` 属 CLI 写命令 ⇒ 分发器 post-run `wal_checkpoint(TRUNCATE)` | 长活会话造成 `-wal` 1499712 字节 → 跑 `gc` 后 0 字节 |
+| 自动整理 | `curator --once --max-ops N --json` | rc=0、报告可解析、`memories_scanned >= 1`（证明读的是目标库） |
+| 归档去向 | `archive_on_gc` 默认 `true` ⇒ 过期行进 `archived_memories`（`archive_reason='ttl_expired'`）而非硬删 | `archive list --json` |
+
+> **`gc` 的计数不等于「过期总量」**：任何 `store` / `list` / `recall` 都可能已经把过期行清扫掉了。所以维护作业**不能靠业务查询代劳** —— 一个只被按 id 读取（`get` 不触发清扫）或根本无人访问的用户库，只有 `gc` 会来收尸。
+
+**两条硬约束**（静态护栏与探针都会机械断言）：
+
+- 每条调用**显式 `--db <绝对路径>`**。源码侧 `--db` 只是 `AI_MEMORY_DB` 的 fallback：不传且 env 缺省时会**静默新建**相对路径 `ai-memory.db`（实测 rc=0）；而容器内该 env 指向**主库** ⇒ 漏传即可能误操作主库。同时冗余注入 `-e AI_MEMORY_DB=` 作纵深防御（护栏仍要求 `--db` 在场，避免冗余掩盖回归）。
+- 每条调用显式 `AI_MEMORY_REQUIRE_AGENT_ATTESTATION=0`：v0.11 起上游缺省翻转为全 surface required，不写死会让维护任务在升级后立刻失败。
+
+**失败语义**：单库失败**不中断**，打印可定位信息后继续处理其余库，最终以非零码退出（供 cron 告警）。遇错即停会让排在后面的库永远得不到维护。**环境不可用必须响亮失败**：容器未运行或无法列举用户库时以 `3` 退出，绝不把「什么都没维护」当作成功 —— 否则 cron 会长期静默漏维护。
+
+退出码契约（维护脚本）：`0` 全部成功 · `1` 至少一个库失败 · `2` 参数错误 · `3` 环境不可用。
+
+**边界**：生产定时器安装 / 日志采集 / 告警留 Sprint 5。归档会随 `gc` 持续累积，`archive purge` 是既有的清理逃生口（其调度同样留 Sprint 5）。覆盖面验证见 [`./mcp-test.md`](./mcp-test.md) §4-C TC-GC。
 
 ### 5.4 备份与配额
 

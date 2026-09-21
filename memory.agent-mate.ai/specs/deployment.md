@@ -174,6 +174,21 @@ sudo docker exec -u 0 ai-memory-mcp install -d -m 0700 /data/users/alice/keys
 
 > 七键**显式写死**（等于编译默认）以防升级时默认值静默漂移；env 覆盖优先，**非正值视为未设**。配额行按 `(agent_id, namespace)` 逐行盖章，改配置不追溯已有行。行为证据见 [`mcp/mcp-test.md`](./mcp/mcp-test.md) §4-D TC-LIMIT。
 
+#### 每库维护（宿主机 cron；Sprint 3 #5 定档）
+
+compose 常驻的 `serve` / `curator` **只服务默认库**，每用户库必须逐库维护，否则过期记忆与 WAL 不会被回收。
+
+```bash
+bash memory.agent-mate.ai/scripts/maintain-user-dbs.sh --dry-run   # 先核对将被维护的库
+make maintain-user-dbs                                             # 逐库 gc + curator --once
+```
+
+调度定档为**宿主机 cron**（生产定时器安装 / 日志采集 / 告警留 Sprint 5）。脚本两条硬约束：每条调用**显式 `--db <绝对路径>`**（漏传会静默回落相对路径库；容器内 `AI_MEMORY_DB` 指向主库 ⇒ 有误操作主库的风险）、每条调用显式 `AI_MEMORY_REQUIRE_AGENT_ATTESTATION=0`（v0.11 起上游缺省翻转为全 surface required）。单库失败**不中断**、最终非零退出供 cron 告警。
+
+退出码契约：`0` 全部成功 · `1` 至少一个库失败 · `2` 参数错误 · `3` 环境不可用（容器未运行）—— 环境不可用时**不得静默成功**，否则 cron 会长期漏维护而不报警。
+
+覆盖面与判据见 [`mcp/mcp-design.md`](./mcp/mcp-design.md) §5.3，验证见 [`mcp/mcp-test.md`](./mcp/mcp-test.md) §4-C TC-GC。
+
 ### 5.4 `.env` 只设本轮用到的 key
 
 ```text
@@ -421,6 +436,7 @@ bash scripts/pin-update.sh <ref> [--force]          # 更新锁文件（--force 
 
 | 日期 | 变更 |
 |---|---|
+| 2026-09-21 | **每库维护定档（Sprint 3 #5）**：§5.3 新增「每库维护（宿主机 cron）」小节 —— 维护入口 [`../scripts/maintain-user-dbs.sh`](../scripts/maintain-user-dbs.sh) / `make maintain-user-dbs`、两条硬约束（显式 `--db`、显式 `AI_MEMORY_REQUIRE_AGENT_ATTESTATION=0`）与失败语义；生产定时器安装留 Sprint 5。覆盖率证据见 [`mcp/mcp-test.md`](./mcp/mcp-test.md) §4-C TC-GC |
 | 2026-09-21 | **补 `[limits]` 容量与配额（Sprint 3 #4）**：§5.3 新增七键表（显式等于 v0.10.0 编译默认）与优先级 / 逐行盖章 / HTTP 面专属说明；模板 [`../deploy/config.toml.tmpl`](../deploy/config.toml.tmpl) 同步落盘；行为证据见 [`mcp/mcp-test.md`](./mcp/mcp-test.md) §4-D TC-LIMIT |
 | 2026-09-20 | **specs 整合**：`dev-plan.md` / `deployment_strategy.md` / `deploy/README.md` / `deploy/deployment-plan.md` 并入本文档；订正三处历史不一致 —— ① 健康探测**不用 curl**（镜像无 curl，改判 serve 日志 + `doctor`）；② 备份外迁频率统一为**每日**；③ 占位符统一 `<VPS4_IP>`（原文 `<vps4>` 混用）。删除 dev-plan 中误提的 gitleaks（本项目用 `make secret-check`） |
 | 2026-09-21 | **§4.4 改为「用户目录属主引导」**：一次性 `install -d -m 2775 -o root -g 999 /data/users`（setgid）使非 root 门户可自建 `0700` 用户目录，并**删除**原 `NOPASSWD: docker exec -u 0` root 规则（`aimem-ssh` 密钥一律带 forced command，不需要 sudo）；§4.5 改为「root 手工操作，保底」。§12.2 补门户 stack 的挂载/密钥/启动自检前置。§7.2 补 S1 的门户侧新触发路径（缺 `DASHSCOPE_API_KEY` ⇒ 401 + linear scan，工具仍成功）。依据 [`architecture.md`](./architecture.md) §2.3 与 [`knowledge/web-portal/portal-launch-mechanism.md`](./knowledge/web-portal/portal-launch-mechanism.md) |

@@ -8,6 +8,41 @@
 
 ## 2026-09-21
 
+### Sprint 3 #5 收口：每用户库维护行为定档（宿主机 cron + 覆盖面实测）
+
+**做了什么**：把「每个用户的库由谁定期打扫、按什么命令、失败怎么办」定档，并给出**行为级**证据（不再停留在设计文档的「覆盖面未验」）。
+
+- **调度定档 = 宿主机 cron**（用户确认）。理由是维护属运维性质、与「多用户接入」这一产品功能解耦，且门户方案要到 Sprint 4 才存在（只能写决议、拿不到证据）。
+- **维护入口落成脚本**：新增 [`../scripts/maintain-user-dbs.sh`](../scripts/maintain-user-dbs.sh)（Bash 3.2；`--dry-run` / `--max-ops` / `--root`；退出码 0 / 1 / 2），并接 `make maintain-user-dbs`。文档只引用脚本路径 —— 只有脚本才能被 cron 稳定调用、被探针静态审计、被路径一致性护栏覆盖。逐 (库, 命令) 独立 `docker exec`，使失败可精确定位到库。
+- **两条硬约束**：每条调用**显式 `--db <绝对路径>`**（源码侧 `--db` 只是 `AI_MEMORY_DB` 的 fallback：不传且 env 缺省时会**静默新建**相对路径 `ai-memory.db`；容器内该 env 指向**主库**）与**显式 `AI_MEMORY_REQUIRE_AGENT_ATTESTATION=0`**（v0.11 起上游缺省翻转为全 surface required）。
+- **失败语义**：单库失败**不中断**、打印可定位信息后继续，最终非零退出供 cron 告警 —— 遇错即停会让排在后面的库永远得不到维护。**环境不可用（容器未运行 / 无法列举用户库）以 `3` 响亮失败**，绝不把「什么都没维护」当成成功：终审时发现首版在容器未运行时 `list_dbs` 返回空集、会以「未发现任何用户库」的样子静默成功（rc=0），正是本项目最忌讳的失败形态，已补前置存活检查与 `list_dbs` 退出码校验。退出码契约：`0` 成功 / `1` 有库失败 / `2` 参数错误 / `3` 环境不可用。
+- **探针**：新增 [`../scripts/gc-probe.sh`](../scripts/gc-probe.sh)（L1.8；退出码 0/10/20/30/40/50/60/70；`--self-test` 负向自测），实跑退出码 0、7 项断言通过。
+
+**实测得到的三条覆盖面结论**（都已推翻或修正既有假定）：
+
+1. **TTL 驱逐不只由 `gc` 触发** —— `db::gc_if_needed`（`src/storage/mod.rs:10502`）被 `cmd_list`/`store`/`recall`/`import` 与 MCP `memory_recall` fire-and-forget 调用 ⇒ `gc` 的 `expired_deleted` **只是「此刻还剩下的过期数」，不是「过期总量」**（探针实测：先 `list` 再 `gc` 会得到 0）。`cmd_get` 不触发清扫，所以「过期但未 gc 的行按 id 仍可读」成立。**推论：维护作业不能靠业务查询代劳** —— 一个只被按 id 读或根本无人访问的用户库，只有 `gc` 会来收尸。
+2. **WAL 回收已被 `gc` 覆盖**（原设计文档标「未验」）—— `Command::Gc` 在 `is_write_command` 名单内 ⇒ 分发器 post-run `wal_checkpoint(TRUNCATE)`。实测：长活 MCP 会话把 `-wal` 撑到 1499712 字节，跑一次 `gc` 后**归零**；`curator` 不在名单内，靠 SQLite 干净关闭时的自动 checkpoint。
+3. **过期为归档而非硬删** —— `archive_on_gc` 默认 `true` ⇒ 行进 `archived_memories`（`archive_reason='ttl_expired'`）；归档会持续累积，逃生口是既有的 `archive purge`（其调度留 Sprint 5）。另注：CLI `gc` 读的是旧顶层键 `archive_on_gc`，只写 `[storage].archive_on_gc` 对它不生效。
+
+**过程中的四处自纠**（都已沉淀成断言或代码注释）：
+
+- **WAL 归零断言首版是竞态**：不等写入方静默就跑 `gc`，因 `memory_store` 之后的 deferred-audit 仍在追加，TRUNCATE 之后立刻长出新帧（实测残留 107152 字节）。改为「连续 5 次采样 `-wal` 无变化再动手」后确定性归零。
+- **「`-wal` 非零」不等于「写完了」**：三条写入是**串行**且每条都含 embedding，第一条落库就让 `-wal` 非零；首版据此立刻校验三条响应，于是偶发 `missing responses: [12]` 假失败（连续复跑时暴露）。改为有界轮询等待**三条响应到齐且无 `isError`** 再进入下一步。
+- **绝对计数断言被上游副作用推翻**：非干跑 `curator --once` 会写入**自报告记忆**，使多库计数从 1 变 3。改为相对口径（计数不下降 + 播种的存活行仍可按 id 读回 + 库 A 的记忆在库 B 中取不到 + 共享主库计数不变）。
+- **两处脚本缺陷**：① `seed()` / `count_of()` 原先在命令替换（子 shell）内调用 `die`，不会终止父进程 —— 改为全局变量回传；② 容器内列举用户库的 glob 未命中时 `[ -f "$f" ]` 返回 1，在 `set -o pipefail` 下把「没有用户库」误报成「列举失败」（终审时被新增断言抓到）—— 内层 `sh` 补显式 `exit 0`。
+
+**跨条目挂账闭环**：ToDo #1 挂账的「每用户维护命令随 #5 验收」与 ToDo #2 挂账的「每库维护命令随 #5 定档时同批审计（须显式 `--db`）」已同时闭环 —— [`../scripts/attestation-paths-check.sh`](../scripts/attestation-paths-check.sh) 扩到**五路径**，新增断言 E（维护命令沿用与 `deployment.md` 用户行**同一** attestation 取值、且每条 `ai-memory` 调用显式 `--db`）并补负向注入自测（缺 `--db` / 缺 attestation 均 fail-closed）。提交说明中已记录：本次同时落盘此前未提交的 TC-ATT-02 护栏文件。
+
+**结论回写唯一真源**：[`mcp/mcp-design.md`](mcp/mcp-design.md) §5.3（调度定档 + 覆盖面表 + 两条硬约束 + 失败语义 + 边界）· [`mcp/mcp-test.md`](mcp/mcp-test.md) §1 新增 **L1.8** / §2 完成态 / §4-C `TC-GC-01..04` / §5 · [`deployment.md`](deployment.md) §5.3「每库维护」小节 + §14 · [`product-backlog.md`](product-backlog.md) #13（`Implemented`）· [`sprint_plan.md`](sprint_plan.md) #5（`Implemented`）+ Sprint 3 Retrospective 补记 · [`knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md`](knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md) 表行 + 教训 21 + Links · 根 `Makefile` 新增 `maintain-user-dbs` 目标并把 `attestation-paths` 描述改为五路径。
+
+**可复跑验证**：`bash memory.agent-mate.ai/scripts/gc-probe.sh`（退出码 0）· `--self-test` · `bash memory.agent-mate.ai/scripts/attestation-paths-check.sh --self-test` · 回归 `mcp-smoke.sh` / `iso-probe.sh` / `limits-probe.sh` · `make doc-links` / `make secret-check` / `make attestation-paths` / `make preflight-test` · `git diff --check`。
+
+**边界**：生产定时器安装、日志采集与告警留 Sprint 5；HTTP 面与生产通道复验同属 Sprint 5。
+
+**用户验收**：2026-09-21，Robert Smith 确认可用。
+
+**ADR：无新增** —— 本轮是「按上游既有契约选择调度形态 + 把覆盖面钉成可复跑断言」，属既有策略（宿主机侧运维、一用户一库、模板显式写死）的执行层，未引入新的架构或流程取舍。
+
 ### RID 解决方案全链路追踪 + Sprint Retrospective 双写规则
 
 **为什么**：RID 的解决方案虽已下沉 Product Backlog，但原链接只定位到文件顶部，Sprint 落点也是不可点击文本，无法沿 `Product Backlog → Sprint Backlog → design/test` 核对实施链；`retrospective` 技能也只要求 ADR / knowledge 沉淀，未强制回写实际交付 Sprint。
