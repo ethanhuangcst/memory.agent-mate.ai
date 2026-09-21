@@ -79,7 +79,7 @@
 | AC6.1 | Home（接入步骤：获取 key → 配置客户端 → 验证）+ Admin 入口 |
 | AC6.2 | 新用户按页面指引可在 ≤ 3 步内完成接入并成功调用一次工具 |
 | AC6.3 | i18n **限定**门户 UI 与接入说明页（MCP 服务本身不做 i18n）；至少中 / 英双语，新增语言不改业务逻辑 |
-| AC6.4 | 页面内容**取自** [`../mcp/mcp-capabilities.md`](../mcp/mcp-capabilities.md)（**唯一内容源**：档位说明 + 工具功能说明 + 端到端例子）；页面只做**取舍与翻译**，不得自行改写工具清单或档位数字（口径单点在 [`../mcp/mcp-design.md`](../mcp/mcp-design.md) §8） |
+| AC6.4 | 页面内容**取自** [`../mcp/mcp-capabilities.md`](../mcp/mcp-capabilities.md)（**唯一内容源**：档位说明 + 逐档工具说明 —— 每档只列本档新增、编号全档连续 1–101，每项含「做什么 / 什么时候用 / 示例」）；页面只做**取舍与翻译**，不得自行改写工具清单或档位数字（口径单点在 [`../mcp/mcp-design.md`](../mcp/mcp-design.md) §8） |
 
 ## S7 容量、配额与限流
 
@@ -124,3 +124,4 @@
 | 2026-09-20 | **specs 整合**：由 `admin_portal_design.md` §1 需求表（用户逐字答复）与 `product-backlog.md` 的 web portal 条目重写为 S1–S9 故事 + AC；`product-backlog.md` **未被修改** |
 | 2026-09-21 | **D1 定稿（β′）+ AC1.1 补前置**：用户确认 β′（[`../adr/ADR-012`](../adr/ADR-012-portal-launch-mechanism-no-docker-socket.md)），AC1.1 增加「`/data/users` 为 `root:aimem 2775`（setgid）」前置与「门户启动自检不可写即拒绝启动」；AC8.3（不挂 docker socket）不变。落地前置三条见 [`../architecture.md`](../architecture.md) §2.3 |
 | 2026-09-21 | **S6 新增 AC6.4**：接入说明页的内容取自 [`../mcp/mcp-capabilities.md`](../mcp/mcp-capabilities.md)（**唯一内容源**：档位 + 全量 101 项工具说明 + 端到端例子），页面只做**取舍与翻译**，不得自行改写工具清单或档位数字（口径单点在 [`../mcp/mcp-design.md`](../mcp/mcp-design.md) §8） |
+| 2026-09-21 | **AC6.4 描述同步**：能力文档体例定稿为「6 张档位表、每张只列本档新增、编号全档连续 1–101、示例入表」，AC6.4 随之由「工具功能说明 + 端到端例子」改为「逐档工具说明」 |

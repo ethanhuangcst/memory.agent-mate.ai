@@ -11,3 +11,4 @@
 | [git-tooling/gotchas.md](git-tooling/gotchas.md) | `.gitignore` 行内注释陷阱、`python3 - <<'PY'` 与管道争 stdin、`git grep` 工作树 vs `--cached` 差异、**护栏允许清单会静默失效**、**全仓文本批处理的边界（排除 vendored 上游）与「原文引用不可单方面改」** | 2026-09-21 |
 | [local-dev/ai-memory-local-run-gotchas.md](local-dev/ai-memory-local-run-gotchas.md) | Apple Silicon 上跑 amd64 版 ai-memory：binfmt 免装 qemu、配置挂载点、CLI 参数形态、`printf` 拼 JSON 的坑 | 2026-09-20 |
 | [web-portal/portal-launch-mechanism.md](web-portal/portal-launch-mechanism.md) | 门户启动机制 β′ 的实测证据（镜像契约 C1–C3、端到端探针配方）、两个落地缺口（`/data/users` 属主 root ⇒ 需 setgid 引导；门户必须注入 LLM key 否则静默降级）、α 无法用 socket 代理收窄 | 2026-09-21 |
+| [docs/spec-doc-conventions.md](docs/spec-doc-conventions.md) | 自有 spec 的写作与维护约定：对外说明「只列增量 + 全档连续编号」、说明必须与探针实测逐项对齐（含集合比对断言）、被引文档改版要连带扫引用方转述、删并文档后的引用治理与护栏豁免收口 | 2026-09-21 |

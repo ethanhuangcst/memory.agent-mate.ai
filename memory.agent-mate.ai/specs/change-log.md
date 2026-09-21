@@ -8,6 +8,22 @@
 
 ## 2026-09-21
 
+### Sprint 2 #11 收口：引用治理 + 能力文档体例定稿
+
+**做了什么**：把 `sprint_plan.md` / `product-backlog.md` 中指向已合并旧 spec 的 85 处引用全部改指合并后文档与对应章节，删除 `link-check.allow` 的两份整文件豁免，并同步因能力文档体例变更而失准的转述。
+
+**引用改写（旧名 → 新落点）**：`multiuser_isolation.md` → `mcp/mcp-design.md`（§5 配方族 / §6.2 V1–V4 / §6.4 未决前提 / §7 五个坑）；`mcp_tool_inventory.md` → `mcp/mcp-design.md` §8；`upstream_coupling_surface.md` → `mcp/mcp-design.md` §9；`admin_portal_design.md` → `web-portal/web-design.md` / `web-portal/web-stories.md` / `web-portal/web-test.md`（按设计 / 验收条件 / 测试清单分流）；`asset_isolation_plan.md` → `architecture.md` §5；`deployment_strategy.md` §0 → `architecture.md` §2；`dev-plan.md` §3 / §3.3 / §3.4 / §4 / §5 → `deployment.md` §3 / §7.3 / §7.2 / §8 / §9；`deploy/deployment-plan.md` → `deployment.md`。
+
+**历史叙述不动**：两份文件「变更记录」行里的旧文件名是**当时事实**，只把链接降级为纯文本（去链接、留名字），不改指新文档。
+
+**漏改自检（两类典型）**：① 共享前缀的省略写法会漏掉后半段章节号（`dev-plan.md` §3.2 八步落地 **+ §3.3 冒烟**）；② 多对一合并会产生重复列举（`deploy/deployment-plan.md` 与 `dev-plan.md` 都归 `deployment.md`）。两处均已订正。
+
+**为什么不停在「文档级链接」**：目标章节在合并时按主题重排，逐处核对锚点后仍能精确落位（`architecture.md` §6 · `deployment.md` §7.2–§7.3 · `mcp/mcp-design.md` §6.2 等）；只有把握不足处才退化为文档级链接。
+
+**验证**：`make doc-links` → 30 文件 / 491 链接，**0 悬空**，允许清单豁免 **2** 个文件（原 4 个）；两份文件行数与表格列数逐行比对未变。落盘回顾文档后复跑：31 文件 / 498 链接，仍 **0 悬空**。
+
+**Sprint 2 收官**：`sprint_plan.md` 的 Sprint 2 加「**状态：已结束**（全部条目完成）」，其 `Retrospective` 由阶段性回顾改为**定稿**（补 3 条本轮实证：档位文档体例 = 只列增量 + 连续编号；能力说明必须与探针实测逐项对齐；被引文档改版会让引用方转述静默过时）。回顾落盘 [`knowledge/docs/spec-doc-conventions.md`](knowledge/docs/spec-doc-conventions.md)（`knowledge/README.md` 索引同步）—— **ADR：无新增**（本轮的体例与引用纪律是 [`ADR-010`](adr/ADR-010-specs-single-source-and-doc-structure.md) 的执行层细化，不产生新的架构/流程决议，避免 ADR 碎片化）。
+
 ### Sprint 2 #10 定稿核查 + 两处文档体例改造（#11 扩展）
 
 **做了什么**：核查「MCP 对外能力清单定稿」是否真的完成（结论：**已完成**），并把用户要求的两处文档改造登记进 Sprint 2 #11、本轮一并做完。
@@ -28,7 +44,7 @@
 | 改动 | 说明 |
 | --- | --- |
 | §1 与 §2 合并 | 合并为「这是什么，怎么接上」，并新增 `mcp.json` **三种形态**示例：托管门户（HTTP）/ 本机自托管（stdio via `docker exec`）/ SSH 通道；示例一律占位符（`<MCP_HOST>` / `<你的令牌>`），并注明「档位由服务端决定、改完必须重连」 |
-| 工具说明改为**按档位** | 原「按族」的 8 个小节取消，改为 **6 张档位详表**：`core` 8 / `admin` 22 / `graph` 20 / `power` 57 / `full` 101 / 自定义 `core,lifecycle` 14；每张表列固定为「工具 / 做什么 / 什么时候用 / **示例**」 |
+| 工具说明改为**按档位** | 原「按族」的 8 个小节取消，改为 **6 张档位详表**：`core` 8 / `admin` 22 / `graph` 20 / `power` 57 / `full` 101 / 自定义 `core,lifecycle` 14；**每张表只列本档新增**（上一档已列过的不重复），首列为**全档连续编号**（`core` 1–8 / `admin` 9–22 / `graph` 23–34 / `power` 35–83 / `full` 84–101；自定义 `core,lifecycle` 沿用 9–14），其余列固定为「工具 / 做什么 / 什么时候用 / **示例**」 |
 | 例子进表格 | 原独立的「一个完整的例子」章节**删除**，示例并入表格的「示例」列（一句自然语言用法） |
 
 工具数与成员**以运行时实测为准**，非手工整理：档位计数用 [`../scripts/profile-probe.sh`](../scripts/profile-probe.sh)（7 档全绿），成员清单用逐档 `tools/list`，功能说明用 `memory_capabilities` 的 verbose drilldown（8 族，101/101 取到完整 `docs`）—— 裸 `tools/list` 的 `description` 是被截断的短描述，不可用于对外说明。
@@ -67,7 +83,7 @@
 
 **管理员档位为何从 `full` 改成 `admin`**：`admin`（22）= Core + Lifecycle + Governance + 常驻 `memory_capabilities`，覆盖管理员真正需要的删除 / 遗忘 / 清理 / 审批与订阅；只有 `full` 才有的 Meta / Archive（`memory_stats` / `memory_agent_list` / `memory_archive_stats`）是**只读统计类**，暂不随管理员入口开放 —— 需要时另开条目评估，而不是把 101 项整体打开。
 
-**新增文档**：[`mcp/mcp-capabilities.md`](mcp/mcp-capabilities.md) —— 面向**最终用户**（简体中文）：一句话定位 / 能做什么 / 三步接入 / 档位说明 / **全量 101 项工具逐项说明**（按 8 组，每项含「做什么 + 什么时候用」）/ 一个端到端例子 / 常见疑问。
+**新增文档**：[`mcp/mcp-capabilities.md`](mcp/mcp-capabilities.md) —— 面向**最终用户**（简体中文）：一句话定位 / 能做什么 / 三步接入 / 档位说明 / **全量 101 项工具逐项说明**（按档位 6 张表：每张只列本档新增、编号全档连续 1–101，每项含「做什么 + 什么时候用 + 示例」）/ 常见疑问。体例于同日收口（见「二、」），原「按 8 组」与独立例子章节均已取消。
 功能说明的底稿**来自运行时实测而不是抄文档**：`tools/list` 只给 ≤50 token 的短描述（如 `memory_recall` 只有 "Recall memories relevant to a"），完整 `docs` 需通过 `memory_capabilities` 的 verbose drilldown（`family=<族>` + `include_schema=true` + `verbose=true`，逐族取回）获得 —— 101 项全部取到后再改写为用户语言。该文档登记为门户「接入指引」页的**唯一内容源**（[`web-portal/web-stories.md`](web-portal/web-stories.md) AC6.4）。
 
 **排期影响**：Sprint 3 #2（把 `--profile` 写入门户 / SSH 模板）**已提前完成**；`product-backlog.md` #12 标 Done、#19 描述补决议 —— 生产侧的 `initialize` 回包核对留待上线后执行。
@@ -243,7 +259,7 @@
 
 | # | 遗留 | 处置 |
 | --- | --- | --- |
-| 1 | `product-backlog.md` / `sprint_plan.md` 内部仍指向已合并的旧文件名（悬空链接 **73** 处 = 前者 32 / 后者 41） | 用户指定零改动；已在 `link-check.allow` 登记为债务，清理时机 = 重写这两份文件时 |
+| 1 | ~~`product-backlog.md` / `sprint_plan.md` 内部仍指向已合并的旧文件名~~ —— **已于 2026-09-21 清空** | 85 处引用全部改指合并后文档与对应章节（历史叙述行降级为纯文本），`link-check.allow` 两份整文件豁免同步删除（豁免 4 → 2）；此后护栏覆盖全部自有 spec，见「Sprint 2 #11 收口」小节 |
 | 2 | 两份运维模板 `hk_vps_4_settings.md` / `vps4_new_deployment_instruction.md` 内部链接同样悬空 | 同上；文件待移除，关键信息已摘编进 `architecture.md` / `deployment.md` |
 | 3 | `secrets.local.hk_vps_4.md` 文件名含旧目录名 | `secrets.local*` 通配仍覆盖，不影响忽略；是否改名为 `secrets.local.md` 待定 |
 | 4 | 实际 1,748 行 vs 计划 1,590 行 | 因上游契约面 A–K 决定**全量保留**（升级预检的逐项判据，压缩会削弱护栏） |

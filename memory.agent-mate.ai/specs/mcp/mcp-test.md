@@ -1,7 +1,7 @@
 # mcp-test — MCP 测试策略 · 测试计划 · 测试用例（Spec）
 
 > **定位**：本文件是 MCP 相关测试的**测试策略 + 测试计划 + 测试用例**的唯一 spec。所有 MCP 层验收探针（本地基线、档位核对、隔离探针、生产冒烟、客户端接入）在此登记与演进；与 [`../sprint_plan.md`](../sprint_plan.md)（执行状态）、[`../deployment.md`](../deployment.md)（部署动作）、[`./mcp-design.md`](./mcp-design.md)（隔离与能力设计）互链不重复。
-> **状态**：v1.1（迁入 `specs/mcp/`） · as_of 2026-09-20
+> **状态**：v1.2 · as_of 2026-09-21
 
 ---
 
@@ -143,6 +143,7 @@
 | TC-TIER-01 | `initialize` + `tools/list` 计核，逐档核对 | core=8 / graph=20 / admin=22 / power=57 / full=101 | **已完成 2026-09-21**（探针 [`../../scripts/profile-probe.sh`](../../scripts/profile-probe.sh)：7 档独立进程 + 默认档对照 + `core,lifecycle`=14，退出码 0；四处模板均已写 `--profile`，用户 `core` / 管理员 `admin`） |
 | TC-TIER-02 | `memory_capabilities` 家族与装载状态 | 与 `tools/list` 一致（族计数口径差异已注明） | **已完成 2026-09-21**（同探针，软断言族装载状态；另以 verbose drilldown 取回 101 项完整 `docs`，作为 [`./mcp-capabilities.md`](./mcp-capabilities.md) 的撰写底稿） |
 | TC-TIER-03 | 对外模板实际档位核对 | 门户 `launch.argv` = `core`；SSH 用户行 = `core`、主人行 = `admin` | **已完成 2026-09-21**（文档级：四处模板逐处核对；生产上线后用 `initialize` 回包复核一次） |
+| TC-TIER-04 | **能力文档 ↔ 实测全集一致性**（[`./mcp-capabilities.md`](./mcp-capabilities.md)） | 6 张档位表登记的工具集合与探针 `full`（101 项）**完全相等**；编号 1–101 连续、每个编号唯一对应一个工具；每张表只列本档新增（与上一档无重复行） | **已完成 2026-09-21**（脚本化断言：从文档提取「编号 + 工具名」与 `tools/list` 实测全集做集合比对 —— 该断言拦住了手工补录引入的、上游**并不存在**的 `memory_gc_hard` / `memory_demote`） |
 
 > 现役探针：[`../../scripts/iso-probe.sh`](../../scripts/iso-probe.sh)（退出码 0 全通过 / 10 前置 / 20 解析链 / 30 隔离 / 40 维护 / 50 方案②会话），组 A=P1a/P1b/P4，组 B=P2/P3/P5，组 C=P6。可重复性已验证：第二次起必然命中 near-duplicate 去重，探针**分会话**处理（写入会话先取「生效标记」再另开会话检索），故重复运行稳定。
 
@@ -188,3 +189,4 @@
 | 2026-09-20 | **specs 整合**：迁入 `specs/mcp/`（原 `specs/mcp-test.md`）；新增 **L1.5 隔离探针层**与 §4-C（TC-ISO / TC-GC / TC-LEAK / TC-TIER）、§4-D（TC-SSH / TC-BAK / TC-REV / TC-LIMIT / TC-I18N / TC-ATT / TC-HTTP）用例位；L0 补「镜像无 curl，改用 serve 日志 + doctor」 |
 | 2026-09-21 | **新增 L1.6 多语言探针层与 §4-E 用例（TC-I18N-01..06，Sprint 2 #8）**：三语言 × 三通路结论矩阵实测全通过（存储 / 语义召回 / 按 id 直取支持；关键词仅完整词元、词元内子串与简繁交叉不命中）；§1「检索工具分工」原则升级为精确边界；§2 登记 Sprint 2 #8 完成；§4-D TC-I18N-01 占位归并至 §4-E。探针 [`../../scripts/i18n-probe.sh`](../../scripts/i18n-probe.sh)，结论回写 [`../product-backlog.md`](../product-backlog.md) #10 |
 | 2026-09-21 | **档位定档 + 模板落盘（Sprint 2 #9 收尾）**：§2 Sprint 3 #2 提前完成；§3 本地基线 `args` 显式 `--profile core`（生产条不写 —— 由服务端 forced command 决定），并注明「不传时默认也是 core 且**不报错**」；§4-C TC-TIER-01/02 标为已完成（探针 [`../../scripts/profile-probe.sh`](../../scripts/profile-probe.sh)：7 档独立进程 + 默认档对照 + `core,lifecycle`=14，退出码 0），新增 TC-TIER-03（对外模板档位核对：门户 `core` / SSH 用户行 `core` / 主人行 `admin`）；新增面向最终用户的能力文档 [`./mcp-capabilities.md`](./mcp-capabilities.md)（工具功能说明的底稿取自 `memory_capabilities` verbose drilldown） |
+| 2026-09-21 | **能力文档体例定稿 + 与实测逐项对齐（Sprint 2 #11）**：`./mcp-capabilities.md` 体例定为「**6 张档位表 + 每张只列本档新增 + 编号全档连续 1–101 + 示例列**」；新增 **§4-C TC-TIER-04**（能力文档 ↔ 实测 `full` 101 项集合相等 + 编号连续唯一），该断言拦住了手工补录写入的不存在工具（`memory_gc_hard` / `memory_demote`）。同步：`../change-log.md`「Sprint 2 #11 收口」小节 · [`../web-portal/web-stories.md`](../web-portal/web-stories.md) AC6.4 · [`./mcp-design.md`](./mcp-design.md) §8 顶部引文 |
