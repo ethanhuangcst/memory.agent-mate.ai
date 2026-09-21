@@ -75,17 +75,21 @@ sudo install -m 600 -o aimem-ssh -g aimem-ssh /dev/null /home/aimem-ssh/.ssh/aut
 
 ### 4.3 强制命令
 
-**主人（默认库）** —— `sudo vim /home/aimem-ssh/.ssh/authorized_keys`：
+**主人（默认库）—— 管理员入口** —— `sudo vim /home/aimem-ssh/.ssh/authorized_keys`：
 
 ```text
-command="docker exec -i ai-memory-mcp ai-memory mcp --tier smart",no-agent-forwarding,no-port-forwarding,no-pty,no-user-rc,no-X11-forwarding <PUBKEY>
+command="docker exec -i ai-memory-mcp ai-memory mcp --tier smart --profile admin",no-agent-forwarding,no-port-forwarding,no-pty,no-user-rc,no-X11-forwarding <PUBKEY>
 ```
 
 **用户（一用户一库，逐行追加）** —— 完整模板与逐项解释见 [`mcp/mcp-design.md`](./mcp/mcp-design.md) §5.2：
 
 ```text
-command="docker exec -i -e AI_MEMORY_DB=/data/users/alice/ai-memory.db -e AI_MEMORY_AGENT_ID=human:alice -e AI_MEMORY_KEY_DIR=/data/users/alice/keys -e AI_MEMORY_REQUIRE_AGENT_ATTESTATION=0 ai-memory-mcp ai-memory mcp --tier smart",no-agent-forwarding,no-port-forwarding,no-pty,no-user-rc,no-X11-forwarding <PUBKEY>
+command="docker exec -i -e AI_MEMORY_DB=/data/users/alice/ai-memory.db -e AI_MEMORY_AGENT_ID=human:alice -e AI_MEMORY_KEY_DIR=/data/users/alice/keys -e AI_MEMORY_REQUIRE_AGENT_ATTESTATION=0 ai-memory-mcp ai-memory mcp --tier smart --profile core",no-agent-forwarding,no-port-forwarding,no-pty,no-user-rc,no-X11-forwarding <PUBKEY>
 ```
+
+> **档位口径（2026-09-21 定稿，决议与理由见 [`mcp/mcp-design.md`](./mcp/mcp-design.md) §8.3）**：用户通道 = **`--profile core`（8 项，最小面）**；管理员入口 = **`--profile admin`（22 项，含删除 / 遗忘 / 治理）**，两条模板**分开维护**，不混用。
+> **不写 `--profile` 的风险**：不传该参数时上游默认就是 `core` 且**不报错、不告警**（实测，探针 [`../scripts/profile-probe.sh`](../scripts/profile-probe.sh)）⇒ 用户行的 `core` 是**显式声明**（防静默漂移），管理员行的 `admin` 是**实质授权**（不加就只剩 8 项）。
+> 改档位必须重连才生效（harness 不支持延迟注册）。
 
 > 逐行追加 = 最小侵入、易审计、可回滚（**不要**整文件重写，一次拼错会连带整个文件失效）。
 
@@ -405,3 +409,4 @@ bash scripts/pin-update.sh <ref> [--force]          # 更新锁文件（--force 
 |---|---|
 | 2026-09-20 | **specs 整合**：`dev-plan.md` / `deployment_strategy.md` / `deploy/README.md` / `deploy/deployment-plan.md` 并入本文档；订正三处历史不一致 —— ① 健康探测**不用 curl**（镜像无 curl，改判 serve 日志 + `doctor`）；② 备份外迁频率统一为**每日**；③ 占位符统一 `<VPS4_IP>`（原文 `<vps4>` 混用）。删除 dev-plan 中误提的 gitleaks（本项目用 `make secret-check`） |
 | 2026-09-21 | **§4.4 改为「用户目录属主引导」**：一次性 `install -d -m 2775 -o root -g 999 /data/users`（setgid）使非 root 门户可自建 `0700` 用户目录，并**删除**原 `NOPASSWD: docker exec -u 0` root 规则（`aimem-ssh` 密钥一律带 forced command，不需要 sudo）；§4.5 改为「root 手工操作，保底」。§12.2 补门户 stack 的挂载/密钥/启动自检前置。§7.2 补 S1 的门户侧新触发路径（缺 `DASHSCOPE_API_KEY` ⇒ 401 + linear scan，工具仍成功）。依据 [`architecture.md`](./architecture.md) §2.3 与 [`knowledge/web-portal/portal-launch-mechanism.md`](./knowledge/web-portal/portal-launch-mechanism.md) |
+| 2026-09-21 | **§4.3 强制命令定档**：主人（默认库 = **管理员入口**）行 → `--profile admin`（22 项）；用户（一用户一库）行 → `--profile core`（8 项，显式声明 —— 不传时默认也是 core 且**不报错**）；补「档位口径」注与「改档须重连」。决议与理由 [`mcp/mcp-design.md`](./mcp/mcp-design.md) §8.3；实测依据 [`../scripts/profile-probe.sh`](../scripts/profile-probe.sh)（7 档全绿）；对外用户版说明 [`mcp/mcp-capabilities.md`](./mcp/mcp-capabilities.md) |

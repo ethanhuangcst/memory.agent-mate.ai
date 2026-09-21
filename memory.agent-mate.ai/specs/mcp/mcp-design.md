@@ -109,7 +109,7 @@
 `authorized_keys`（每台机器一条，**都不带** `-e AI_MEMORY_AGENT_ID`）：
 
 ```text
-command="docker exec -i ai-memory-mcp ai-memory mcp --tier smart",no-pty,no-port-forwarding,no-agent-forwarding,no-X11-forwarding ssh-ed25519 AAAA…mac1 user@mac1
+command="docker exec -i ai-memory-mcp ai-memory mcp --tier smart --profile admin",no-pty,no-port-forwarding,no-agent-forwarding,no-X11-forwarding ssh-ed25519 AAAA…mac1 user@mac1
 ```
 
 - **共享**：读 trust-all → 全部互见
@@ -119,9 +119,10 @@ command="docker exec -i ai-memory-mcp ai-memory mcp --tier smart",no-pty,no-port
 ### 5.2 场景 B：多用户物理隔离（方案 ③）
 
 ```
-command="docker exec -i -e AI_MEMORY_DB=/data/users/alice/ai-memory.db -e AI_MEMORY_AGENT_ID=human:alice -e AI_MEMORY_KEY_DIR=/data/users/alice/keys ai-memory-mcp ai-memory mcp --tier smart",no-pty,no-port-forwarding,no-agent-forwarding,no-X11-forwarding ssh-ed25519 AAAA…alice alice@mac
+command="docker exec -i -e AI_MEMORY_DB=/data/users/alice/ai-memory.db -e AI_MEMORY_AGENT_ID=human:alice -e AI_MEMORY_KEY_DIR=/data/users/alice/keys ai-memory-mcp ai-memory mcp --tier smart --profile core",no-pty,no-port-forwarding,no-agent-forwarding,no-X11-forwarding ssh-ed25519 AAAA…alice alice@mac
 ```
 
+- **档位**：用户行写 `--profile core`（8 项，对外统一口径）；管理员入口写 `--profile admin`（22 项）——决议与理由见 §8.3；改档位必须**重连**才生效
 - `AI_MEMORY_KEY_DIR` 指向用户目录，避免所有人共用默认 key dir
 - 客户端：`~/.ssh/config` 用自己的密钥；`mcp.json` 只需 `args: ["ai-memory"]`（forced command 覆盖一切）
 - **逐行追加**（最小侵入、易审计、可回滚）—— 不要整文件重写，一次拼错会连带整个文件失效
@@ -220,6 +221,8 @@ aimem-ssh ALL=(root) NOPASSWD: /usr/bin/docker exec -i ai-memory-mcp ai-memory m
 ## 8. 档位（`--profile`）与工具清单
 
 > 数字与名称**从源码派生**（上游文档在此处滞后）：工具名 `src/mcp/registry.rs` · 族 `src/profile.rs:391` · 档位 `src/profile.rs:647-697` · 计数 `:714`。**上游发新版后必须复核。**
+>
+> **面向最终用户的通俗版**（每个工具做什么、你能用哪些、一个完整例子）：[`./mcp-capabilities.md`](./mcp-capabilities.md) —— 门户「接入指引」页面的**唯一内容源**（页面只做取舍与翻译，不得自行改写工具清单）。
 
 ### 8.1 档位与工具数
 
@@ -258,9 +261,9 @@ aimem-ssh ALL=(root) NOPASSWD: /usr/bin/docker exec -i ai-memory-mcp ai-memory m
 
 | # | 决策 | 现状 |
 |---|---|---|
-| 1 | 对用户暴露哪一档 | **已定（2026-09-21）**：对外（SSH 与门户**统一**）= **`core`（8 项）**；管理员另设入口 = **`full`（101 项）**，两条模板分离。理由：对外取最小面（不开放删除，代价见 #4）；管理员排障需要 Meta 族（`memory_stats` / `memory_agent_list` / `memory_recall_observations`）与 Archive（`memory_archive_stats`）—— `admin`（22）档看不到这些，而管理员通道只有本人使用，提示词开销可接受。**模板落盘**（把 `--profile` 写进 SSH / 门户模板）= Sprint 3 #2（Backlog #12），本条只定档 |
-| 2 | 门户模板与 SSH 模板是否统一档位 | **已定**：统一为 `core`（同上 #1）；管理员入口单独一条，不与用户通道混用 |
-| 3 | 选档后如何验收 | 用 `initialize` + `tools/list` 实测计数 —— 能力已由 [`../../scripts/profile-probe.sh`](../../scripts/profile-probe.sh) 提供（7 档全绿）；对**门户 / SSH 模板本身**的验收（TC-TIER-01/02）随 Sprint 3 #2 执行，登记在 [`./mcp-test.md`](./mcp-test.md) §4-C |
+| 1 | 对用户暴露哪一档 | **已定（2026-09-21）**：对外（SSH 与门户**统一**）= **`core`（8 项）**；管理员另设入口 = **`admin`（22 项）**，两条模板分离。理由：对外取最小面（不开放删除，代价见 #4）；管理员通道要在同一入口里做删除 / 遗忘 / 清理与治理审批（Lifecycle + Governance）—— `core` 做不到；而 Meta / Archive 族（`memory_stats` / `memory_agent_list` / `memory_archive_stats`）属 `full` 档，**不随 `admin` 开放**（管理员若确需只读统计类工具，另开条目评估）。**模板已落盘（2026-09-21 收尾，原「移交 Sprint 3 #2 / Backlog #12」提前完成）**：SSH 主人行 `admin` + 用户行 `core`（[`../deployment.md`](../deployment.md) §4.3）、完整配方（本文 §5.1 `admin` / §5.2 `core`）、门户 `launch.argv`（[`../web-portal/web-design.md`](../web-portal/web-design.md) §3.3）、本地客户端条目（[`./mcp-test.md`](./mcp-test.md) §3） |
+| 2 | 门户模板与 SSH 模板是否统一档位 | **已定**：统一为 `core`（同上 #1）；管理员入口（`admin`）单独一条，不与用户通道混用 |
+| 3 | 选档后如何验收 | 用 `initialize` + `tools/list` 实测计数 —— 能力已由 [`../../scripts/profile-probe.sh`](../../scripts/profile-probe.sh) 提供（7 档全绿）；**TC-TIER-01 / 02 已完成 2026-09-21**（各档计数实测 + `memory_capabilities` 交叉一致；四处模板均已含 `--profile`），登记在 [`./mcp-test.md`](./mcp-test.md) §4-C |
 | 4 | `core` 档**不含删除类工具**（`memory_delete` / `memory_forget` / `memory_gc`） | **已知限制，本轮接受**：用户无法自行删除或遗忘自己的记忆。若要开放删除，**最小增量档位是 `core,lifecycle`（实测 14 项）**，不是 `admin`（22）或 `full`（101）——后者会同时引入治理面与自治编排面。是否开放、何时开放另开条目评估，**不在 #9 结论内** |
 
 ---
@@ -406,3 +409,4 @@ aimem-ssh ALL=(root) NOPASSWD: /usr/bin/docker exec -i ai-memory-mcp ai-memory m
 | 2026-09-21 | **§0.1 冻结机制「属主」行补前置**：2026-09-21 起门户路径由门户以 `aimem` 身份自建 `0700` 用户目录，**前置**为 `/data/users` = `root:aimem 2775`（setgid 一次性引导，[`../deployment.md`](../deployment.md) §4.4）；`docker exec -u 0 … mkdir/chown` 形式仅保留给 root 手工操作。背景：门户启动机制定稿 β′（[`../adr/ADR-012`](../adr/ADR-012-portal-launch-mechanism-no-docker-socket.md)），证据 [`../knowledge/web-portal/portal-launch-mechanism.md`](../knowledge/web-portal/portal-launch-mechanism.md) E3 |
 | 2026-09-21 | **多语言能力边界落盘（Sprint 2 #8）**：§2 新增「记忆内容多语言」行（部分支持——存储 / 语义通路不限语言；关键词通路按 FTS5 `unicode61` 完整词元匹配、简繁不互通、无配置项）；§9 新增契约点 **J4**（分词器行为 + `sanitize_fts_query` + 探针方式），供上游升级预检核对。依据：探针 [`../../scripts/i18n-probe.sh`](../../scripts/i18n-probe.sh)（L1.6，三语言 × 三通路矩阵 + STRICT 边界断言）+ 源码复核；用例登记 [`./mcp-test.md`](./mcp-test.md) §4-E |
 | 2026-09-21 | **档位定档收口（Sprint 2 #9）**：§8.1 补**实测**引文（探针 [`../../scripts/profile-probe.sh`](../../scripts/profile-probe.sh)：`core=8` / `graph=20` / `admin=22` / `power=57` / `full=101` / `core,lifecycle=14` / 默认档 `=8`，`--profile` 与 `--tier` 并存有效）；§8.3 由「待决策」改为「档位决议与开放问题」——#1 已定（对外 `core`、管理员 `full`，模板落盘归 Sprint 3 #2）、#2 已定（两条用户通道统一 `core`）、#3 验收方式落到 profile-probe、新增 #4（core 不含删除 = 已知限制，开放删除的最小增量是 `core,lifecycle`） |
+| 2026-09-21 | **模板定档落盘 + 用户版能力文档（Sprint 2 #9 收尾）**：① §5.1（管理员自用场景）→ `--profile admin`、§5.2（用户场景）→ `--profile core`，并补「改档须重连」注；② §8.3 #1 管理员入口由 `full`（101）改定 `admin`（22）（Meta / Archive 族不随 admin 开放），并标注**模板已落盘**（SSH 主人行 + 用户行 [`../deployment.md`](../deployment.md) §4.3 · 门户 `launch.argv` [`../web-portal/web-design.md`](../web-portal/web-design.md) §3.3 · 本地客户端条目 [`./mcp-test.md`](./mcp-test.md) §3），#3 的 TC-TIER-01/02 标为已完成；③ §8 顶部登记面向最终用户的通俗版 [`./mcp-capabilities.md`](./mcp-capabilities.md)（门户接入指引页唯一内容源） |

@@ -178,6 +178,10 @@ src/storage/migrations.rs:1507
     同一会话内紧接着检索该标记必然 `count:0`（表现为「明明存了却搜不到」的假失败，且只在第二次运行后暴露）。
     正解：写入会话先取「生效标记」（CONFLICT 响应中引用的既有标记），再用该标记另开会话检索 —— 见 `iso-probe.sh` 的 A1/A2、B1/B2 结构。
     另：`memory_store` 的 CONFLICT 响应同样带 `id` 字段，可直接作为后续 `memory_get` 的目标。
+18. **`tools/list` 的 `description` 是「被截断的短描述」，写工具说明时不能照抄**：上游 C2 契约（`tests/c2_tool_docs_field.rs`）规定裸 `tools/list` 只给短 `description` 且 ≤ 50 cl100k token ——
+    实测 `memory_recall` 的 `description` 只有 "Recall memories relevant to a"（句子被砍断），`memory_store` 只有 "Store a memory"；回包的 key 也只有 `name` / `description` / `inputSchema` 三个，**没有** `docs`。
+    完整说明在 `memory_capabilities` 的 **verbose drilldown**：`{family:<族>, include_schema:true, verbose:true}` ⇒ 响应的 `tools[]` 每项带完整 `docs`，且每个参数带 `description`；对 8 个族逐个取即可覆盖全部 101 项（实测 101/101 取到）。
+    ⇒ 凡是要写「这个工具做什么」（对外文档、指引页、README），底稿一律取自这里，而不是 `tools/list`。
 
 ## Links
 

@@ -8,6 +8,24 @@
 
 ## 2026-09-21
 
+### 模板定档落盘 + 用户版能力文档（Sprint 2 #9 收尾）
+
+**做了什么**：把 #9 的档位决议真正写进模板；管理员入口档位由 `full`（101）**改定为 `admin`（22）**；新增面向最终用户的能力文档。
+
+| 落点 | 改动 |
+| --- | --- |
+| [`deployment.md`](deployment.md) §4.3 | 主人（默认库 = 管理员入口）行 → `--profile admin`；用户行 → `--profile core`；补「不写 `--profile` **也不报错**」的静默风险注 |
+| [`mcp/mcp-design.md`](mcp/mcp-design.md) §5.1 / §5.2 | 场景 A（管理员多设备）`admin`、场景 B（用户）`core`；加「改档须重连」注 |
+| [`web-portal/web-design.md`](web-portal/web-design.md) §3.3 | `launch.argv` 由注释掉的待定项改为生效的 `--profile core`；§10 #1 由「未定」改为「已定」 |
+| [`mcp/mcp-test.md`](mcp/mcp-test.md) §3 | 本地客户端条目显式 `--profile core`（生产条由服务端强制命令决定，不写） |
+
+**管理员档位为何从 `full` 改成 `admin`**：`admin`（22）= Core + Lifecycle + Governance + 常驻 `memory_capabilities`，覆盖管理员真正需要的删除 / 遗忘 / 清理 / 审批与订阅；只有 `full` 才有的 Meta / Archive（`memory_stats` / `memory_agent_list` / `memory_archive_stats`）是**只读统计类**，暂不随管理员入口开放 —— 需要时另开条目评估，而不是把 101 项整体打开。
+
+**新增文档**：[`mcp/mcp-capabilities.md`](mcp/mcp-capabilities.md) —— 面向**最终用户**（简体中文）：一句话定位 / 能做什么 / 三步接入 / 档位说明 / **全量 101 项工具逐项说明**（按 8 组，每项含「做什么 + 什么时候用」）/ 一个端到端例子 / 常见疑问。
+功能说明的底稿**来自运行时实测而不是抄文档**：`tools/list` 只给 ≤50 token 的短描述（如 `memory_recall` 只有 "Recall memories relevant to a"），完整 `docs` 需通过 `memory_capabilities` 的 verbose drilldown（`family=<族>` + `include_schema=true` + `verbose=true`，逐族取回）获得 —— 101 项全部取到后再改写为用户语言。该文档登记为门户「接入指引」页的**唯一内容源**（[`web-portal/web-stories.md`](web-portal/web-stories.md) AC6.4）。
+
+**排期影响**：Sprint 3 #2（把 `--profile` 写入门户 / SSH 模板）**已提前完成**；`product-backlog.md` #12 标 Done、#19 描述补决议 —— 生产侧的 `initialize` 回包核对留待上线后执行。
+
 ### `--profile` 定档收口（Sprint 2 #9）
 
 **问题**：对外（SSH 与门户）暴露哪一档工具集（8 / 20 / 22 / 57 / 101）一直未定 —— SSH 模板没写 `--profile` ⇒ 实际只暴露 core 且**不报错**；门户模板里同一项是注释掉的待定行。定档缺**实测**依据（AC 要求实测 v0.10.0 各档工具数）。

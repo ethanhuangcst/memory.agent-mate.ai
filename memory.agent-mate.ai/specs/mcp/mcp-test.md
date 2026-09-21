@@ -52,7 +52,7 @@
 | L2 客户端接入（即时） | Cursor 加载 `ai-memory-local`（8 工具 + 2 prompts）+ agent 直调（§4-B2） | 已完成 2026-09-20 |
 | Sprint 2 #5 | L1.5 隔离探针：本地预实证 A/B/C 三组全绿（P1a 静默证据 → D1/D2 的存在理由） | 已完成 2026-09-20 |
 | Sprint 2 #8 | L1.6 多语言探针：三语言 × 三通路结论矩阵（部分支持，§4-E）+ 客户端通路交叉复现一致 | 已完成 2026-09-21 |
-| Sprint 3 #2 | 档位核对（TC-TIER）：**双探针** `memory_capabilities` + `tools/list` 计数（core=8 / graph=20 / admin=22 / power=57 / full=101） | 待做 |
+| Sprint 3 #2 | 档位核对（TC-TIER）：**双探针** `memory_capabilities` + `tools/list` 计数（core=8 / graph=20 / admin=22 / power=57 / full=101） | 已完成 2026-09-21（提前落地：定档 + 模板四处已写 `--profile`；各档计数实测 7 档全绿，证据见 §4-C） |
 | Sprint 3 #6 | 隔离负向验收（TC-ISO）：落地 D1/D2 后重跑 V1，断言**必须失败** | 待做 |
 | Sprint 3 #7 | 每库维护（TC-GC）：`gc` / `curator --once` 对每用户库的覆盖面对账 | 待做 |
 | Sprint 3 #8 | 写路径泄露探针（TC-LEAK）：去重/合成是否回显他人私有内容 | 待做 |
@@ -72,9 +72,11 @@
 "ai-memory-local": {
   "type": "stdio",
   "command": "docker",
-  "args": ["exec", "-i", "ai-memory-mcp", "ai-memory", "mcp", "--tier", "smart"]
+  "args": ["exec", "-i", "ai-memory-mcp", "ai-memory", "mcp", "--tier", "smart", "--profile", "core"]
 }
 ```
+
+- `--profile core`（8 项）= **对外正式口径**（2026-09-21 定稿，与 SSH 用户行、门户模板一致；管理员入口为 `admin`，见 [`../deployment.md`](../deployment.md) §4.3 与 [`./mcp-design.md`](./mcp-design.md) §8.3）；写出来的理由是「不传时默认也是 core 且**不报错**」，显式声明可防静默漂移。
 
 - **只加 `-i`，绝不加 `-t`**：pty 会破坏 stdio 帧（与生产 forced command `no-pty` 同因）。
 - **无需 `env` 字段**：`docker exec` 继承容器环境，qwen key 不进 Cursor 配置、不进仓。
@@ -138,8 +140,9 @@
 | TC-ISO-04 | 维护通路：各库 `--db stats` | 计数独立（alice=1 / bob=1 / 主库=7） | Sprint 3 #6 |
 | TC-GC-01 | 每库 `gc` / `curator --once` | 日志无错，且 TTL 遗忘与 WAL checkpoint 已覆盖（**覆盖面待验**） | Sprint 3 #7 |
 | TC-LEAK-01 | 写路径泄露：方案②下 A 写入后检查是否回显 B 的私有内容 | 期望**无**跨库回显；方案③物理分离本应无路径 | Sprint 3 #8 |
-| TC-TIER-01 | `initialize` + `tools/list` 计核，逐档核对 | core=8 / graph=20 / admin=22 / power=57 / full=101 | Sprint 3 #2 |
-| TC-TIER-02 | `memory_capabilities` 家族与装载状态 | 与 `tools/list` 一致（族计数口径差异已注明） | Sprint 3 #2 |
+| TC-TIER-01 | `initialize` + `tools/list` 计核，逐档核对 | core=8 / graph=20 / admin=22 / power=57 / full=101 | **已完成 2026-09-21**（探针 [`../../scripts/profile-probe.sh`](../../scripts/profile-probe.sh)：7 档独立进程 + 默认档对照 + `core,lifecycle`=14，退出码 0；四处模板均已写 `--profile`，用户 `core` / 管理员 `admin`） |
+| TC-TIER-02 | `memory_capabilities` 家族与装载状态 | 与 `tools/list` 一致（族计数口径差异已注明） | **已完成 2026-09-21**（同探针，软断言族装载状态；另以 verbose drilldown 取回 101 项完整 `docs`，作为 [`./mcp-capabilities.md`](./mcp-capabilities.md) 的撰写底稿） |
+| TC-TIER-03 | 对外模板实际档位核对 | 门户 `launch.argv` = `core`；SSH 用户行 = `core`、主人行 = `admin` | **已完成 2026-09-21**（文档级：四处模板逐处核对；生产上线后用 `initialize` 回包复核一次） |
 
 > 现役探针：[`../../scripts/iso-probe.sh`](../../scripts/iso-probe.sh)（退出码 0 全通过 / 10 前置 / 20 解析链 / 30 隔离 / 40 维护 / 50 方案②会话），组 A=P1a/P1b/P4，组 B=P2/P3/P5，组 C=P6。可重复性已验证：第二次起必然命中 near-duplicate 去重，探针**分会话**处理（写入会话先取「生效标记」再另开会话检索），故重复运行稳定。
 
@@ -184,3 +187,4 @@
 | 2026-09-20 | 增补 §1 原则两条（capabilities 计数口径；档位只能启动时定）与 §3 改档说明；§2 Sprint 3 #2 改双探针；§4-B2 记录第二客户端交叉验证 |
 | 2026-09-20 | **specs 整合**：迁入 `specs/mcp/`（原 `specs/mcp-test.md`）；新增 **L1.5 隔离探针层**与 §4-C（TC-ISO / TC-GC / TC-LEAK / TC-TIER）、§4-D（TC-SSH / TC-BAK / TC-REV / TC-LIMIT / TC-I18N / TC-ATT / TC-HTTP）用例位；L0 补「镜像无 curl，改用 serve 日志 + doctor」 |
 | 2026-09-21 | **新增 L1.6 多语言探针层与 §4-E 用例（TC-I18N-01..06，Sprint 2 #8）**：三语言 × 三通路结论矩阵实测全通过（存储 / 语义召回 / 按 id 直取支持；关键词仅完整词元、词元内子串与简繁交叉不命中）；§1「检索工具分工」原则升级为精确边界；§2 登记 Sprint 2 #8 完成；§4-D TC-I18N-01 占位归并至 §4-E。探针 [`../../scripts/i18n-probe.sh`](../../scripts/i18n-probe.sh)，结论回写 [`../product-backlog.md`](../product-backlog.md) #10 |
+| 2026-09-21 | **档位定档 + 模板落盘（Sprint 2 #9 收尾）**：§2 Sprint 3 #2 提前完成；§3 本地基线 `args` 显式 `--profile core`（生产条不写 —— 由服务端 forced command 决定），并注明「不传时默认也是 core 且**不报错**」；§4-C TC-TIER-01/02 标为已完成（探针 [`../../scripts/profile-probe.sh`](../../scripts/profile-probe.sh)：7 档独立进程 + 默认档对照 + `core,lifecycle`=14，退出码 0），新增 TC-TIER-03（对外模板档位核对：门户 `core` / SSH 用户行 `core` / 主人行 `admin`）；新增面向最终用户的能力文档 [`./mcp-capabilities.md`](./mcp-capabilities.md)（工具功能说明的底稿取自 `memory_capabilities` verbose drilldown） |

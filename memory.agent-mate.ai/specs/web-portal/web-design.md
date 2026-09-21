@@ -129,8 +129,8 @@ launch:
     - mcp
     - --tier
     - smart
-    # - --profile
-    # - full          # 见 §10 #1：默认 core（8 工具），是否 full 待定
+    - --profile
+    - core          # §10 #1 已定（2026-09-21）：对外统一 core（8 工具）；管理员入口 admin（22）。见 ../mcp/mcp-design.md §8.3
   env:
     AI_MEMORY_DB: "/data/users/{handle}/ai-memory.db"
     AI_MEMORY_AGENT_ID: "human:{handle}"
@@ -297,7 +297,7 @@ launch:
 
 | # | 问题 | 建议 |
 |---|---|---|
-| 1 | 会话是否用 `--profile full`？ | 上游 `mcp --profile` **默认 `core`**（8 工具）；要「所有功能」应显式 `full`（101）。**现有 SSH 模板也没写** ⇒ 当前只暴露 core。需与 SSH 路径**统一口径**（[`../mcp/mcp-design.md`](../mcp/mcp-design.md) §8.3） |
+| 1 | ~~会话是否用 `--profile full`？~~ **已定（2026-09-21）** | 对外（门户 + SSH 用户行）**统一 `core`（8 工具）**；管理员入口 = **`admin`（22 工具）**，两条模板分开维护。**已落盘**：门户 `launch.argv`（§3.3）、SSH 强制命令（[`../deployment.md`](../deployment.md) §4.3 / [`../mcp/mcp-design.md`](../mcp/mcp-design.md) §5.1–§5.2）、本地客户端条目（[`../mcp/mcp-test.md`](../mcp/mcp-test.md) §3）。决议与理由：[`../mcp/mcp-design.md`](../mcp/mcp-design.md) §8.3；实测依据 [`../../scripts/profile-probe.sh`](../../scripts/profile-probe.sh) |
 | 2 | 门户技术栈 | 未定（要求：能实现 MCP Streamable HTTP + 子进程 stdio 桥） |
 | 3 | 反向代理选型 | 未定（NPM / Caddy / 其它） |
 | 4 | MCP 传输实现 | **本项目唯一非平凡工程量**；优先复用官方 MCP SDK 的「server transport + stdio client transport」组合，**不自行实现协议**；兼容旧版 SSE 客户端 |
@@ -331,3 +331,4 @@ launch:
 | 2026-09-20 | **specs 整合**：由 `admin_portal_design.md` 迁入 `web-portal/`；**去重** —— 全链路数据流与两 stack 职责表已上移 [`../architecture.md`](../architecture.md) §3，本文档只保留门户内部设计；静默失败点 S4 与 architecture 的 R1 互指不重复叙述；耦合面 C1–C8 与 [`../mcp/mcp-design.md`](../mcp/mcp-design.md) §9（A–K）分工：C* 是门户对上游的 8 个依赖点，A–K 是全量契约清单 |
 | 2026-09-20 | 已关闭的既有矛盾：门户代码位置定为本仓 `admin_portal/`（推翻「本仓不承载」）；「无公网入口」决议**部分修订**为「ai-memory 本体无公网入口，门户面有」；自有资产根增为两个（`memory.agent-mate.ai/` + `admin_portal/`）；升级七步增「门户镜像随 `upstream.lock` 重建」 |
 | 2026-09-21 | **D1 定稿（β′，用户确认）+ 新增 §3.4 落地前置 + §9 附录更新**：§0 的 D1 由「可翻转」转**已定稿**；§3.2 构建片段补 `--platform=linux/amd64` / `ca-certificates` / 显式 `--uid 999 --gid 999`；新增 §3.4「三条硬前置 + 一条启动自检」（`/data/users` setgid 引导、门户持独立 MaaS key、版本断言、启动自检 fail-closed）；§9 附录补「α 的缓解措施被证不成立 + α 已排除」。依据 [`../knowledge/web-portal/portal-launch-mechanism.md`](../knowledge/web-portal/portal-launch-mechanism.md) E1–E7 |
+| 2026-09-21 | **§3.3 会话档位定稿 + §10 #1 关闭**：`launch.argv` 由注释掉的待定项改为生效的 `--profile core`（对外统一 8 项）；§10 #1 由「未定」改为**已定**（管理员入口 = `admin` 22 项，两条模板分开维护），并指向已落盘的四处模板。决议与理由 [`../mcp/mcp-design.md`](../mcp/mcp-design.md) §8.3；实测 [`../../scripts/profile-probe.sh`](../../scripts/profile-probe.sh)；接入说明页的内容源 = [`../mcp/mcp-capabilities.md`](../mcp/mcp-capabilities.md)（[`./web-stories.md`](./web-stories.md) AC6.4） |
