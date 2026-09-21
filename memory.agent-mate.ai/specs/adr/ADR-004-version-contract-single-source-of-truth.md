@@ -48,14 +48,14 @@ Accepted
 
 ## Consequences
 
-- ✅ 改版本 = 改一处（`make pin-update` 回写），消灭自相矛盾。
-- ✅ 可由 `make preflight` 自动检出「标签被重推」与「契约面差异」。
-- ✅ 文档引用不再因上游重写历史而断链。
-- ⚠️ 多一个文件与一层间接：读者需知道「版本号在锁文件里」；已在各文档显式点名。
-- ⚠️ digest 必须真实校验过才可信：初值来自 GHCR 包页面抓取时标记 `unverified`；
+- 改版本 = 改一处（`make pin-update` 回写），消灭自相矛盾。
+- 可由 `make preflight` 自动检出「标签被重推」与「契约面差异」。
+- 文档引用不再因上游重写历史而断链。
+- 注意：多一个文件与一层间接 —— 读者需知道「版本号在锁文件里」；已在各文档显式点名。
+- 注意：digest 必须真实校验过才可信：初值来自 GHCR 包页面抓取时标记 `unverified`；
   已用 `make preflight ARGS=--with-image` 直连 registry v2 校验并改为 `registry-api`。
-- ⚠️ digest 校验依赖 `ghcr.io` 可达：本机曾一度不可达，故脚本设计为**不可达即 SKIP 不阻断**。
-- 🔁 后续：若上游发布流程改为不可变 tag（或提供 digest 承诺），可简化为仅 digest。
+- 注意：digest 校验依赖 `ghcr.io` 可达：本机曾一度不可达，故脚本设计为**不可达即 SKIP 不阻断**。
+- 后续：若上游发布流程改为不可变 tag（或提供 digest 承诺），可简化为仅 digest。
 
 ## Date
 

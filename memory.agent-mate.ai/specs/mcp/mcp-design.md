@@ -12,10 +12,10 @@
 
 | 问题 | 答案 | 证据 |
 |---|---|---|
-| 一用户一 DB 的物理隔离能否成立？ | ✅ **能**（双向检索未命中 / `memory_get` → `memory not found` / 主库计数不变） | 探针 P2 · P3 · P5 |
-| 「不设 `AI_MEMORY_DB` 就共用主库」只是理论担忧？ | ❌ **不是** —— 实测：退出码 0、无任何告警，`source` 静默落到 config 的 `db`（`/data/ai-memory.db`） | 探针 P1a |
-| 方案②（单库 + per-user env）能替代吗？ | ❌ **不能** —— 读隔离成立，但**写路径完全可伪造**：bob 以 `agent_id=human:iso-alice` 写入成功并回显 alice 身份，alice 随后检索到被注入内容 | 探针 P6 |
-| 错设路径是否也静默？ | ⚠️ 视情况：目标库**打不开**时 fail-loud（`Storage=critical / failed to open database`，rc=2）；**漏设/指到有效库**时静默 | 探针 P4 · P1a |
+| 一用户一 DB 的物理隔离能否成立？ | **能**（双向检索未命中 / `memory_get` → `memory not found` / 主库计数不变） | 探针 P2 · P3 · P5 |
+| 「不设 `AI_MEMORY_DB` 就共用主库」只是理论担忧？ | **不是** —— 实测：退出码 0、无任何告警，`source` 静默落到 config 的 `db`（`/data/ai-memory.db`） | 探针 P1a |
+| 方案②（单库 + per-user env）能替代吗？ | **不能** —— 读隔离成立，但**写路径完全可伪造**：bob 以 `agent_id=human:iso-alice` 写入成功并回显 alice 身份，alice 随后检索到被注入内容 | 探针 P6 |
+| 错设路径是否也静默？ | 注意：视情况 —— 目标库**打不开**时 fail-loud（`Storage=critical / failed to open database`，rc=2）；**漏设/指到有效库**时静默 | 探针 P4 · P1a |
 
 ### 0.1 冻结机制（2026-09-20 用户确认，按探针实测形态冻结）
 
@@ -52,17 +52,17 @@
 
 | 能力 | 结论 | 依据 |
 |---|---|---|
-| 账号 / 租户模型 | ❌ **不存在**（无 user / tenant / invite 概念，上游自称 single-tenant） | 源码核实 |
-| 多租户**读**隔离 | ✅ 存在且覆盖面广 —— 按行 `scope=private` + 属主过滤 | `is_visible_to_caller` 应用于 `session_start`/`list`/`recall`/`search`/`get`/`kg_query`/`kg_timeline`/`link`/`load_family`/`lineage`/`replay`/`find_paths` + 全部 HTTP handler |
-| 可见性调用者来源 | ⭐ **只认 `AI_MEMORY_AGENT_ID` 环境变量**（`resolve_read_visibility_caller`，**不接受工具参数**）；未设 = trust-all | `src/identity/mod.rs:333-345` |
+| 账号 / 租户模型 | **不存在**（无 user / tenant / invite 概念，上游自称 single-tenant） | 源码核实 |
+| 多租户**读**隔离 | 存在且覆盖面广 —— 按行 `scope=private` + 属主过滤 | `is_visible_to_caller` 应用于 `session_start`/`list`/`recall`/`search`/`get`/`kg_query`/`kg_timeline`/`link`/`load_family`/`lineage`/`replay`/`find_paths` + 全部 HTTP handler |
+| 可见性调用者来源 | **只认 `AI_MEMORY_AGENT_ID` 环境变量**（`resolve_read_visibility_caller`，**不接受工具参数**）；未设 = trust-all | `src/identity/mod.rs:333-345` |
 | 上游官方要求 | *"Operators running a multi-tenant MCP host **MUST** set `AI_MEMORY_AGENT_ID` per tenant"* | `docs/ADMIN_GUIDE.md:1069` |
-| 写路径可见性过滤 | ❌ **完全没有**（`store`/`atomise`/`promote` 命中 0） | 源码 grep |
-| `namespace` | ⚠️ 是**分类**，**不是授权边界** | 源码 |
-| macaroon 能力令牌 | ⚠️ **additive-only**（只放宽不收紧）；v0.10.0 默认关闭 | `src/governance/capability.rs` |
-| 顶层 `api_key` | ⚠️ 单一共享密钥，无多用户、无法按用户吊销 | `src/config.rs:2793` |
-| 默认 `scope` | ⚠️ 写入**默认即 `private`** | `src/mcp/tools/list.rs:251-252` |
-| 静态加密 | ✅ `AI_MEMORY_ENCRYPT_AT_REST=1` → 按 agent 的 X25519 ECDH + ChaCha20-Poly1305（per-node at-rest） | `src/encryption/mod.rs:1-20` |
-| 按 agent 配额 | ✅ `agent_quotas` / `ai-memory quota-status` | `src/cli/commands/quota_status.rs` |
+| 写路径可见性过滤 | **完全没有**（`store`/`atomise`/`promote` 命中 0） | 源码 grep |
+| `namespace` | 注意：是**分类**，**不是授权边界** | 源码 |
+| macaroon 能力令牌 | 注意：**additive-only**（只放宽不收紧）；v0.10.0 默认关闭 | `src/governance/capability.rs` |
+| 顶层 `api_key` | 注意：单一共享密钥，无多用户、无法按用户吊销 | `src/config.rs:2793` |
+| 默认 `scope` | 注意：写入**默认即 `private`** | `src/mcp/tools/list.rs:251-252` |
+| 静态加密 | `AI_MEMORY_ENCRYPT_AT_REST=1` → 按 agent 的 X25519 ECDH + ChaCha20-Poly1305（per-node at-rest） | `src/encryption/mod.rs:1-20` |
+| 按 agent 配额 | `agent_quotas` / `ai-memory quota-status` | `src/cli/commands/quota_status.rs` |
 
 > **Ed25519 身份 ≠ 授权**：`metadata.agent_id` 是**自述值**，任何调用者可填，不得单独作授权闸门（只用于溯源/审计/过滤）。
 
@@ -73,9 +73,9 @@
 | 档 | 机制 | 读写隔离 | 运维成本 | 适用 |
 |---|---|---|---|---|
 | ① 单库 trust-all | **不设** `AI_MEMORY_AGENT_ID` | 读：全开（有意）<br>写：不设防 | 最低 | **单人多设备共享**（场景 A） |
-| ② 单库 + 每用户 env | `-e AI_MEMORY_AGENT_ID=human:<u>` | 读：✅ 强制<br>写：❌ **可伪造** | 低 | 互信小团队 |
-| ③ 一用户一 DB ⭐ | `-e AI_MEMORY_DB=/data/users/<u>/ai-memory.db` | 读：✅ **物理**<br>写：✅ **物理** | 中（每库各自维护+备份） | **多用户（场景 B）默认** |
-| ④ 一用户一容器 | 独立 stack | ✅ 物理 + 独立故障域/tier/版本/配额 | 高（N× compose/config/env） | 需要独立故障域或差异化规格 |
+| ② 单库 + 每用户 env | `-e AI_MEMORY_AGENT_ID=human:<u>` | 读：强制<br>写：不强制（**可伪造**） | 低 | 互信小团队 |
+| ③ 一用户一 DB | `-e AI_MEMORY_DB=/data/users/<u>/ai-memory.db` | 读：**物理**<br>写：**物理** | 中（每库各自维护+备份） | **多用户（场景 B）默认** |
+| ④ 一用户一容器 | 独立 stack | 物理 + 独立故障域/tier/版本/配额 | 高（N× compose/config/env） | 需要独立故障域或差异化规格 |
 
 > **为什么 ③ 而不是 ②**：② 的读隔离可强制，但写路径无过滤且 `agent_id` 是自述值（MCP 工具参数优先级高于 env）→ 任意用户可把他人名字写在行上。③ 让这条路径**物理上不存在**。
 
@@ -97,7 +97,7 @@
 | 每用户成本 | 1 把密钥 + 1 行 | `useradd` + 组/sudoers + 家目录 + 密钥 |
 | 攻击面 | 1 个 docker 组成员 | **N 个**（docker 组 ≈ root 等价） |
 | 吊销 | 删 1 行 | 删账号（易漏家目录/组） |
-| sshd 日志区分用户 | ❌（**唯一实质损失**；用 `metadata.agent_id` + `authorized_keys` comment 补） | ✅ |
+| sshd 日志区分用户 | 否（**唯一实质损失**；用 `metadata.agent_id` + `authorized_keys` comment 补） | 是 |
 
 ---
 
@@ -137,7 +137,7 @@ for db in /data/users/*/ai-memory.db; do
 done
 ```
 
-> ✅ `--db <path> stats` 通路已实测（各库计数独立）；⚠️ `gc` / `curator --once` 对每库 TTL 遗忘与 WAL checkpoint 的**覆盖面未验**（Sprint 3 #7）。
+> `--db <path> stats` 通路已实测（各库计数独立）；注意：`gc` / `curator --once` 对每库 TTL 遗忘与 WAL checkpoint 的**覆盖面未验**（Sprint 3 #7）。
 
 ### 5.4 备份与配额
 
@@ -162,11 +162,11 @@ aimem-ssh ALL=(root) NOPASSWD: /usr/bin/docker exec -i ai-memory-mcp ai-memory m
 
 | # | 防线 | 为什么是「条件」 | 状态 |
 |---|---|---|---|
-| **D1** | fail-closed 断言：spawn 前断言 `AI_MEMORY_DB` 非空 + 以 `/data/users/` 开头 + 含该 `handle` | P1a 证明漏设时**无任何信号**；无此断言，一次模板笔误即静默串号 | ☐ Sprint 3 #5 |
-| **D2** | 移除 `config.toml.tmpl` 的 `db` 键 | 该键是 R1 的**唯一落点**；移除后漏设退化为相对路径 → **fail-loud** | ☐ Sprint 3 #5 |
-| **D3** | 一会话一子进程，**禁止跨用户复用/池化** | 单库方案写路径无 caller 边界（P6），会话复用即把边界交还给门户 | ☐ Sprint 3 #5 / Sprint 4 #7 |
-| **D4** | 会话审计含**解析出的库路径** | 事后可对账；`doctor --json` 的 `source` 即现成来源 | ☐ Sprint 3 #5 / Sprint 4 #4 |
-| **D5** | 上线前负向验收（不过则阻断） | 本 Sprint 只给本地预实证 | ☐ Sprint 3 #6 |
+| **D1** | fail-closed 断言：spawn 前断言 `AI_MEMORY_DB` 非空 + 以 `/data/users/` 开头 + 含该 `handle` | P1a 证明漏设时**无任何信号**；无此断言，一次模板笔误即静默串号 | 待落地：Sprint 3 #5 |
+| **D2** | 移除 `config.toml.tmpl` 的 `db` 键 | 该键是 R1 的**唯一落点**；移除后漏设退化为相对路径 → **fail-loud** | 待落地：Sprint 3 #5 |
+| **D3** | 一会话一子进程，**禁止跨用户复用/池化** | 单库方案写路径无 caller 边界（P6），会话复用即把边界交还给门户 | 待落地：Sprint 3 #5 / Sprint 4 #7 |
+| **D4** | 会话审计含**解析出的库路径** | 事后可对账；`doctor --json` 的 `source` 即现成来源 | 待落地：Sprint 3 #5 / Sprint 4 #4 |
+| **D5** | 上线前负向验收（不过则阻断） | 本 Sprint 只给本地预实证 | 待落地：Sprint 3 #6 |
 
 > D1/D2 不提升隔离**上限**（上限由物理分离给定），只保证**下限**：配置错一次不会静默串号。这是「可实现」与「可信」的分界。
 
@@ -174,10 +174,10 @@ aimem-ssh ALL=(root) NOPASSWD: /usr/bin/docker exec -i ai-memory-mcp ai-memory m
 
 | # | 验证 | 本地预实证 | 证据 | 生产级待办 |
 |---|---|---|---|---|
-| **V1** | 负向：漏设 `AI_MEMORY_DB` 必须失败 | ⚠️ 预实证了「当前会**静默成功**」（D1/D2 未落地时的基线） | P1a | 落地 D1/D2 后重跑，断言**必须失败** |
-| **V2** | 正向：目标库 mtime 变化且共享主库不变 | ✅（用户库 1/1，主库 7→7，mtime/size 未变） | P2 · P5 | 生产卷上复验 |
-| **V3** | 交叉：A 写后 B 检索不到、B `get <A id>` 不可见 | ✅（双向未命中；`get` → `memory not found`） | P2 | 生产 forced command 路径复验 |
-| **V4** | 解析链自检：与模板相同的 env/argv 跑 `doctor --json`，`source` == 该用户库 | ✅（`source=/data/users/iso-alice/ai-memory.db`） | P3 | 用**生产模板实际生成**的 env 再验 |
+| **V1** | 负向：漏设 `AI_MEMORY_DB` 必须失败 | 注意：预实证了「当前会**静默成功**」（D1/D2 未落地时的基线） | P1a | 落地 D1/D2 后重跑，断言**必须失败** |
+| **V2** | 正向：目标库 mtime 变化且共享主库不变 | 是（用户库 1/1，主库 7→7，mtime/size 未变） | P2 · P5 | 生产卷上复验 |
+| **V3** | 交叉：A 写后 B 检索不到、B `get <A id>` 不可见 | 是（双向未命中；`get` → `memory not found`） | P2 | 生产 forced command 路径复验 |
+| **V4** | 解析链自检：与模板相同的 env/argv 跑 `doctor --json`，`source` == 该用户库 | 是（`source=/data/users/iso-alice/ai-memory.db`） | P3 | 用**生产模板实际生成**的 env 再验 |
 
 ### 6.3 验收清单（方案 ③）
 
@@ -265,7 +265,7 @@ aimem-ssh ALL=(root) NOPASSWD: /usr/bin/docker exec -i ai-memory-mcp ai-memory m
 
 > 这是「最小耦合」的**可执行载体**：只登记我方**实际踩的那几块砖**，不追求覆盖上游全集。
 > **敏感度**：**高·静默** = 理解错了不报错、只是行为退化 → 必查且必须用**运行证据**核对；中 = 会响亮失败；低 = 影响有限。
-> ⚠️ 检测命令中的 `curl` 仅作**上游位置**的语义说明 —— **镜像内不含 curl/wget**，容器内 HTTP 探测改用 `ai-memory doctor` 与 serve 日志（见 [`../deployment.md`](../deployment.md) §7.1）。
+> 注意：检测命令中的 `curl` 仅作**上游位置**的语义说明 —— **镜像内不含 curl/wget**，容器内 HTTP 探测改用 `ai-memory doctor` 与 serve 日志（见 [`../deployment.md`](../deployment.md) §7.1）。
 
 ### A. 镜像与容器形态
 
@@ -366,7 +366,7 @@ aimem-ssh ALL=(root) NOPASSWD: /usr/bin/docker exec -i ai-memory-mcp ai-memory m
 | I2 | manifest **含 `sha256`**（另有 snapshot/bytes/source_db/version/created_at） | 高 | 字段消失 → 完备性校验失去依据，静默退化为「只看文件存在」 | `:46-54,87-100` |
 | I3 | 同名快照**拒绝覆盖** | 中 | 改静默覆盖 → 可能丢上一份快照 | `:73-78` |
 | I4 | `--keep` 默认 **48**，按 mtime **newest-first** 保留，超出连同 manifest 删；`0` 关闭轮换 | 高 | 语义变 → 静默堆积或静默删掉想要的快照 | `:29-32,114-160` |
-| I5 | ⚠️ **`restore` 是 in-place**：校验 manifest sha256（`--skip-verify` 可跳）→ 当前库 rename 为 `pre-restore-<ts>.db` 作安全网 → 快照 copy 到 `db_path` | 高 | 与「恢复永不 in-place」的直觉相反；若流程假设落在 staging → **实际直接覆盖生产库**。本清单最反直觉的一条 | `:35-44,171-258` |
+| I5 | 注意：**`restore` 是 in-place**：校验 manifest sha256（`--skip-verify` 可跳）→ 当前库 rename 为 `pre-restore-<ts>.db` 作安全网 → 快照 copy 到 `db_path` | 高 | 与「恢复永不 in-place」的直觉相反；若流程假设落在 staging → **实际直接覆盖生产库**。本清单最反直觉的一条 | `:35-44,171-258` |
 | I6 | 迁移前自动快照 `<dbfile>.pre-migration-v<from>-to-v<to>-<nanos>.bak`（同目录，仅 `version>0` 时生成） | 高 | 命名变 → 回滚脚本找不到快照（通配会静默取错） | `src/storage/migrations.rs:868,915-947,1502-1529` |
 
 ### J. schema 与迁移语义
@@ -375,7 +375,7 @@ aimem-ssh ALL=(root) NOPASSWD: /usr/bin/docker exec -i ai-memory-mcp ai-memory m
 |---|---|---|---|---|
 | J1 | `CURRENT_SCHEMA_VERSION`：v0.10.0 = **80**（clone `main` = **81**）；文档滞后写 78 | 中 | 仅作「是否发生前向迁移」的信号；**文档不可用于版本判断** | `src/storage/migrations.rs:859` |
 | J2 | 迁移**前向-only**，v34 / v50 / v54 三个阶梯臂**不可逆** | 高 | 不可逆迁移后无法靠改回旧二进制降级 | `:1502-1519` |
-| J3 | ⚠️ **旧二进制启动于「比自身更新的库」时不会报错**（`migrate()` 在 `version >= CURRENT` 直接 `return Ok(())`；全 `src` 无「库过新则拒绝」逻辑） | 高·静默 | **回滚只改 `IMAGE_TAG` 是危险的**：旧二进制照常启动并操作不认识的 schema → **静默数据损坏**。⇒ **回滚必须用 pre-migration 快照覆盖 DB** | `:1507-1509`；全 src grep 无命中（2026-09-20 核实） |
+| J3 | 注意：**旧二进制启动于「比自身更新的库」时不会报错**（`migrate()` 在 `version >= CURRENT` 直接 `return Ok(())`；全 `src` 无「库过新则拒绝」逻辑） | 高·静默 | **回滚只改 `IMAGE_TAG` 是危险的**：旧二进制照常启动并操作不认识的 schema → **静默数据损坏**。⇒ **回滚必须用 pre-migration 快照覆盖 DB** | `:1507-1509`；全 src grep 无命中（2026-09-20 核实） |
 
 ### K. 凭证与授权面
 
@@ -383,7 +383,7 @@ aimem-ssh ALL=(root) NOPASSWD: /usr/bin/docker exec -i ai-memory-mcp ai-memory m
 |---|---|---|---|---|
 | K1 | HTTP `api_key` 是**单一共享密钥**，不是多用户体系 | 中 | 换 key = 所有客户端同时重配；**无法按用户吊销** | `src/config.rs:2793` |
 | K2 | macaroon 能力令牌 `[capabilities]`：v0.9.0 引入，**v0.10.0 默认 `false`**（GA 姿态 = 恒等函数）；`main`（v1.0.0 方向）编译默认已改 `true` 并新增零配置 `owner` issuer | 高 | 升级 v1.0.0 需重评「无令牌调用者行为不变」（上游称 additive-only） | v0.10.0 `:5884-5905`；main `src/governance/capability.rs:102` |
-| K3 | CLI 签发链路（v0.10.0 已有）：`capability keygen/mint/attenuate/inspect/verify`；caveat **只能收窄**（AND）：`--namespace-prefix`/`--op-ceiling`/`--action`/`--agent`/`--expires-*`/`--not-before`。⚠️ **v0.10.0 没有 `capability init`**（v1.0.0 特性）—— 照搬运维文档会失败 | 高 | flag 改名 → 「无 UI 签发 key」的 runbook 断裂（响亮） | `src/cli/capability.rs:117-171` |
+| K3 | CLI 签发链路（v0.10.0 已有）：`capability keygen/mint/attenuate/inspect/verify`；caveat **只能收窄**（AND）：`--namespace-prefix`/`--op-ceiling`/`--action`/`--agent`/`--expires-*`/`--not-before`。注意：**v0.10.0 没有 `capability init`**（v1.0.0 特性）—— 照搬运维文档会失败 | 高 | flag 改名 → 「无 UI 签发 key」的 runbook 断裂（响亮） | `src/cli/capability.rs:117-171` |
 | K4 | `issuers` 是**封闭白名单**，无隐式 issuer；每项需 `<id>.caproot`（0600）+ `<id>.pub`；`max_op` **必填**，解析失败即跳过该 issuer（fail-closed） | 高 | 以为可省 `max_op` → 令牌校验全失败（运行时才暴露） | `:5898-5912` |
 | K5 | **Ed25519 身份是「出处证明」不是授权**：`agent_id` 是自述值，**不得单独作授权闸门** | 高 | 当权限依据 → 任何人自称任意 id → **静默越权** | `docs/ADMIN_GUIDE.md:996-1010` |
 | K6 | 密钥目录解析 `--key-dir` > `AI_MEMORY_KEY_DIR` > `$HOME/.config/ai-memory/keys`；私钥 0600。因 `HOME=/data`，密钥随持久卷留存（收益） | 中 | 改到卷外 → 丢失导致既有令牌全部不可验证 | `src/cli/capability.rs`；`src/identity/keypair.rs:170` |

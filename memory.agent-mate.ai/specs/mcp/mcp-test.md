@@ -47,9 +47,9 @@
 
 | 阶段 | 内容 | 状态 |
 |---|---|---|
-| Sprint 2 #4 | 本地基线：local-up 常驻 + L0 + L1（证据：8 工具断言、`mode:hybrid` 语义召回命中） | ✅ 2026-09-20 |
-| L2 客户端接入（即时） | Cursor 加载 `ai-memory-local`（8 工具 + 2 prompts）+ agent 直调（§4-B2） | ✅ 2026-09-20 |
-| Sprint 2 #5 | L1.5 隔离探针：本地预实证 A/B/C 三组全绿（P1a 静默证据 → D1/D2 的存在理由） | ✅ 2026-09-20 |
+| Sprint 2 #4 | 本地基线：local-up 常驻 + L0 + L1（证据：8 工具断言、`mode:hybrid` 语义召回命中） | 已完成 2026-09-20 |
+| L2 客户端接入（即时） | Cursor 加载 `ai-memory-local`（8 工具 + 2 prompts）+ agent 直调（§4-B2） | 已完成 2026-09-20 |
+| Sprint 2 #5 | L1.5 隔离探针：本地预实证 A/B/C 三组全绿（P1a 静默证据 → D1/D2 的存在理由） | 已完成 2026-09-20 |
 | Sprint 3 #2 | 档位核对（TC-TIER）：**双探针** `memory_capabilities` + `tools/list` 计数（core=8 / graph=20 / admin=22 / power=57 / full=101） | 待做 |
 | Sprint 3 #6 | 隔离负向验收（TC-ISO）：落地 D1/D2 后重跑 V1，断言**必须失败** | 待做 |
 | Sprint 3 #7 | 每库维护（TC-GC）：`gc` / `curator --once` 对每用户库的覆盖面对账 | 待做 |
@@ -162,6 +162,6 @@
 | 日期 | 变更 |
 |---|---|
 | 2026-09-20 | 初版：定位声明；传输形态核实（stdio-over-SSH，源码级证据）；固化 mcp-smoke.sh 6 用例与 doctor 2 用例；登记本地/生产 Cursor 接入配置 |
-| 2026-09-20 | 增补 §4-B2 L2 客户端用例（TC-L2-01..04），首次执行全通过；§2 登记 L2 ✅ |
+| 2026-09-20 | 增补 §4-B2 L2 客户端用例（TC-L2-01..04），首次执行全通过；§2 登记 L2 |
 | 2026-09-20 | 增补 §1 原则两条（capabilities 计数口径；档位只能启动时定）与 §3 改档说明；§2 Sprint 3 #2 改双探针；§4-B2 记录第二客户端交叉验证 |
 | 2026-09-20 | **specs 整合**：迁入 `specs/mcp/`（原 `specs/mcp-test.md`）；新增 **L1.5 隔离探针层**与 §4-C（TC-ISO / TC-GC / TC-LEAK / TC-TIER）、§4-D（TC-SSH / TC-BAK / TC-REV / TC-LIMIT / TC-I18N / TC-ATT / TC-HTTP）用例位；L0 补「镜像无 curl，改用 serve 日志 + doctor」 |

@@ -4,7 +4,7 @@
 **应用仓库必须产出：** `deployment-plan.md`（路径可为 `specs/deployment-plan.md` 或仓库根目录 `deployment-plan.md`）。  
 **使用者：** 开启发布任务时，运维将该文件作为 release-bot 的主输入（密钥放在 Git 外）。
 
-> ## ⚠️ 2026-09-19 更正 — Cloudflare zone 变更
+> ## 2026-09-19 更正 — Cloudflare zone 变更
 >
 > 本文早期版本把应用域名约定为 `{appname}.qiuge.me`（zone `qiuge.me`）。**该 zone 不在本项目控制范围内，已不可用**，此约定作废。
 >

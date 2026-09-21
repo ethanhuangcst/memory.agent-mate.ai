@@ -13,14 +13,14 @@
 
 | # | 决议 | 状态 |
 |---|---|---|
-| D1 | **启动机制 β′**：门户镜像内 `COPY` 上游二进制，直接 spawn（备选 α = `docker exec`，见 §9 附录） | 🟡 **本设计定稿**，可翻转 |
-| D2 | 接入方式：新增 HTTP MCP 路径；SSH 路径**保留**为运维/主人保底 | ✅ |
-| D3 | 隔离强度：**一用户一库** `/data/users/<handle>/ai-memory.db` | ✅ |
-| D4 | 密钥：`memo_` + 32 字节 CSPRNG；库内只存哈希 | ✅ |
-| D5 | 门户对上游 ai-memory 的**语义知识 = 0**；唯一知识 = 配置里一段模板 | ✅ |
-| D6 | 代码位置：本仓 `admin_portal/`（单一工作区） | ✅ |
-| D7 | 两 stack **不互相依赖**：门户自带二进制，不 exec 既有容器、不挂 docker socket | ✅ |
-| D8 | 认证边界：管理面 Cloudflare Access；MCP 面 `memo_` 令牌 | ✅ |
+| D1 | **启动机制 β′**：门户镜像内 `COPY` 上游二进制，直接 spawn（备选 α = `docker exec`，见 §9 附录） | 已定稿（可翻转） |
+| D2 | 接入方式：新增 HTTP MCP 路径；SSH 路径**保留**为运维/主人保底 | 已定稿 |
+| D3 | 隔离强度：**一用户一库** `/data/users/<handle>/ai-memory.db` | 已定稿 |
+| D4 | 密钥：`memo_` + 32 字节 CSPRNG；库内只存哈希 | 已定稿 |
+| D5 | 门户对上游 ai-memory 的**语义知识 = 0**；唯一知识 = 配置里一段模板 | 已定稿 |
+| D6 | 代码位置：本仓 `admin_portal/`（单一工作区） | 已定稿 |
+| D7 | 两 stack **不互相依赖**：门户自带二进制，不 exec 既有容器、不挂 docker socket | 已定稿 |
+| D8 | 认证边界：管理面 Cloudflare Access；MCP 面 `memo_` 令牌 | 已定稿 |
 
 > **唯一可翻转项是 D1**（涉及权限模型）。其余 7 条已锁定。
 
@@ -63,8 +63,8 @@
 
 | 路径 | 谁用 | 端点 | 认证 | 状态 |
 |---|---|---|---|---|
-| **SSH stdio** | 主人、运维、门户故障保底 | `ssh ai-memory`（forced command） | 每密钥一行 `authorized_keys` | ✅ 保留 |
-| **HTTP MCP** | 外部用户 | `https://<MCP_HOST>/mcp` | `Authorization: Bearer memo_…` | 🆕 本设计定义 |
+| **SSH stdio** | 主人、运维、门户故障保底 | `ssh ai-memory`（forced command） | 每密钥一行 `authorized_keys` | 保留 |
+| **HTTP MCP** | 外部用户 | `https://<MCP_HOST>/mcp` | `Authorization: Bearer memo_…` | 新增：本设计定义 |
 
 > 全链路数据流与两 stack 划分见 [`../architecture.md`](../architecture.md) §3（不在此重复）。**为什么两条都留**：HTTP 是公网面、依赖反代与门户；SSH 零公网入口、零额外组件 ⇒ 门户挂掉时主人仍能读写（**降级不失效**）。
 
@@ -83,7 +83,7 @@
 
 | | **α：`docker exec`** | **β′：镜像内带二进制直接 spawn（采用）** |
 |---|---|---|
-| 门户需要 | **docker socket** | ❌ 不需要 |
+| 门户需要 | **docker socket** | 不需要 |
 | 权限等价性 | 门户 ≈ **root 等价** | 门户 = `aimem`（本该有的权限） |
 | 与既有容器的耦合 | 运行态耦合（须知容器名且容器在跑） | 无 |
 | 模板长相 | `docker exec -i -e AI_MEMORY_DB={db} … ai-memory-mcp ai-memory mcp …` | `argv: [ai-memory, mcp, …]` + `env:` |
@@ -101,7 +101,7 @@
 | 运行时底座 | `debian:bookworm-slim` + `ca-certificates`（`Dockerfile:32,42-44`） | 门户基础镜像必须 **bookworm 系**（如 `node:22-bookworm-slim`）+ `ca-certificates` |
 | 容器用户 | `aimem`（`useradd --system`，**UID/GID 不固定为常量**） | `docker run --rm --entrypoint id <img> aimem` → 与门户镜像**对齐** |
 
-> ⚠️ **UID/GID 对齐是硬要求**：SSH 路径是在既有容器里以 `aimem` 打开 `/data/users/<u>/ai-memory.db`；门户若以不同 UID 建目录，SSH 路径**写不进去**。
+> 注意：**UID/GID 对齐是硬要求**：SSH 路径是在既有容器里以 `aimem` 打开 `/data/users/<u>/ai-memory.db`；门户若以不同 UID 建目录，SSH 路径**写不进去**。
 
 ### 3.2 门户构建（关键只有一行）
 
@@ -158,7 +158,7 @@ launch:
 | 对比 | 常时比较 |
 | 吊销 | 置 `revoked_at`；已建立会话可即时终止（门户 kill 子进程） |
 | 归属 | `key → user → { handle, db_path, agent_id }` |
-| 一用户多 key | ✅ 天然支持（多设备/多工具共享同一库） |
+| 一用户多 key | 天然支持（多设备/多工具共享同一库） |
 
 > 固定 `memo_` 前缀可用于 GitHub secret scanning 自定义模式与日志脱敏规则。
 
@@ -210,8 +210,8 @@ launch:
 
 | 面 | 域名 | CF Access | 认证 |
 |---|---|---|---|
-| 管理面 | `<ADMIN_HOST>` | ✅ **开启**（浏览器 SSO） | CF Access 身份 + 门户会话 |
-| MCP 面 | `<MCP_HOST>` | ❌ **必须绕过** | `memo_` 令牌 |
+| 管理面 | `<ADMIN_HOST>` | **开启**（浏览器 SSO） | CF Access 身份 + 门户会话 |
+| MCP 面 | `<MCP_HOST>` | **必须绕过** | `memo_` 令牌 |
 
 **为什么必须绕**：MCP 客户端是命令行/桌面程序，**无法完成浏览器 SSO 重定向**；被拦时只会收到 302/HTML，表现为「连不上」。
 
@@ -220,7 +220,7 @@ launch:
 1. **两个域名分离**（不靠 path 区分）—— CF Access 的策略与绕过按 host/path 配，混用极易误配
 2. **门户按 Host 头做面隔离**：管理 API 只接受 `<ADMIN_HOST>`，MCP 端点只接受 `<MCP_HOST>`；在 MCP 域名上命中管理路由时**拒绝**
 
-> ⚠️ 新增公网入口 ⇒ 对原有「无域名 / 无 NPM / 无公网入口」决议做**部分修订**：**ai-memory 本体仍无公网入口、仍无 api_key**；新增的只是门户面。
+> 注意：新增公网入口 ⇒ 对原有「无域名 / 无 NPM / 无公网入口」决议做**部分修订**：**ai-memory 本体仍无公网入口、仍无 api_key**；新增的只是门户面。
 
 ---
 
@@ -228,10 +228,10 @@ launch:
 
 | 类 | 机制 | 归属 |
 |---|---|---|
-| ✅ **上游原生** | `[limits].max_memories_per_day` / `max_storage_bytes` / `max_links_per_day`（均 **per-(agent, namespace)** ⇒ 一用户一库一 agent 天然等价 **per-用户**）、`max_page_size`（每请求内存上限，不是限流） | 以**配置**实现并核验生效 |
-| ⚠️ **仅 HTTP 面** | `[limits].max_inflight_requests` = 全局 HTTP 准入并发上限，超限返 503 | 多用户走 **stdio MCP**，**很可能不生效**，需实测后登记结论 |
-| ❌ **门户必须自建** | 每 key 并发上限、全局并发上限、空闲超时、单会话最长时长 | 上游无「会话」概念，stdio 进程由 spawner 管 |
-| ❌ **另需方案** | FS 级磁盘配额 | `max_storage_bytes` 是**库内计数**，不覆盖 WAL 与临时文件 |
+| **上游原生** | `[limits].max_memories_per_day` / `max_storage_bytes` / `max_links_per_day`（均 **per-(agent, namespace)** ⇒ 一用户一库一 agent 天然等价 **per-用户**）、`max_page_size`（每请求内存上限，不是限流） | 以**配置**实现并核验生效 |
+| 注意：**仅 HTTP 面** | `[limits].max_inflight_requests` = 全局 HTTP 准入并发上限，超限返 503 | 多用户走 **stdio MCP**，**很可能不生效**，需实测后登记结论 |
+| **门户必须自建** | 每 key 并发上限、全局并发上限、空闲超时、单会话最长时长 | 上游无「会话」概念，stdio 进程由 spawner 管 |
+| **另需方案** | FS 级磁盘配额 | `max_storage_bytes` 是**库内计数**，不覆盖 WAL 与临时文件 |
 
 查询入口：`memory_quota_status` 工具 / `ai-memory quota-status` CLI。
 
@@ -250,7 +250,7 @@ launch:
 | T7 | CF 绕过策略误配致管理面暴露 | 两个域名分离 + 门户按 Host 头面隔离并**拒绝**跨面调用 |
 | T8 | 日志泄露令牌/记忆内容 | 日志只记 `key_prefix`；**不记录** MCP 报文正文与令牌明文 |
 | T9 | 上游 v1.0.0 的 `[capabilities]` 默认翻转 | 门户**不使用**能力令牌（隔离靠分库）⇒ 影响面小；仍进升级预检 |
-| T10 | 快照外迁泄露 | OSS 私有桶 + SSE；可叠加 `AI_MEMORY_ENCRYPT_AT_REST=1` —— ⚠️ 它是 **per-node at-rest**、密钥在容器内，**不防门户被攻破**，只防「快照离开主机后被读」 |
+| T10 | 快照外迁泄露 | OSS 私有桶 + SSE；可叠加 `AI_MEMORY_ENCRYPT_AT_REST=1` —— 注意：它是 **per-node at-rest**、密钥在容器内，**不防门户被攻破**，只防「快照离开主机后被读」 |
 
 ---
 

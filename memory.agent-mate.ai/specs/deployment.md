@@ -279,22 +279,22 @@ bash scripts/pin-update.sh <ref> [--force]          # 更新锁文件（--force 
 
 | ID | 触发 | 级别 |
 |---|---|---|
-| H1 | `upstream.lock` 缺失/格式错/字段缺 | 🔴 阻断 |
-| H2 | 镜像 tag 不存在（releases API 404） | 🔴 阻断 |
-| H3 | digest 不匹配（标签被重推，**供应链风险**） | 🔴 阻断 |
-| H4 | reference commit 不可达 | 🟠 高危 |
-| H5 | 镜像 tag 含 `latest`（浮动标签，**禁止**） | 🟠 高危 |
+| H1 | `upstream.lock` 缺失/格式错/字段缺 | 阻断 |
+| H2 | 镜像 tag 不存在（releases API 404） | 阻断 |
+| H3 | digest 不匹配（标签被重推，**供应链风险**） | 阻断 |
+| H4 | reference commit 不可达 | 高危 |
+| H5 | 镜像 tag 含 `latest`（浮动标签，**禁止**） | 高危 |
 
 ### 9.4 告警项（W，人工判断）
 
 | ID | 触发 | 级别 |
 |---|---|---|
-| W1 | 上游有更新的 release | 🔵 info |
-| W2 | 上游有新提交 | 🔵 info |
-| W3 | 上游文档改动**命中契约面**（[`mcp/mcp-design.md`](./mcp/mcp-design.md) §9） | 🟡 warn |
-| W4 | 上游新增依赖 | 🟡 warn |
-| W5 | 上游依赖含已知 CVE（OSV API 查询公开 GHCR 镜像，不需 GH_TOKEN） | 🔴 高危 |
-| W6 | 本地 clone 有本地提交（**事实偏离上游**） | 🟡 warn |
+| W1 | 上游有更新的 release | info |
+| W2 | 上游有新提交 | info |
+| W3 | 上游文档改动**命中契约面**（[`mcp/mcp-design.md`](./mcp/mcp-design.md) §9） | warn |
+| W4 | 上游新增依赖 | warn |
+| W5 | 上游依赖含已知 CVE（OSV API 查询公开 GHCR 镜像，不需 GH_TOKEN） | 高危 |
+| W6 | 本地 clone 有本地提交（**事实偏离上游**） | warn |
 
 ### 9.5 四类破坏性变更判断
 

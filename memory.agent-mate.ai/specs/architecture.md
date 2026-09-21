@@ -26,10 +26,10 @@ memory.agent-mate.ai = 上游 `ai-memory-mcp` 的**私有化部署 + 定制**（
 
 | 面 | 主体 | 凭据 | 公网 | 设计文档 |
 |---|---|---|---|---|
-| 管理面（门户 UI / API） | 管理员 | Cloudflare Access（浏览器 SSO）+ 门户会话 | ✅ 仅 `<ADMIN_HOST>` | [`web-portal/web-design.md`](./web-portal/web-design.md) §5 |
-| MCP 面（`<MCP_HOST>/mcp`） | 用户及其客户端 | `memo_` 令牌（`Authorization: Bearer`） | ✅ 仅 `<MCP_HOST>` | 同上 |
-| SSH 面（stdio，保底） | 主人 / 运维 | SSH 密钥 + forced command | ❌ 无公网入口 | [`mcp/mcp-design.md`](./mcp/mcp-design.md) §5 |
-| 上游 HTTP 面（`serve` 9077） | **不对外** | 绑 `127.0.0.1`，不映射主机端口，不设 `api_key` | ❌ | [`deployment.md`](./deployment.md) §3 |
+| 管理面（门户 UI / API） | 管理员 | Cloudflare Access（浏览器 SSO）+ 门户会话 | 仅 `<ADMIN_HOST>` | [`web-portal/web-design.md`](./web-portal/web-design.md) §5 |
+| MCP 面（`<MCP_HOST>/mcp`） | 用户及其客户端 | `memo_` 令牌（`Authorization: Bearer`） | 仅 `<MCP_HOST>` | 同上 |
+| SSH 面（stdio，保底） | 主人 / 运维 | SSH 密钥 + forced command | 无公网入口 | [`mcp/mcp-design.md`](./mcp/mcp-design.md) §5 |
+| 上游 HTTP 面（`serve` 9077） | **不对外** | 绑 `127.0.0.1`，不映射主机端口，不设 `api_key` | 否 | [`deployment.md`](./deployment.md) §3 |
 
 > **ai-memory 本体始终无公网入口**；新增的公网入口只属于门户面（`web-portal/web-design.md` §5）。
 
@@ -74,7 +74,7 @@ memory.agent-mate.ai = 上游 `ai-memory-mcp` 的**私有化部署 + 定制**（
 【管理面】浏览器 ──HTTPS──> Cloudflare Access ──> https://<ADMIN_HOST>/   门户 UI / API
 【MCP 面】客户端 ──HTTPS──> 反向代理（TLS 终止，按 Host 分流）──> https://<MCP_HOST>/mcp
                                                         │  Authorization: Bearer memo_…
-                                                        ▼
+                                                        ↓
                                         ┌─── admin_portal 容器（唯一公网组件）───┐
                                         │ ① sha256(token) → {handle, status}   │
                                         │ ② 拼 env/argv（配置模板，非代码）      │
@@ -82,7 +82,7 @@ memory.agent-mate.ai = 上游 `ai-memory-mcp` 的**私有化部署 + 定制**（
                                         │ ④ 会话结束 → kill 子进程             │
                                         └───────────────┬──────────────────────┘
                                                         │ spawn（一会话一进程）
-                                                        ▼
+                                                        ↓
                                           ai-memory mcp --tier smart（子进程）
                                             env  AI_MEMORY_DB=/data/users/<handle>/ai-memory.db
                                                  AI_MEMORY_AGENT_ID=human:<handle>
@@ -104,7 +104,7 @@ memory.agent-mate.ai = 上游 `ai-memory-mcp` 的**私有化部署 + 定制**（
 |---|---|---|
 | 容器 | `ai-memory`（serve）+ `curator` | 门户 + 其 spawn 的 N 个子进程 |
 | 服务对象 | 主人 / 运维（默认库） | 外部用户（每用户库） |
-| 公网入口 | ❌ | ✅（经反代） |
+| 公网入口 | 否 | 是（经反代） |
 | 数据卷 | `ai_memory_data` → `/data` | **同一卷**（共享文件，**不共享进程**） |
 | 与对方的关系 | 不知道门户存在 | 只知道「一段模板」 |
 
@@ -163,7 +163,7 @@ memory.agent-mate.ai = 上游 `ai-memory-mcp` 的**私有化部署 + 定制**（
 ├── ai-memory-mcp/      # 上游嵌套 clone（gitignored，只读约定；make upstream 可重建）
 ├── admin_portal/       # 自有产品代码（门户）
 └── memory.agent-mate.ai/                    # 自有资产（全部入库）
-    ├── upstream.lock   # ★ 版本坐标唯一真相源
+    ├── upstream.lock   # 版本坐标唯一真相源
     ├── deploy/         # 部署事实文件（compose / 模板 / 示例 env）
     ├── scripts/        # 探针与守卫脚本
     ├── backup/         # 备份脚本（Sprint 5 落地）
@@ -203,9 +203,9 @@ memory.agent-mate.ai = 上游 `ai-memory-mcp` 的**私有化部署 + 定制**（
 
 | # | 风险 | 机制 | 级别 |
 |---|---|---|---|
-| **R1** | **多用户隔离静默失效 —— 所有用户共用同一个库** | `effective_db()` 只在「CLI/env 库路径**恰为默认值**」时才改用 config 的 `db`；而 config 写死共享主库 ⇒ 会话**漏设/写错** `AI_MEMORY_DB` 即落到共享主库，**无报错、无告警、无日志**（已获**行为级证据**：`rc=0` 且 `source=/data/ai-memory.db`） | 🔴 严重 |
-| **R2** | 隔离完全依赖门户一处正确性，无纵深 | 上游无任何多租户授权边界：写路径无可见性过滤；macaroon 能力令牌 **additive-only**（只放宽不收紧） | 🟠 高 |
-| **R3** | SSH 手工 forced command 的同类风险 | 每用户一条很长的单行命令，手工拼写易漏；且**难以审计**（逐行生效，错一次连带整文件） | 🟠 高 |
+| **R1** | **多用户隔离静默失效 —— 所有用户共用同一个库** | `effective_db()` 只在「CLI/env 库路径**恰为默认值**」时才改用 config 的 `db`；而 config 写死共享主库 ⇒ 会话**漏设/写错** `AI_MEMORY_DB` 即落到共享主库，**无报错、无告警、无日志**（已获**行为级证据**：`rc=0` 且 `source=/data/ai-memory.db`） | 严重 |
+| **R2** | 隔离完全依赖门户一处正确性，无纵深 | 上游无任何多租户授权边界：写路径无可见性过滤；macaroon 能力令牌 **additive-only**（只放宽不收紧） | 高 |
+| **R3** | SSH 手工 forced command 的同类风险 | 每用户一条很长的单行命令，手工拼写易漏；且**难以审计**（逐行生效，错一次连带整文件） | 高 |
 
 > R1 定级「严重」的理由：多数故障会报错能被发现，**R1 表现为「功能正常」**，只是所有人共享同一份记忆。
 
