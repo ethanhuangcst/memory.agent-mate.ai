@@ -54,10 +54,10 @@ Sprint Goal: 制定产品化计划
 
 **本轮学到**
 
-- 先立「版本坐标 + 契约点」再谈功能：上游发版会重写历史、改 schema、且不拒绝更新的库，没有 [`../upstream.lock`](../upstream.lock) 与 `make preflight-test` 做护栏，后面每条结论都会漂移。
-- 研究类条目必须留下**可复跑的证据**（探针脚本 + 源码锚点），否则下一轮无法复核，只能重新讨论一遍。
-- 方案对比要写在文档里（隔离四档对比 + 11 条源码依据），不写就会在下游以「口头结论」的形式被反复推翻。
-- 决议只留**一个单点**：同一事实写在多处，改一处漏一处就是隐性矛盾。
+- 先立「版本坐标 + 契约点」再谈功能：上游发版会重写历史、改 schema、且不拒绝更新的库，没有 [`../upstream.lock`](../upstream.lock) 与 `make preflight-test` 做护栏，后面每条结论都会漂移。决策见 [`ADR-004`](./adr/ADR-004-version-contract-single-source-of-truth.md) 与 [`ADR-005`](./adr/ADR-005-upgrade-admission-gate-layering.md)，实证归档见 [`上游事实与坑`](./knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md)。
+- 研究类条目必须留下**可复跑的证据**（探针脚本 + 源码锚点），否则下一轮无法复核，只能重新讨论一遍；上游版本拓扑、schema 与回滚语义的证据整理见 [`上游事实与坑`](./knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md)。
+- 方案对比要写在文档里（隔离四档对比 + 11 条源码依据），不写就会在下游以「口头结论」的形式被反复推翻；最终隔离选择及取舍见 [`ADR-009`](./adr/ADR-009-per-user-db-isolation-over-single-db-agent-id.md)。
+- 决议只留**一个单点**：同一事实写在多处，改一处漏一处就是隐性矛盾；spec 单一真源与链接纪律见 [`ADR-010`](./adr/ADR-010-specs-single-source-and-doc-structure.md)。
 
 **下轮改进**
 
@@ -101,14 +101,16 @@ Sprint Goal: 本地启动 + 探针明确方案
 
 **本轮学到**
 
-- **上游 `tools/list` 的 `description` 是被截断的短描述**（≤ 50 cl100k token，实测 `memory_recall` 只有 "Recall memories relevant to a"）。写对外说明必须改走 `memory_capabilities` 的 verbose drilldown（`family` + `include_schema` + `verbose`）取完整 `docs` —— 照抄短描述会写出残缺句子。已归档 `knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md`。
+- **上游 `tools/list` 的 `description` 是被截断的短描述**（≤ 50 cl100k token，实测 `memory_recall` 只有 "Recall memories relevant to a"）。写对外说明必须改走 `memory_capabilities` 的 verbose drilldown（`family` + `include_schema` + `verbose`）取完整 `docs` —— 照抄短描述会写出残缺句子。实证归档见 [`上游事实与坑`](./knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md)。
+- **本地基线应复用生产 compose**：这样本地 MCP 冒烟验证的是同一套镜像、挂载和启动契约，减少“本地能跑、生产不同构”的漂移；决策见 [`ADR-008`](./adr/ADR-008-local-baseline-reuses-production-compose.md)，环境踩坑见 [`本地运行踩坑`](./knowledge/local-dev/ai-memory-local-run-gotchas.md)。
 - **`--profile` 不传时默认就是 `core` 且完全不报错** ⇒ 模板必须**显式写档位**（用户行 `core`、管理员行 `admin`），否则「看起来对了」其实随时可能静默漂移；同一口径要在 SSH / 门户 / 客户端 / 对外文档**四处一致**。
 - **先想「要做哪些事」再选档**：管理员入口先定 `full`（101）后收敛到 `admin`（22）—— Meta / Archive 这类只读统计不该随管理员入口整体开放。
 - **研究类条目以「只读探针 + 退出码契约化」为默认起点**（i18n / profile / iso 三支探针同构、只读、可复跑），结论才能被复核，而不是靠一次性手工观察。
-- **隔离的失效模式是「静默」**：R1 不报错、不告警、无日志，只能靠**负向验证 V1**（漏设 env 必须失败）+ **D2 移除 config 的 `db` 键**来消除落点；正向用例证明不了它。
-- **档位文档的体例 = 每档只列本档新增 + 全档连续编号**：6 张档位表若各自重复上一档，读者看不出「这一档比上一档多了什么」；编号 1–101 连续（`core` 1–8 / `admin` 9–22 / `graph` 23–34 / `power` 35–83 / `full` 84–101）后，任何一处增删都能被一眼定位。
-- **能力说明必须与探针实测逐项对齐**：手工补录曾写入上游**不存在**的工具（`memory_gc_hard` / `memory_demote`），只有拿 `profile-probe.sh` 的 `full` 全集做集合比对（编号连续 + 集合相等，脚本化断言）才拦得住。
-- **被引文档改版会让引用方的转述静默过时**：能力文档由「按 8 组 + 一个端到端例子」改为「6 张档位表」后，`change-log.md`、`web-stories.md` AC6.4、`mcp-design.md` 三处转述立即失真 —— 体例变更必须连带扫引用方。
+- **隔离的失效模式是「静默」**：R1 不报错、不告警、无日志，只能靠**负向验证 V1**（漏设 env 必须失败）+ **D2 移除 config 的 `db` 键**来消除落点；正向用例证明不了它。隔离边界的选择与取舍见 [`ADR-009`](./adr/ADR-009-per-user-db-isolation-over-single-db-agent-id.md)。
+- **门户不应通过 Docker socket 启动 MCP**：socket 代理无法按容器与命令收窄权限，最终选择镜像内带二进制并按会话启动子进程；决策见 [`ADR-012`](./adr/ADR-012-portal-launch-mechanism-no-docker-socket.md)，实测证据见 [`门户启动机制实证`](./knowledge/web-portal/portal-launch-mechanism.md)。
+- **档位文档的体例 = 每档只列本档新增 + 全档连续编号**：6 张档位表若各自重复上一档，读者看不出「这一档比上一档多了什么」；编号 1–101 连续（`core` 1–8 / `admin` 9–22 / `graph` 23–34 / `power` 35–83 / `full` 84–101）后，任何一处增删都能被一眼定位。约定见 [`spec 文档体例与引用治理约定`](./knowledge/docs/spec-doc-conventions.md)。
+- **能力说明必须与探针实测逐项对齐**：手工补录曾写入上游**不存在**的工具（`memory_gc_hard` / `memory_demote`），只有拿 `profile-probe.sh` 的 `full` 全集做集合比对（编号连续 + 集合相等，脚本化断言）才拦得住；验证约定见 [`spec 文档体例与引用治理约定`](./knowledge/docs/spec-doc-conventions.md)。
+- **被引文档改版会让引用方的转述静默过时**：能力文档由「按 8 组 + 一个端到端例子」改为「6 张档位表」后，`change-log.md`、`web-stories.md` AC6.4、`mcp-design.md` 三处转述立即失真 —— 体例变更必须连带扫引用方。治理原则见 [`ADR-010`](./adr/ADR-010-specs-single-source-and-doc-structure.md) 与 [`spec 文档体例与引用治理约定`](./knowledge/docs/spec-doc-conventions.md)。
 
 **下轮改进**
 
