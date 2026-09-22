@@ -195,6 +195,108 @@ aimem-ssh ALL=(root) NOPASSWD: /usr/bin/docker exec -i ai-memory-mcp ai-memory m
 
 收益：即使误加一条**没有** forced command 的记录也拿不到完整 docker 权限，且规则不随用户数增长。代价：需在服务器实测无通配符 argv 匹配行为（Sprint 6 前）。
 
+### 5.6 门户接入面契约（HTTP MCP 端点 · 会话桥 · 启动模板）
+
+> **迁入来源**：本节由 [`../web-portal/web-design.md`](../web-portal/web-design.md) 迁入（Sprint 4 #1 文档边界修正）。判定标准：**随上游版本漂移、需探针守护**的跨进程/上游契约归本文件；门户自身业务功能（账号、令牌、审计、i18n 说明页、访问控制、启动自检、容器加固）留 `web-portal/`。原章节保留稳定锚点回链。
+> **本节是「门户 ↔ 上游」接入契约的唯一真源**：`launch` 模板、会话桥形态、制品契约对齐要求均以本节为准，门户侧只写「门户怎么做」并回链。
+
+#### 5.6.1 三条上游硬事实（为什么必须有「启动器」）
+
+> 常见误解：ai-memory 会读「门户写的用户文件」来决定身份/隔离。**不会**。
+
+| 事实 | 位置 |
+|---|---|
+| 库路径是全局 CLI 参数，可由 `AI_MEMORY_DB` 提供 | `src/daemon_runtime.rs:138-139` |
+| 全子命令**唯一**的库路径解析点（含 `mcp`） | `src/daemon_runtime.rs:980` → `app_config.effective_db(&cli.db)` |
+| `resolve_read_visibility_caller()` 只读 `std::env::var(ENV_AGENT_ID)`；未设 = trust-all | `src/identity/mod.rs:333-345` |
+| `--agent-id` 虽在 clap 上带 `env = "AI_MEMORY_AGENT_ID"`，但**传 flag 不会写回 env** | `src/daemon_runtime.rs:146-147` |
+| 上游**没有** MCP-over-HTTP：78 个路由常量中无 `/mcp`、`/sse`、`streamable` | `src/handlers/routes.rs`（同 §1 事实 1 · §9 H2） |
+
+三条结论：
+
+1. **分库只能在进程启动那一刻选定** ⇒ 一个进程一旦启动就跑在某个特定库上，**运行中无法换库**。
+2. **读隔离的「调用者」只认环境变量** ⇒ 模板必须用**环境变量**注入身份，不能用 `--agent-id`（否则写入标记看似正常、读路径却 trust-all，隔离根本没开）。
+3. **上游没有 MCP-over-HTTP** ⇒ HTTP↔stdio 桥必须由门户实现。
+
+⇒ **必须存在「启动器」**：会话建立时按用户拼出 env + argv → 拉起子进程 → 双向转发 MCP 消息。
+门户**对 ai-memory 的语义知识 = 0**，只知道「把 `{handle}` 套进一段它不理解的模板」—— 这就是「0 耦合」的确切含义。
+
+#### 5.6.2 接入路径与会话桥
+
+| 路径 | 谁用 | 端点 | 认证 | 状态 |
+|---|---|---|---|---|
+| **SSH stdio** | 主人、运维、门户故障保底 | `ssh ai-memory`（forced command，模板见 §5.1 / §5.2） | 每密钥一行 `authorized_keys` | 保留 |
+| **HTTP MCP** | 外部用户 | `https://{MCP_HOST}/mcp` | `Authorization: Bearer memo_…` | 门户实现 |
+
+> **为什么两条都留**：HTTP 是公网面、依赖反代与门户；SSH 零公网入口、零额外组件 ⇒ 门户挂掉时主人仍能读写（**降级不失效**）。全链路数据流与两 stack 划分见 [`../architecture.md`](../architecture.md) §3（不在此重复）。域名与 Cloudflare Access 边界（D8）属门户接入面，见 [`../web-portal/web-design.md`](../web-portal/web-design.md) §6。
+
+**会话桥契约（HTTP(Streamable) ⇄ stdio）**——以下 4 步中，**第 3 步是本文件契约**，其余三步是门户自身编排：
+
+| # | 步骤 | 归属 |
+|---|---|---|
+| 1 | 校验 `memo_`：`sha256(token)` → 查门户库 → `{handle, status}` | 门户（令牌模型见 `web-design.md` §4.1） |
+| 2 | 断言 `handle` 合法 + 拼 env/argv（模板来自**配置**，非代码） | 门户执行，断言依据见 §5.6.4 不变量 1–3 |
+| 3 | **spawn 子进程；MCP 协议桥 HTTP(Streamable) ⇄ stdio** | **本文件**（**一会话一子进程**，见 §6.1 D3） |
+| 4 | 会话结束 → kill 子进程 | 门户（子进程随父进程死亡是 β′ 的天然保证，见 §5.6.3） |
+
+**部署顺序依赖**：`ai-memory-mcp` 先起（创建命名卷 `ai_memory_data`），门户以 `external: true` 引用。
+
+#### 5.6.3 启动机制 β′ 与制品契约
+
+| | **α：`docker exec`** | **β′：镜像内带二进制直接 spawn（采用）** |
+|---|---|---|
+| 门户需要 | **docker socket** | 不需要 |
+| 权限等价性 | 门户 ≈ **root 等价** | 门户 = `aimem`（本该有的权限） |
+| 与既有容器的耦合 | 运行态耦合（须知容器名且容器在跑） | 无 |
+| 模板长相 | `docker exec -i -e AI_MEMORY_DB={db} … ai-memory-mcp ai-memory mcp …` | `argv: [ai-memory, mcp, …]` + `env:` |
+| 上游升级成本 | 改 `IMAGE_TAG` + 重启 | **需重建门户镜像**（可由 `upstream.lock` 自动化） |
+| spawn 开销 | 每次 docker exec 握手 | 更低 |
+| 会话生命周期 | 子进程在别人容器里，强杀需再连 socket | 天然随门户进程（父死子死） |
+
+> **选 β′ 的理由**：门户是**公网可达**组件，给它 root 等价权限 = 把宿主机命运交给 Web 服务；α 的全部收益（省一次镜像重建）不抵此代价。决议 [`../adr/ADR-012`](../adr/ADR-012-portal-launch-mechanism-no-docker-socket.md)；α 的排除理由与其缓解措施被证不成立，收口在 [`../architecture.md`](../architecture.md) §2.2 与 [`../knowledge/web-portal/portal-launch-mechanism.md`](../knowledge/web-portal/portal-launch-mechanism.md)。
+
+**β′ 的制品契约（3 条，需探针守护）** —— 门户镜像必须与上游镜像**在这三项上对齐**：
+
+| 契约点 | 值 | 探针 |
+|---|---|---|
+| 二进制路径 | `/usr/local/bin/ai-memory`（`Dockerfile:49`） | `docker run --rm --entrypoint ls <img> -l /usr/local/bin/ai-memory` |
+| 运行时底座 | `debian:bookworm-slim` + `ca-certificates`（`Dockerfile:32,42-44`） | 门户基础镜像必须 **bookworm 系**（如 `node:22-bookworm-slim`）+ `ca-certificates` |
+| 容器用户 | `aimem`（`useradd --system`，**UID/GID 不固定为常量**） | `docker run --rm --entrypoint id <img> aimem` → 与门户镜像**对齐** |
+
+> **UID/GID 对齐是硬要求**：SSH 路径是在既有容器里以 `aimem` 打开 `/data/users/<u>/ai-memory.db`；门户若以不同 UID 建目录，SSH 路径**写不进去**。
+> **不得继承上游默认值**：门户镜像**不继承**上游的 `ENTRYPOINT`/`CMD`/`ENV`（避免被上游默认值静默影响）——对应 §9 A1 / A2 与 §9 M 的 C1。
+> 门户镜像的**构建细节**（`FROM`、base 镜像选择、`useradd` 命令、`COPY --from`、tag 由 `upstream.lock` 注入）属门户侧制品设计，见 [`../web-portal/web-design.md`](../web-portal/web-design.md) §3.2。
+
+#### 5.6.4 启动模板（`launch`）与强制不变量
+
+门户代码里的 ai-memory 知识 = 0；全部知识收敛到**一段配置**（门户只做占位符替换，不解析语义）：
+
+```yaml
+launch:
+  argv:
+    - /usr/local/bin/ai-memory
+    - mcp
+    - --tier
+    - smart
+    - --profile
+    - core          # §8.3 已定：对外统一 core（8 工具）；管理员入口 = admin（22）
+  env:
+    AI_MEMORY_DB: "/data/users/{handle}/ai-memory.db"
+    AI_MEMORY_AGENT_ID: "human:{handle}"
+    AI_MEMORY_KEY_DIR: "/data/users/{handle}/keys"
+    AI_MEMORY_REQUIRE_AGENT_ATTESTATION: "0"
+  # HOME 统一设为 /data ⇒ 所有用户共用一份 config.toml（tier / LLM 设置）
+```
+
+**强制不变量（fail-closed）**：
+
+1. `handle` 必须匹配 `^[a-z0-9_-]{1,32}$`，且**只**来自门户数据库，**绝不**取自请求
+2. 替换后断言 `AI_MEMORY_DB` 非空、以 `/data/users/` 开头、且包含该 `handle` —— 否则**拒绝启动会话**（防门户侧静默失败点 S4，即 [`../architecture.md`](../architecture.md) §6 的 R1；判据 §6.1 D1 / §6.2 V1）
+3. `AI_MEMORY_AGENT_ID` 必须由 `handle` 派生（不接受客户端传入值）
+4. 子进程**不得跨用户复用**（禁止会话池）
+
+> **本模板是 attestation 口径的承载路径之一**：静态护栏 `make attestation-paths` 的**断言 C** 核对本节含 `AI_MEMORY_REQUIRE_AGENT_ATTESTATION: "0"`，**断言 B** 核对 SSH 用户行 `-e` 子句含 `=0` 且与 [`../deployment.md`](../deployment.md) §4.3 逐字一致。**改模板必须复跑该门禁**。
+
 ---
 
 ## 6. 条件矩阵 · 验证项 · 验收清单
@@ -470,6 +572,26 @@ aimem-ssh ALL=(root) NOPASSWD: /usr/bin/docker exec -i ai-memory-mcp ai-memory m
 
 > **无必要 ADR**：本条结论是「按上游既有契约使用配置」，未引入我方架构选择；模板取值固定为编译默认亦属既有策略（`--profile core` 同源）的延续。
 
+### M. 门户耦合面索引（C1–C8 → A–K 映射，Sprint 4 #1 迁入）
+
+> **分工**：M 是**门户对上游的 8 个依赖点的稳定索引**；A–K 是**全量契约清单**。M **不复制**契约正文，只给「C 编号 → 耦合点 → 对应 A–K 条目」的映射，避免同一事实两处叙述（[`../adr/ADR-010`](../adr/ADR-010-specs-single-source-and-doc-structure.md)「一事实一处」）。
+> **迁入来源**：[`../web-portal/web-design.md`](../web-portal/web-design.md) 原 §9 的 C1–C8 表。原表的具体值与探针方式已由 A–K 承载；门户侧的制品对齐要求见 §5.6.3。
+
+| C | 门户对上游的耦合点 | 对应条目 |
+|---|---|---|
+| C1 | 二进制路径 `/usr/local/bin/ai-memory` | **A1**（`ENTRYPOINT ["ai-memory"]`）；绝对路径与对齐要求见 §5.6.3 |
+| C2 | 运行时底座 `debian:bookworm-slim` + `ca-certificates` | **A6**；对齐要求见 §5.6.3 |
+| C3 | 容器用户 `aimem` 的 UID/GID | **A3**；对齐要求见 §5.6.3 |
+| C4 | `mcp` 子命令及 `--tier` / `--profile` 取值 | **C2**（`--profile` 另见 **B7**） |
+| C5 | 库路径 env 名与语义 `AI_MEMORY_DB` | **B2**；解析优先级见 **D10** |
+| C6 | 身份 env 名与「只认 env」语义 `AI_MEMORY_AGENT_ID` | **未单列于 A–K** —— 见 §2「可见性调用者来源」行与 §7 坑 3 |
+| C7 | DB 自动创建 + schema 前向迁移 | **J1 / J2 / J3** |
+| C8 | MCP 传输仅 stdio（**上游无 HTTP MCP**） | **H1 / H2** |
+
+**契约探针**：`scripts/upstream-preflight.sh --with-image` 已能校验镜像指纹；应**新增一步**：在候选镜像内执行 `ai-memory --help` / `mcp --help` / `id aimem`，与上述 8 项的 baseline 快照比对，缺项或改名即阻断升级 ⇒ **上游升级对门户的影响变成可执行检查，而不是靠人记得**。
+
+> **原 α 附录**：`web-portal/web-design.md` 原 §9 附录的 α 方案说明已作废；α 的排除理由收口在 [`../architecture.md`](../architecture.md) §2.2，机制对照见 §5.6.3。
+
 ---
 
 ## 10. 变更记录
@@ -484,3 +606,4 @@ aimem-ssh ALL=(root) NOPASSWD: /usr/bin/docker exec -i ai-memory-mcp ai-memory m
 | 2026-09-21 | **模板定档落盘 + 用户版能力文档（Sprint 2 #9 收尾）**：① §5.1（管理员自用场景）→ `--profile admin`、§5.2（用户场景）→ `--profile core`，并补「改档须重连」注；② §8.3 #1 管理员入口由 `full`（101）改定 `admin`（22）（Meta / Archive 族不随 admin 开放），并标注**模板已落盘**（SSH 主人行 + 用户行 [`../deployment.md`](../deployment.md) §4.3 · 门户 `launch.argv` [`../web-portal/web-design.md`](../web-portal/web-design.md) §3.3 · 本地客户端条目 [`./mcp-test.md`](./mcp-test.md) §3），#3 的 TC-TIER-01/02 标为已完成；③ §8 顶部登记面向最终用户的通俗版 [`./mcp-capabilities.md`](./mcp-capabilities.md)（门户接入指引页唯一内容源） |
 | 2026-09-21 | **§8 引文同步（能力文档体例定稿）**：面向最终用户的 [`./mcp-capabilities.md`](./mcp-capabilities.md) 体例定为「6 张档位表 + 每张只列本档新增 + 编号全档连续 1–101 + 示例列」；§8 顶部引文随之更新（不再提「一个完整例子」，补编号口径）。同步：`../web-portal/web-stories.md` AC6.4 与 `../change-log.md` 同日小节 |
 | 2026-09-22 | **Sprint 编号随 Replan 改指**：D1 / D3 与两处未决前提的会话桥落点 → `Sprint 4 PSP-W2「端到端接入」`；D4 审计落点 → `Sprint 4 PSP-W3「可运维、可发布」`；D2 / D5 与验收清单的生产落点 → `Sprint 6`（含 `#5` 备份脚本 / `#7` 门户部署 / `#9` 备份与恢复落地，及「上线验收」）；sudoers 实测与归档清理调度 → `Sprint 6 前`。D1–D5 的结论文字未改 |
+| 2026-09-22 | **门户接入面契约迁入（Sprint 4 #1 文档边界修正）**：① 新增 **§5.6「门户接入面契约」**（三条上游硬事实 · 接入路径与会话桥 · β′ 启动机制与制品契约 · `launch` 模板与四条强制不变量），由 [`../web-portal/web-design.md`](../web-portal/web-design.md) 原 §1 / §2 / §3.1–§3.4 迁入；② §9 新增 **M「门户耦合面索引（C1–C8 → A–K 映射）」**，不再复制 C1–C8 的契约正文，消去与 A–K 的重复叙述；③ 原 `web-design.md` 对应章节改为稳定锚点回链（门户侧只留业务功能）。④ 连带：静态护栏 `scripts/attestation-paths-check.sh` **断言 C** 的核对目标由 `web-design.md` 改指本文件（`launch` 模板真源随之迁到 §5.6.4）；`platform` / `useradd` 等门户镜像构建细节按边界留在 `web-design.md` §3.2 |

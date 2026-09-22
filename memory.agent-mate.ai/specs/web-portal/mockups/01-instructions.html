@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>memory.agent-mate.ai - AI Memory MCP</title>
+<link rel="icon" href="assets/logo.png" type="image/png">
+<link rel="stylesheet" href="assets/portal.css">
+</head>
+<body class="home-shell guide-shell">
+<a class="sr-only" href="#content" data-i18n="a11y.skip">Skip to content</a>
+
+<div class="shell-locale">
+  <div class="locale-switch" role="group" data-i18n="a11y.locale" data-i18n-attr="aria-label">
+    <button type="button" data-locale="EN">EN</button>
+    <button type="button" data-locale="CN">简</button>
+    <button type="button" data-locale="HK">港</button>
+    <button type="button" data-locale="TW">台</button>
+  </div>
+</div>
+
+<main id="content" class="home-main">
+  <article class="guide" data-testid="instructions-guide">
+
+    <header class="guide-hero">
+      <div class="guide-hero-title">
+        <span class="logo">
+          <img class="logo-header-mark" src="assets/logo.png" alt="" width="56" height="56" onerror="this.style.visibility='hidden'">
+        </span>
+        <h1 data-i18n="guide.title">AI Memory MCP</h1>
+      </div>
+      <p class="guide-hero-tag" data-i18n="guide.tag">REMEMBER.RECALL.SEARCH.PRIVACY</p>
+    </header>
+
+    <section class="guide-section" id="setup">
+      <h2 class="section-subtitle" data-i18n="guide.h_setup">Setup</h2>
+      <p data-i18n="guide.setup_body">Three steps: get a token, configure the client, verify one call.</p>
+
+      <ol class="steps">
+        <li class="step">
+          <span class="step-num">01</span>
+          <div class="step-body">
+            <h3 data-i18n="step1.title">Get a token</h3>
+            <p data-i18n="step1.body">An admin issues it. The plaintext shows once, so copy it at once.</p>
+            <p class="step-contact">
+              <span data-i18n="step1.contact_lead">No token yet?</span>
+              <span class="contact-admin">
+                <button type="button" class="contact-admin-trigger" aria-describedby="step1-wechat-qr" data-testid="contact-admin" data-i18n="contact.trigger">Contact Admin</button>
+                <span id="step1-wechat-qr" class="contact-admin-pop" role="tooltip">
+                  <img src="assets/wechat.png" alt="Admin WeChat QR code" width="180" height="180" data-i18n="contact.qr_alt" data-i18n-attr="alt" onerror="this.style.visibility='hidden'">
+                  <span class="contact-admin-caption" data-i18n="contact.caption">Scan with WeChat, or</span>
+                  <a class="contact-admin-mail" href="mailto:me@ethanhuang.com">me@ethanhuang.com</a>
+                </span>
+              </span>
+            </p>
+            <p data-i18n="step1.token_note">Your token looks like this:</p>
+            <span class="token-mask">memo_a1b2.....4o5p6</span>
+          </div>
+        </li>
+
+        <li class="step">
+          <span class="step-num">02</span>
+          <div class="step-body">
+            <h3 data-i18n="step2.title">Configure the client</h3>
+            <p data-i18n="step2.body">Paste the block below into your MCP client (mcp.json).</p>
+            <p data-i18n="step2.cursor">In Cursor: Settings → MCP → Add new MCP server, then paste the URL below.</p>
+            <p class="step-url"><span data-i18n="step2.url_label">MCP URL</span> <code>https://memory.agent-mate.ai/mcp</code></p>
+            <div class="codeblock codeblock--file">
+              <div class="codeblock-head">
+                <span class="codeblock-tag">mcp.json</span>
+                <button class="codeblock-copy" type="button" data-copy='{
+  "mcpServers": {
+    "ai-memory": {
+      "type": "http",
+      "url": "https://memory.agent-mate.ai/mcp",
+      "headers": {
+        "Authorization": "Bearer memo_…"
+      }
+    }
+  }
+}' data-i18n="common.copy">Copy</button>
+              </div>
+              <pre class="codeblock-text mono">{
+  "mcpServers": {
+    "ai-memory": {
+      "type": "http",
+      "url": "https://memory.agent-mate.ai/mcp",
+      "headers": {
+        "Authorization": "Bearer memo_…"
+      }
+    }
+  }
+}</pre>
+            </div>
+          </div>
+        </li>
+
+        <li class="step">
+          <span class="step-num">03</span>
+          <div class="step-body">
+            <h3 data-i18n="step3.title">Verify one call</h3>
+            <p data-i18n="step3.body">Ask it to remember one thing, then ask it back in a new chat.</p>
+            <figure class="step-figure">
+              <img src="assets/chat-example.png" alt="Chat showing a memory stored and a memory id returned" width="910" height="700" data-i18n="step3.figure_alt" data-i18n-attr="alt">
+            </figure>
+            <p class="field-note" data-i18n="step3.caption">A real chat: the summary is stored and the memory id comes back.</p>
+          </div>
+        </li>
+      </ol>
+    </section>
+
+    <section class="guide-section" id="agents">
+      <h2 class="section-subtitle" data-i18n="agents.h">Supported AI agents</h2>
+      <p data-i18n="agents.intro">Any MCP-capable client works. These are the ones we verified.</p>
+      <ol class="agent-roster" data-testid="guide-agents">
+        <li class="agent-roster-row">
+          <span class="agent-roster-mark" aria-hidden="true"><img class="agent-roster-icon" src="assets/guide/cursor.png" alt="" width="18" height="18" onerror="this.style.visibility='hidden'"></span>
+          <span class="agent-roster-name">Cursor</span>
+        </li>
+        <li class="agent-roster-row">
+          <span class="agent-roster-mark" aria-hidden="true"><img class="agent-roster-icon" src="assets/guide/claude.png" alt="" width="18" height="18" onerror="this.style.visibility='hidden'"></span>
+          <span class="agent-roster-name">Claude Code</span>
+        </li>
+        <li class="agent-roster-row">
+          <span class="agent-roster-mark" aria-hidden="true"><img class="agent-roster-icon" src="assets/guide/codex.png" alt="" width="18" height="18" onerror="this.style.visibility='hidden'"></span>
+          <span class="agent-roster-name">Codex</span>
+        </li>
+        <li class="agent-roster-row">
+          <span class="agent-roster-mark" aria-hidden="true"><img class="agent-roster-icon" src="assets/guide/codebuddy.png" alt="" width="18" height="18" onerror="this.style.visibility='hidden'"></span>
+          <span class="agent-roster-name">CodeBuddy CN / CodeBuddy</span>
+        </li>
+        <li class="agent-roster-row">
+          <span class="agent-roster-mark" aria-hidden="true"><img class="agent-roster-icon" src="assets/guide/trae.png" alt="" width="18" height="18" onerror="this.style.visibility='hidden'"></span>
+          <span class="agent-roster-name">TraeCode CN / TRAE</span>
+        </li>
+        <li class="agent-roster-row">
+          <span class="agent-roster-mark" aria-hidden="true"><img class="agent-roster-icon" src="assets/guide/copilot.png" alt="" width="18" height="18" onerror="this.style.visibility='hidden'"></span>
+          <span class="agent-roster-name">GitHub Copilot</span>
+        </li>
+        <li class="agent-roster-row">
+          <span class="agent-roster-mark" aria-hidden="true"><img class="agent-roster-icon" src="assets/guide/kiro.png" alt="" width="18" height="18" onerror="this.style.visibility='hidden'"></span>
+          <span class="agent-roster-name">AWS Kiro</span>
+        </li>
+      </ol>
+    </section>
+
+    <section class="guide-section" id="tools">
+      <h2 class="section-subtitle" data-i18n="tools.h">Tools</h2>
+      <p data-i18n="tools.intro">These eight tools are yours. Ask in plain words; the client picks the tool.</p>
+      <div class="table-wrap">
+        <table class="guide-caps-table">
+          <thead>
+            <tr>
+              <th data-i18n="tools.col.tool">Tool</th>
+              <th data-i18n="tools.col.does">Does</th>
+              <th data-i18n="tools.col.example">Example</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td><code>memory_store</code></td><td data-i18n="tools.store.does">Save a memory. Same title and category merge. Kept 7 days by default, can be permanent.</td><td data-i18n="tools.store.eg">“Remember: my meeting notes are always bullet points.”</td></tr>
+            <tr><td><code>memory_recall</code></td><td data-i18n="tools.recall.does">Find memories by meaning, ranked by relevance, importance and recent use. The way to search in Chinese.</td><td data-i18n="tools.recall.eg">“What was that note format I mentioned last time?”</td></tr>
+            <tr><td><code>memory_search</code></td><td data-i18n="tools.search.does">Find by exact keywords. Every word must appear.</td><td data-i18n="tools.search.eg">Memories containing both “redis” and “port”.</td></tr>
+            <tr><td><code>memory_get</code></td><td data-i18n="tools.get.does">Read one memory in full by its id.</td><td data-i18n="tools.get.eg">Open the one with id 8f2c….</td></tr>
+            <tr><td><code>memory_list</code></td><td data-i18n="tools.list.does">List memories by category, age or source. Up to 200.</td><td data-i18n="tools.list.eg">“List everything I saved about writing style.”</td></tr>
+            <tr><td><code>memory_load_family</code></td><td data-i18n="tools.family.does">Load the most recent entries of one category.</td><td data-i18n="tools.family.eg">Load the last 10 entries of “core”.</td></tr>
+            <tr><td><code>memory_smart_load</code></td><td data-i18n="tools.smart.does">Say what you want in one line; it picks the category and loads it.</td><td data-i18n="tools.smart.eg">“Pull up everything about project decisions.”</td></tr>
+            <tr><td><code>memory_capabilities</code></td><td data-i18n="tools.caps.does">Show the current tier and tool count. Always available.</td><td data-i18n="tools.caps.eg">“Which tools can I use right now?”</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="field-note" data-i18n="tools.note">The tier is fixed by the server. Changing your client config will not change it, and you must reconnect after a change.</p>
+    </section>
+
+  </article>
+</main>
+
+<footer class="site-footer">
+  <a href="02-users.html" data-i18n="admin.entry">Admin entry</a>
+  <p data-i18n="copyright">copyright © Ethan Huang</p>
+</footer>
+
+<script src="assets/i18n.js"></script>
+<script src="assets/mockup.js"></script>
+</body>
+</html>

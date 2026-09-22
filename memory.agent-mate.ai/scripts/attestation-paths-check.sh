@@ -7,7 +7,8 @@
 # 检查项：
 #   A. compose 的 `ai-memory` 与 `curator` 两服务均显式 `"0"`（恰好 2 处）
 #   B. `deployment.md` 用户行与 `mcp-design.md` §5.2 模板的 `-e` 子句**逐字一致**，且含该 env
-#   C. 门户 `web-design.md` §3.3 launch 模板含该 env
+#   C. 门户 launch 模板含该 env —— 模板真源 2026-09-22 起迁至 `mcp-design.md` §5.6.4
+#      （Sprint 4 #1 文档边界修正：跨进程/上游契约归 MCP 侧，门户侧只留业务功能）
 #   D. 全仓**现行**文档不再残留已证伪口径（历史 `change-log.md` 与已标注真源除外）
 #   E. 每库维护命令（`maintain-user-dbs.sh`，Sprint 3 #5 新增的第五条承载路径）沿用**同一**
 #      attestation 取值，且每条 `ai-memory` 调用都显式 `--db`（否则漏传时会静默回落相对路径库）
@@ -118,8 +119,8 @@ esac
 log "B 通过：两处用户行模板的 -e 子句逐字一致且含 attestation"
 
 # ── C. 门户 launch 模板必须含该 env ──
-grep -qE '^[[:space:]]*AI_MEMORY_REQUIRE_AGENT_ATTESTATION:[[:space:]]*"0"[[:space:]]*$' "$PORTAL" \
-  || die 10 "门户 launch 模板（web-design.md §3.3）缺 AI_MEMORY_REQUIRE_AGENT_ATTESTATION: \"0\""
+grep -qE '^[[:space:]]*AI_MEMORY_REQUIRE_AGENT_ATTESTATION:[[:space:]]*"0"[[:space:]]*$' "$DESIGN" \
+  || die 10 "门户 launch 模板（mcp-design.md §5.6.4）缺 AI_MEMORY_REQUIRE_AGENT_ATTESTATION: \"0\""
 log "C 通过：门户 launch 模板含 attestation"
 
 # ── E. 每库维护命令（第五条路径）沿用同一 attestation 取值，且每条调用显式 --db ──

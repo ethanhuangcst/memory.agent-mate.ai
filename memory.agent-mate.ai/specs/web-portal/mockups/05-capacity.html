@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>memory.agent-mate.ai - AI Memory MCP</title>
+<link rel="icon" href="assets/logo.png" type="image/png">
+<link rel="stylesheet" href="assets/portal.css">
+</head>
+<body class="app-shell" data-title-key="cap.title">
+<a class="sr-only" href="#content" data-i18n="a11y.skip">Skip to content</a>
+
+<header class="app-header">
+  <a class="logo" href="02-users.html" data-i18n="brand" data-i18n-attr="aria-label" aria-label="memory.agent-mate.ai - AI Memory MCP">
+    <img class="logo-header-mark" src="assets/logo.png" alt="" width="30" height="30" onerror="this.style.visibility='hidden'">
+    <span class="logo-word" data-i18n="brand">memory.agent-mate.ai - AI Memory MCP</span>
+  </a>
+  <button type="button" class="menu-toggle" data-i18n="a11y.menu">Menu</button>
+  <div class="header-end">
+    <a class="header-guide" href="01-instructions.html" data-i18n="nav.site">Instructions</a>
+    <p class="hello mono">admin</p>
+    <div class="locale-switch" role="group" data-i18n="a11y.locale" data-i18n-attr="aria-label">
+      <button type="button" data-locale="EN">EN</button>
+      <button type="button" data-locale="CN">简</button>
+      <button type="button" data-locale="HK">港</button>
+      <button type="button" data-locale="TW">台</button>
+    </div>
+  </div>
+</header>
+
+<div class="app-body">
+  <aside class="sidebar">
+    <nav class="nav" aria-label="Admin">
+      <a href="02-users.html" data-i18n="nav.users">Users</a>
+      <a href="04-audit.html" data-i18n="nav.audit">Audit</a>
+      <a class="active" href="05-capacity.html" data-i18n="nav.capacity">Capacity</a>
+      <a href="06-admin-mcp.html" data-i18n="nav.guide">Admin MCP config</a>
+    </nav>
+  </aside>
+
+  <main id="content" class="content">
+    <div class="page-head">
+      <p class="eyebrow" data-i18n="cap.eyebrow">CAPACITY</p>
+      <h1 data-i18n="cap.title">Capacity</h1>
+      <div class="page-head-row">
+        <p class="page-head-lead" data-i18n="cap.lead">Session limits are ours. Memory and storage quotas come from upstream. Over-limit is refused, not queued.</p>
+      </div>
+    </div>
+
+    <div class="callout callout-info" style="margin-bottom:0">
+      <p data-i18n="cap.readonly">Read only. Limits are set in the server config; change them there and restart. This page never writes.</p>
+    </div>
+
+    <dl class="how-to">
+      <dt data-i18n="cap.how.where">Where to change</dt>
+      <dd data-i18n="cap.how.where_v">On the host: the compose file and its env for session limits, the config file for upstream quotas. Not in this portal.</dd>
+      <dt data-i18n="cap.how.restart">Then restart</dt>
+      <dd data-i18n="cap.how.restart_v">Restart the portal so the new session limits apply. Upstream quotas are read on the next session.</dd>
+      <dt data-i18n="cap.how.tier">Tool tier</dt>
+      <dd data-i18n="cap.how.tier_v">The tier is per client and set in Admin MCP config, not here.</dd>
+    </dl>
+
+    <section class="metrics">
+      <article class="metric">
+        <p class="metric-label" data-i18n="cap.m.duration">Longest session</p>
+        <p class="metric-value">2h</p>
+        <div class="bar" role="img" aria-label="1h12m of 2h">
+          <div class="bar-fill" style="width:60%"></div>
+        </div>
+        <p class="metric-foot"><span data-i18n="cap.m.inuse">In use</span> <span class="mono">1h12m</span> · <span data-i18n="cap.m.idle">Idle timeout</span> <span class="mono">15m</span></p>
+      </article>
+      <article class="metric">
+        <p class="metric-label" data-i18n="cap.m.concurrency">Concurrent sessions</p>
+        <p class="metric-value">12</p>
+        <div class="bar" role="img" aria-label="5 of 12">
+          <div class="bar-fill" style="width:42%"></div>
+        </div>
+        <p class="metric-foot"><span data-i18n="cap.m.inuse">In use</span> <span class="mono">5</span> · <span data-i18n="cap.m.perkey">Per token</span> <span class="mono">3</span></p>
+      </article>
+    </section>
+
+    <section class="section">
+      <h2 data-i18n="cap.q.h">Upstream quota (per user)</h2>
+      <p class="lead-note" data-i18n="cap.q.lead">Seven keys, set explicitly to the upstream defaults. Omitting them delegates silently.</p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th data-i18n="cap.q.col.key">Key</th>
+              <th class="num" data-i18n="cap.q.col.value">Value</th>
+              <th data-i18n="cap.q.col.source">Source</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td data-label="key"><span class="mono">max_memories_per_day</span></td><td data-label="value" class="num">1000</td><td data-label="source"><span class="mono">[limits]</span></td></tr>
+            <tr><td data-label="key"><span class="mono">max_storage_bytes</span></td><td data-label="value" class="num">104857600</td><td data-label="source"><span class="mono">[limits]</span></td></tr>
+            <tr><td data-label="key"><span class="mono">max_links_per_day</span></td><td data-label="value" class="num">5000</td><td data-label="source"><span class="mono">[limits]</span></td></tr>
+            <tr><td data-label="key"><span class="mono">vector_index_capacity</span></td><td data-label="value" class="num">100000</td><td data-label="source"><span class="mono">[limits]</span></td></tr>
+            <tr><td data-label="key"><span class="mono">vector_index_hard_fail_at_cap</span></td><td data-label="value" class="num">false</td><td data-label="source"><span class="mono">[limits]</span></td></tr>
+            <tr><td data-label="key"><span class="mono">max_page_size</span></td><td data-label="value" class="num">1000</td><td data-label="source"><span data-i18n="cap.q.http">HTTP only</span></td></tr>
+            <tr><td data-label="key"><span class="mono">max_inflight_requests</span></td><td data-label="value" class="num">0</td><td data-label="source"><span data-i18n="cap.q.http">HTTP only</span> · <span data-i18n="cap.q.off">off</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <div class="callout callout-info" style="margin-top:1.5rem">
+      <p data-i18n="cap.note">Over-limit requests are refused. The storage quota counts the database only, not WAL or temp files.</p>
+    </div>
+  </main>
+</div>
+
+<footer class="site-footer">
+  <p data-i18n="copyright">copyright © Ethan Huang</p>
+</footer>
+
+<script src="assets/i18n.js"></script>
+<script src="assets/mockup.js"></script>
+</body>
+</html>

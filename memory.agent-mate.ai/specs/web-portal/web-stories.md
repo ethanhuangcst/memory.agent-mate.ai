@@ -1,7 +1,8 @@
 # web-stories — 门户用户故事与验收条件（ATDD / BDD）
 
-> **定位**：门户（admin portal）**用户故事与验收条件（AC）**的唯一 spec —— 只写「谁要什么、怎样算完成」。设计见 [`web-design.md`](./web-design.md)，测试计划与用例见 [`web-test.md`](./web-test.md)，MCP 侧隔离判据见 [`../mcp/mcp-design.md`](../mcp/mcp-design.md) §6，排期与执行状态见 [`../sprint-plan.md`](../sprint-plan.md)。
-> **状态**：v2.0（ATDD 重写） · as_of 2026-09-21 · 当前门户**代码为零**，本 spec 先于实现落盘
+> **定位**：**门户自身（web app）**用户故事与验收条件（AC）的唯一 spec —— 只写「门户业务要什么、怎样算完成」。设计见 [`web-design.md`](./web-design.md)，测试计划与用例见 [`web-test.md`](./web-test.md)，排期与执行状态见 [`../sprint-plan.md`](../sprint-plan.md)。
+> **文档边界（2026-09-22 起）**：**跨进程 / 上游契约**的故事与 AC 归 [`../mcp/mcp-stories.md`](../mcp/mcp-stories.md)（`MS{n}` / `AC-M{n}.{m}`）；**MCP 侧隔离、档位与能力边界**见 [`../mcp/mcp-design.md`](../mcp/mcp-design.md) §0–§9。原 `S3` / `S4` 的 5 条契约类 AC 已迁出，编号**不重排**、在本文件保留「迁出登记表」。
+> **状态**：v2.1（Sprint 4 #1 边界修正） · as_of 2026-09-22 · 当前门户**代码为零**，本 spec 先于实现落盘
 > **上游基准**：`v0.10.0`（版本坐标唯一真源 [`../../upstream.lock`](../../upstream.lock)）
 > **角色**：**管理员**（邀请制，经 Cloudflare Access 进入管理面）· **用户**（持 `memo_` 令牌的 MCP 客户端使用者）· **新用户**（尚未接入，读说明页）· **主人**（SSH 保底路径）· **运维**（门户与镜像）
 > **边界**：不写实现方案、不写部署动作、不写密钥与真实 IP；实现与部署分别见 [`web-design.md`](./web-design.md) 与 [`../deployment.md`](../deployment.md) §12.2
@@ -25,8 +26,8 @@
 |---|---|---|---|---|---|---|---|
 | <a id="s1"></a>S1 | 创建用户（邀请制） | 管理员 | AC1.1–AC1.7 | [`product-backlog.md`](../product-backlog.md) #27 | Sprint 4 PSP-W1「账号与凭证」 | [`web-design.md`](./web-design.md) §4.2 | TC-P-L0-01 · TC-P-L1-01 · TC-P-L3-02 |
 | <a id="s2"></a>S2 | 令牌生命周期 | 管理员 | AC2.1–AC2.9 | [`product-backlog.md`](../product-backlog.md) #3 | Sprint 4 PSP-W1「账号与凭证」 | [`web-design.md`](./web-design.md) §4.1 | TC-P-L0-04 · TC-P-L1-02 · TC-P-L3-04 |
-| <a id="s3"></a>S3 | 用户通过 MCP 端点接入 | 用户 | AC3.1–AC3.7 | [`product-backlog.md`](../product-backlog.md) #14 / #28 | Sprint 4 PSP-W2「端到端接入」 | [`web-design.md`](./web-design.md) §2 / §3.3 | TC-P-L1-03 · TC-P-L1-04 · TC-P-L1-06 · TC-P-L2-01–03 |
-| <a id="s4"></a>S4 | 跨用户隔离 | 用户 | AC4.1–AC4.7 | [`product-backlog.md`](../product-backlog.md) #4 / #11 | [Sprint 4 PSP-W2「端到端接入」](../sprint-plan.md#s4-mcp-session-bridge) | [`web-design.md`](./web-design.md) §3.3 / §5 | TC-P-L0-02/03 · TC-P-L1-05/07 · TC-P-L3-01/05/09 |
+| <a id="s3"></a>S3 | 令牌接入的门户侧执行（MCP 侧契约已迁） | 用户 | `AC3.3`–`AC3.5` · `AC3.7`（`AC3.1` / `AC3.2` / `AC3.6` → [`../mcp/mcp-stories.md`](../mcp/mcp-stories.md) `MS1` / `MS6`） | [`product-backlog.md`](../product-backlog.md) #14 / #28 | Sprint 4 PSP-W2「端到端接入」 | [`web-design.md`](./web-design.md) §2 / §4.1 | TC-P-L1-04 · TC-P-L1-06 · TC-P-L2-03 |
+| <a id="s4"></a>S4 | 门户侧的隔离执行与审计（MCP 侧契约已迁） | 用户 | `AC4.3`–`AC4.7`（`AC4.1` / `AC4.2` → [`../mcp/mcp-stories.md`](../mcp/mcp-stories.md) `MS2`） | [`product-backlog.md`](../product-backlog.md) #4 / #11 | [Sprint 4 PSP-W2「端到端接入」](../sprint-plan.md#s4-mcp-session-bridge) | [`web-design.md`](./web-design.md) §1 / §5 | TC-P-L0-02/03 · TC-P-L1-05/07 · TC-P-L3-01/05/09 |
 | <a id="s5"></a>S5 | 审计可追溯 | 管理员 | AC5.1–AC5.3 | [`product-backlog.md`](../product-backlog.md) #5 | [Sprint 4 PSP-W3「可运维、可发布」](../sprint-plan.md#s4-audit-view) | [`web-design.md`](./web-design.md) §4.4 | TC-P-L0-05 |
 | <a id="s6"></a>S6 | 接入说明页与 i18n | 新用户 | AC6.1–AC6.6 | [`product-backlog.md`](../product-backlog.md) #7 | Sprint 4 PSP-W3「可运维、可发布」 | [`web-design.md`](./web-design.md) §2 | TC-P-L2-04 · TC-P-L2-05 |
 | <a id="s7"></a>S7 | 容量、配额与限流 | 管理员 | AC7.1–AC7.6 | [`product-backlog.md`](../product-backlog.md) #6 / #17 / #29 | Sprint 4 PSP-W2 / PSP-W3 · Sprint 6 #10 / #11 | [`web-design.md`](./web-design.md) §7 · [`../mcp/mcp-design.md`](../mcp/mcp-design.md) §5.4 | TC-P-L3-06 · TC-P-L3-07 |
@@ -196,32 +197,24 @@ Scenario Outline: 对不存在的令牌执行「<操作>」
 ---
 
 <a id="s3-story"></a>
-## S3 用户通过 MCP 端点接入
+## S3 令牌接入的门户侧执行（MCP 侧契约已迁）
 
-**故事**：作为**用户**，我希望用令牌把客户端指向 `https://{MCP_HOST}/mcp`，以便无需 SSH 即可使用记忆能力。
+**故事**：作为**用户**，我希望持令牌经门户接入时门户侧行为可预测（子进程被回收、多设备共享同一份记忆），以便日常使用不出意外。
 
-**范围边界**：MCP 面只认 `Authorization: Bearer memo_…`；不提供 REST / Web SDK / OpenAI 兼容等其它接入面。
+**范围边界**：本故事只写**门户侧**行为。原「MCP 端点与协议桥」相关验收条件属**跨进程 / 上游契约**，已迁至 [`../mcp/mcp-stories.md`](../mcp/mcp-stories.md)。**编号冻结**：`AC3.*` **不重排**；移出的编号在下表保留登记、不在本文件定义（避免既有引用静默失真）。
+**MCP 面只认** `Authorization: Bearer memo_…`；不提供 REST / Web SDK / OpenAI 兼容等其它接入面。
+
+**迁出登记（原 `AC3.*` → MCP 侧，2026-09-22，Sprint 4 #1）**：
+
+| 原编号 | 场景 | 去向 |
+|---|---|---|
+| `AC3.1` | 持有效令牌完成一次工具调用 | [`../mcp/mcp-stories.md`](../mcp/mcp-stories.md) `MS1 AC-M1.1` |
+| `AC3.2` | 凭据缺失或已失效时拒绝建立会话 | [`../mcp/mcp-stories.md`](../mcp/mcp-stories.md) `MS1 AC-M1.2` |
+| `AC3.6` | 对外与管理员入口的工具数一致 | [`../mcp/mcp-stories.md`](../mcp/mcp-stories.md) `MS6 AC-M6.1` |
+
+**留本文件的验收条件**（门户侧行为）：
 
 ```gherkin
-@AC3.1 @happy
-Scenario: 持有效令牌完成一次工具调用
-  Given 用户 alice 持有一把有效令牌
-  When 客户端带该令牌连接 https://{MCP_HOST}/mcp
-  Then 会话建立成功，可完成 initialize → tools/list → tools/call
-  And 一次 memory_store 调用返回成功
-
-@AC3.2 @negative
-Scenario Outline: 凭据缺失或已失效时拒绝建立会话
-  Given 客户端处于「<凭据状态>」
-  When 客户端连接 https://{MCP_HOST}/mcp
-  Then 会话建立被拒绝
-  And 请求不被降级为匿名访问
-
-  Examples:
-    | 凭据状态 |
-    | 未携带令牌 |
-    | 携带已吊销的令牌 |
-
 @AC3.3 @edge
 Scenario: MCP 面不被 Cloudflare Access 拦截
   Given MCP 面已显式绕过 Cloudflare Access
@@ -250,40 +243,28 @@ Scenario: 多把令牌的使用时间各自独立更新
   When 只有其中一把令牌被使用
   Then 该令牌的最后使用时间被更新
   And 另一把令牌的最后使用时间保持不变
-
-@AC3.6 @edge
-Scenario: 对外与管理员入口实际暴露的工具数与定档一致
-  Given 对外用户通道与管理入口分别按各自模板启动
-  When 用 initialize 回包核对实际注册的工具数
-  Then 对外用户通道为 core 档 8 项
-  And 管理员入口为 admin 档 22 项
 ```
 
 ---
 
 <a id="s4-story"></a>
-## S4 跨用户隔离
+## S4 门户侧的隔离执行与审计（MCP 侧契约已迁）
 
-**故事**：作为**用户**，我希望我的记忆只有我能看到，以便不与他人串号。
+**故事**：作为**用户**，我希望门户在每次会话里都真的把隔离执行到位、且事后可对账，以便隔离不是纸面约定。
 
-**范围边界**：隔离靠**一用户一数据库**与**每用户身份**，不依赖上游多租户机制，也不依赖能力令牌；门户对上游的语义知识为 0。
-**门禁**：AC4.4 是**上线准入门槛**（对应 V1 负向判据，定义见 [`../mcp/mcp-design.md`](../mcp/mcp-design.md) §6.2）；不通过则不得上线。
+**范围边界**：本故事只写**门户侧**的隔离**执行、断言与审计**。隔离的**可观察判据**（跨用户检索互不可见、按 id 直取不可见）属**物理隔离契约**，已迁至 [`../mcp/mcp-stories.md`](../mcp/mcp-stories.md)。**编号冻结**：`AC4.*` **不重排**（`AC4.4` 被 V1 判据与冲刺条目引用）。
+**门禁**：`AC4.4` 是**上线准入门槛**（对应 V1 负向判据，定义见 [`../mcp/mcp-design.md`](../mcp/mcp-design.md) §6.2）；不通过则不得上线。
+
+**迁出登记（原 `AC4.*` → MCP 侧，2026-09-22，Sprint 4 #1）**：
+
+| 原编号 | 场景 | 去向 |
+|---|---|---|
+| `AC4.1` | 用户之间的检索互不可见 | [`../mcp/mcp-stories.md`](../mcp/mcp-stories.md) `MS2 AC-M2.1` |
+| `AC4.2` | 按 id 直取他人记忆时不可见 | [`../mcp/mcp-stories.md`](../mcp/mcp-stories.md) `MS2 AC-M2.2` |
+
+**留本文件的验收条件**（门户侧执行与审计）：
 
 ```gherkin
-@AC4.1 @happy
-Scenario: 用户之间的检索互不可见
-  Given 用户 A 已写入一条记忆
-  When 用户 B 在自己的会话中检索该内容
-  Then 用户 B 检索不到该记忆
-  And 检索不报错、不提示存在他人记忆
-
-@AC4.2 @happy
-Scenario: 按 id 直取他人记忆时不可见
-  Given 用户 A 已写入一条记忆并已知其 id
-  When 用户 B 在自己的会话中按该 id 取记忆
-  Then 返回「记忆不存在」
-  And 不返回该记忆的任何内容
-
 @AC4.3 @edge
 Scenario: 每次会话断言并记录实际使用的库路径
   Given 用户 alice 的会话已建立
@@ -734,10 +715,10 @@ Scenario: 门户容器按最小依赖与资源限额运行
 | 1 | `core` 档**不含删除类工具**，用户无法自行删除或遗忘自己的记忆 | 已知限制，本轮接受（[`../mcp/mcp-design.md`](../mcp/mcp-design.md) §8.3 #4）；若要开放，最小增量档为 `core,lifecycle`。接入说明页是否需显式告知该限制，待定 |
 | 2 | 审计写入失败时的 fail-open / fail-closed 策略 | **未定**：`S5` 未规定审计落库失败时是否仍放行会话，需在实现前决议 |
 | 3 | ~~`S11` / `S12` 的验收条件尚无对应测试用例~~ **已登记（2026-09-21）** | [`web-test.md`](./web-test.md) §2 已补 `TC-P-L0-06`–`TC-P-L0-09`（启动自检四项，对应 `S11`）、`TC-P-L1-11` / `TC-P-L1-12`（制品契约核对、版本注入与不继承上游默认值）与既有 `TC-P-L1-09`（UID/GID 对齐，对应 `AC12.2`），三者合起来对应 `S12`；`S13` 由既有 `TC-P-L1-08` 与新增 `TC-P-L1-13` 覆盖。`AC12.4`（升级演练）是流程留痕项，登记在 §1 测试计划为**人工项**，不设自动化用例 |
-| 4 | 门户技术栈 | 未定（要求：能实现 MCP Streamable HTTP + 子进程 stdio 桥）—— [`web-design.md`](./web-design.md) §10 #2 |
+| 4 | ~~门户技术栈~~ **已定（2026-09-22）** | **Node.js 22 LTS + TypeScript；Fastify + Nunjucks 服务端模板 + 原生 CSS；MCP 桥用官方 `@modelcontextprotocol/sdk` 双 transport；门户库 SQLite** —— 选型理由与被拒备选见 [`web-design.md`](./web-design.md) §12.0，决议登记 §0 **D9** |
 | 5 | 反向代理选型 | 未定（NPM / Caddy / 其它）—— [`web-design.md`](./web-design.md) §10 #3 |
 | 6 | MCP 传输实现 | 本项目唯一非平凡工程量；优先复用官方 SDK 的 server transport + stdio client transport，不自行实现协议 —— [`web-design.md`](./web-design.md) §10 #4 |
-| 7 | 每用户库后台维护的执行方 | 门户调度 or 主机 cron —— [`web-design.md`](./web-design.md) §10 #5 · [`../sprint-plan.md`](../sprint-plan.md) Sprint 3 #5 |
+| 7 | ~~每用户库后台维护的执行方~~ **已定档（Sprint 3 #5）** | **主机 cron** 逐库调度，唯一入口 `scripts/maintain-user-dbs.sh`；命令口径、覆盖面实测与失败语义见 [`../mcp/mcp-design.md`](../mcp/mcp-design.md) §5.3，故事 [`../mcp/mcp-stories.md`](../mcp/mcp-stories.md) `MS8`。生产定时器与告警留 Sprint 6 |
 | 8 | 是否启用静态加密（`AI_MEMORY_ENCRYPT_AT_REST`） | 未定；注意它只防「快照离开主机后被读」，不防门户被攻破 —— [`web-design.md`](./web-design.md) §10 #6 / §8 T10 |
 | 9 | 门户镜像重建是否自动化 | 建议纳入版本锁变更触发的流水线 —— [`web-design.md`](./web-design.md) §10 #7 |
 
@@ -752,3 +733,4 @@ Scenario: 门户容器按最小依赖与资源限额运行
 | 2026-09-21 | **ATDD 重写（v2.0）**：① 全部 AC 由「描述」改为 **Given-When-Then**，并按「一条场景一个行为、一个 `When` 触发」拆分；② 新增场景：`AC1.6` / `AC1.7`（重复 handle、目录创建失败无半成品）· `AC2.9`（对不存在令牌操作）· `AC3.6`（对外与管理员入口工具数核对）· `AC3.7`（多把令牌的使用时间各自独立）· `AC4.7`（指向他用户库路径的负向断言，对应 D1）· `AC6.5`（示例一律占位符）· `AC6.6`（页面口径不一致时阻断发布）· `AC7.5`（用户规模上限落地为校验）· `AC7.6`（配额内用户不受影响）· `AC8.4`（门户 stack 独立重启）· `AC9.3`（门户库单独恢复）· `AC9.4`（门户库误放 /data 时阻断）· `AC10.5`（已认证管理员正常使用管理面）；③ 新增 **S10 管理面访问控制与面隔离**、**S11 门户启动自检（fail-closed）**、**S12 门户制品契约与升级治理**、**S13 门户容器最小攻击面**，承接 [`product-backlog.md`](../product-backlog.md) #2 / #16 / #18 与 [`web-design.md`](./web-design.md) §3.1–§3.4 / §6 / §8 T1；④ 新增「故事索引」表（故事 → 角色 → Backlog → Sprint → 设计 → 测试用例）与「AC 编号只追加不重排」纪律；⑤ 新增「已知限制与开放问题」表，显式登记 `S11`/`S12` **尚无测试用例**与「审计写入失败策略未定」两处缺口。**既有 AC 编号一字未重排**（`AC6.4`、`S3 AC3.5` 等跨文档引用仍有效） |
 | 2026-09-21 | **引用收口（故事索引 + 已知限制）**：故事索引新增 `AC` 列（`AC{n}.{m}` 区间）并把 `S11` / `S12` / `S13` 的「待登记用例」替换为具体用例号（`TC-P-L0-06`–`TC-P-L0-09`；`TC-P-L1-09` / `TC-P-L1-11` / `TC-P-L1-12`；`TC-P-L1-08` / `TC-P-L1-13`），形成 AC ↔ TC 双向映射；「已知限制与开放问题」第 3 条由「尚无对应用例」改为**已登记**，并注明 `AC12.4`（升级演练）为 §1 人工项。同日 [`product-backlog.md`](../product-backlog.md) / [`sprint-plan.md`](../sprint-plan.md) / [`change-log.md`](../change-log.md) 同步订正指向本文件旧故事号的 5 处错指 |
 | 2026-09-22 | **故事索引的 Sprint 落点随 Replan 改指**（锚点 id `s4-*` / `s5-*` 全部保留，跨文档链接未断）：S1 / S2 / S10 → `Sprint 4 PSP-W1「账号与凭证」`；S3 / S4 / S13 → `Sprint 4 PSP-W2「端到端接入」`；S5 / S6 / S11 → `Sprint 4 PSP-W3「可运维、可发布」`；S7 → `Sprint 4 PSP-W2 / PSP-W3 · Sprint 6 #10 / #11`；S8 → `Sprint 6「接入面」`；S9 → `Sprint 6 #9`；S12 → `Sprint 4 PSP-W3 · Sprint 7 #3 / #6` |
+| 2026-09-22 | **文档边界修正（v2.1，Sprint 4 #1）**：本文件收窄为**门户自身（web app）**的故事与 AC。① `S3` 由「用户通过 MCP 端点接入」改为「**令牌接入的门户侧执行**」、`S4` 由「跨用户隔离」改为「**门户侧的隔离执行与审计**」（**锚点 `#s3` / `#s4` / `#s3-story` / `#s4-story` 冻结未改**）；② 5 条属**跨进程 / 上游契约**的 AC 迁出至 [`../mcp/mcp-stories.md`](../mcp/mcp-stories.md)：`AC3.1` → `MS1 AC-M1.1` · `AC3.2` → `MS1 AC-M1.2` · `AC3.6` → `MS6 AC-M6.1` · `AC4.1` → `MS2 AC-M2.1` · `AC4.2` → `MS2 AC-M2.2`（**原编号一律不重排**，两故事内各留「迁出登记」表，既有跨文档引用继续可解析）；③ 故事索引的 `AC` 列与 `设计` 列随之更新（设计指向改为门户侧章节）；④ 「已知限制」第 7 条（每用户库维护执行方）关闭为**已定档：主机 cron**。**留本文件的 AC 原文一字未改** |

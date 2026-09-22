@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>memory.agent-mate.ai - AI Memory MCP</title>
+<link rel="icon" href="assets/logo.png" type="image/png">
+<link rel="stylesheet" href="assets/portal.css">
+</head>
+<body class="app-shell" data-title-key="audit.title">
+<a class="sr-only" href="#content" data-i18n="a11y.skip">Skip to content</a>
+
+<header class="app-header">
+  <a class="logo" href="02-users.html" data-i18n="brand" data-i18n-attr="aria-label" aria-label="memory.agent-mate.ai - AI Memory MCP">
+    <img class="logo-header-mark" src="assets/logo.png" alt="" width="30" height="30" onerror="this.style.visibility='hidden'">
+    <span class="logo-word" data-i18n="brand">memory.agent-mate.ai - AI Memory MCP</span>
+  </a>
+  <button type="button" class="menu-toggle" data-i18n="a11y.menu">Menu</button>
+  <div class="header-end">
+    <a class="header-guide" href="01-instructions.html" data-i18n="nav.site">Instructions</a>
+    <p class="hello mono">admin</p>
+    <div class="locale-switch" role="group" data-i18n="a11y.locale" data-i18n-attr="aria-label">
+      <button type="button" data-locale="EN">EN</button>
+      <button type="button" data-locale="CN">简</button>
+      <button type="button" data-locale="HK">港</button>
+      <button type="button" data-locale="TW">台</button>
+    </div>
+  </div>
+</header>
+
+<div class="app-body">
+  <aside class="sidebar">
+    <nav class="nav" aria-label="Admin">
+      <a href="02-users.html" data-i18n="nav.users">Users</a>
+      <a class="active" href="04-audit.html" data-i18n="nav.audit">Audit</a>
+      <a href="05-capacity.html" data-i18n="nav.capacity">Capacity</a>
+      <a href="06-admin-mcp.html" data-i18n="nav.guide">Admin MCP config</a>
+    </nav>
+  </aside>
+
+  <main id="content" class="content">
+    <div class="page-head">
+      <p class="eyebrow" data-i18n="audit.eyebrow">AUDIT</p>
+      <h1 data-i18n="audit.title">Audit</h1>
+      <div class="page-head-row">
+        <p class="page-head-lead" data-i18n="audit.lead">Five event types. Session rows carry the resolved database path.</p>
+        <div class="page-head-actions">
+          <button type="button" class="btn btn-ghost" data-i18n="audit.export">Export</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="filter-bar">
+      <label class="field-label" for="f-type">
+        <span data-i18n="audit.filter.type">Event type</span>
+        <select class="input-box" id="f-type">
+          <option data-i18n="audit.filter.all">All events</option>
+          <option data-i18n="audit.ev.session">Session started</option>
+          <option data-i18n="audit.ev.create">User created</option>
+          <option data-i18n="audit.ev.issue">Token issued</option>
+          <option data-i18n="audit.ev.rotate">Token rotated</option>
+          <option data-i18n="audit.ev.revoke">Token revoked</option>
+        </select>
+      </label>
+      <label class="field-label" for="f-range">
+        <span data-i18n="audit.filter.range">Time range</span>
+        <select class="input-box" id="f-range">
+          <option data-i18n="audit.range.24h">Last 24 hours</option>
+          <option data-i18n="audit.range.7d">Last 7 days</option>
+        </select>
+      </label>
+      <label class="field-label" for="f-handle">
+        <span data-i18n="audit.filter.user">User</span>
+        <input class="input-box is-mono" id="f-handle" type="search" placeholder="alice" autocomplete="off" data-i18n="audit.filter.user_ph" data-i18n-attr="placeholder">
+      </label>
+      <button type="button" class="btn" data-filter-apply data-i18n="audit.filter.apply">Filter</button>
+      <span class="row-end mono" data-i18n="audit.filter.count" data-i18n-vars='{"n":"5"}'>5 events</span>
+    </div>
+
+    <div class="table-wrap" data-audit-table>
+      <table>
+        <thead>
+          <tr>
+            <th data-i18n="audit.col.time">Time</th>
+            <th data-i18n="audit.col.event">Event</th>
+            <th data-i18n="audit.col.handle">handle</th>
+            <th data-i18n="audit.col.result">Result</th>
+            <th data-i18n="audit.col.path">Resolved path</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td data-label="time"><span class="mono">2026-09-22 11:04:12</span></td>
+            <td data-label="event" data-i18n="audit.ev.session">Session started</td>
+            <td data-label="handle"><a href="03-user-detail.html">alice</a></td>
+            <td data-label="result"><span class="status" data-i18n="audit.ok">OK</span></td>
+            <td data-label="path"><span class="path">/data/users/alice/ai-memory.db</span></td>
+          </tr>
+          <tr>
+            <td data-label="time"><span class="mono">2026-09-22 10:58:40</span></td>
+            <td data-label="event" data-i18n="audit.ev.session">Session started</td>
+            <td data-label="handle">bob</td>
+            <td data-label="result"><span class="status is-off" data-i18n="audit.refused">Refused</span></td>
+            <td data-label="path"><span class="mono">—</span></td>
+          </tr>
+          <tr>
+            <td data-label="time"><span class="mono">2026-09-22 09:47:03</span></td>
+            <td data-label="event" data-i18n="audit.ev.revoke">Token revoked</td>
+            <td data-label="handle">carol</td>
+            <td data-label="result"><span class="status" data-i18n="audit.ok">OK</span></td>
+            <td data-label="path"><span class="mono">—</span></td>
+          </tr>
+          <tr>
+            <td data-label="time"><span class="mono">2026-09-21 18:02:55</span></td>
+            <td data-label="event" data-i18n="audit.ev.issue">Token issued</td>
+            <td data-label="handle"><a href="03-user-detail.html">alice</a></td>
+            <td data-label="result"><span class="status" data-i18n="audit.ok">OK</span></td>
+            <td data-label="path"><span class="mono">—</span></td>
+          </tr>
+          <tr>
+            <td data-label="time"><span class="mono">2026-09-21 09:47:41</span></td>
+            <td data-label="event" data-i18n="audit.ev.create">User created</td>
+            <td data-label="handle">carol</td>
+            <td data-label="result"><span class="status" data-i18n="audit.ok">OK</span></td>
+            <td data-label="path"><span class="path">/data/users/carol/ai-memory.db</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <nav class="pager" aria-label="Pagination">
+      <p class="pager-count" data-i18n="pager.showing" data-i18n-vars='{"from":"1","to":"5","total":"5"}'>Showing 1–5 of 5</p>
+      <div class="pager-controls">
+        <button type="button" class="btn-text" data-i18n="pager.prev" disabled>Previous</button>
+        <span class="pager-page is-current" aria-current="page">1</span>
+        <button type="button" class="btn-text" data-i18n="pager.next" disabled>Next</button>
+      </div>
+    </nav>
+
+    <div class="empty" data-audit-empty hidden>
+      <p data-i18n="audit.empty">No events match. Clear the user or widen the range.</p>
+    </div>
+
+    <div class="callout callout-info" style="margin-top:1.5rem">
+      <p data-i18n="audit.note">No token plaintext, no memory content. A refused session writes nothing, so it has no path.</p>
+    </div>
+  </main>
+</div>
+
+<footer class="site-footer">
+  <p data-i18n="copyright">copyright © Ethan Huang</p>
+</footer>
+
+<script src="assets/i18n.js"></script>
+<script src="assets/mockup.js"></script>
+</body>
+</html>

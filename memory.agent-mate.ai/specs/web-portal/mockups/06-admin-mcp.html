@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>memory.agent-mate.ai - AI Memory MCP</title>
+<link rel="icon" href="assets/logo.png" type="image/png">
+<link rel="stylesheet" href="assets/portal.css">
+</head>
+<body class="app-shell" data-title-key="ag.title">
+<a class="sr-only" href="#content" data-i18n="a11y.skip">Skip to content</a>
+
+<header class="app-header">
+  <a class="logo" href="02-users.html" data-i18n="brand" data-i18n-attr="aria-label" aria-label="memory.agent-mate.ai - AI Memory MCP">
+    <img class="logo-header-mark" src="assets/logo.png" alt="" width="30" height="30" onerror="this.style.visibility='hidden'">
+    <span class="logo-word" data-i18n="brand">memory.agent-mate.ai - AI Memory MCP</span>
+  </a>
+  <button type="button" class="menu-toggle" data-i18n="a11y.menu">Menu</button>
+  <div class="header-end">
+    <a class="header-guide" href="01-instructions.html" data-i18n="nav.site">Instructions</a>
+    <p class="hello mono">admin</p>
+    <div class="locale-switch" role="group" data-i18n="a11y.locale" data-i18n-attr="aria-label">
+      <button type="button" data-locale="EN">EN</button>
+      <button type="button" data-locale="CN">简</button>
+      <button type="button" data-locale="HK">港</button>
+      <button type="button" data-locale="TW">台</button>
+    </div>
+  </div>
+</header>
+
+<div class="app-body">
+  <aside class="sidebar">
+    <nav class="nav" aria-label="Admin">
+      <a href="02-users.html" data-i18n="nav.users">Users</a>
+      <a href="04-audit.html" data-i18n="nav.audit">Audit</a>
+      <a href="05-capacity.html" data-i18n="nav.capacity">Capacity</a>
+      <a class="active" href="06-admin-mcp.html" data-i18n="nav.guide">Admin MCP config</a>
+    </nav>
+  </aside>
+
+  <main id="content" class="content">
+    <div class="page-head">
+      <p class="eyebrow" data-i18n="ag.eyebrow">ADMIN</p>
+      <h1 data-i18n="ag.title">Admin MCP config</h1>
+      <div class="page-head-row">
+        <p class="page-head-lead" data-i18n="ag.lead">Two ways in. The admin entry uses the admin tier.</p>
+      </div>
+    </div>
+
+    <section class="section" style="margin-top:0">
+      <h2 data-i18n="ag.tier.h">Tier</h2>
+      <p class="lead-note" data-i18n="ag.tier.body">The tier is fixed by the server. Change it, then reconnect.</p>
+      <div class="readonly">
+        <dl class="kv">
+          <dt>admin</dt>
+          <dd><span class="mono">--tier smart --profile admin</span> · <span class="mono">22</span></dd>
+        </dl>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2 data-i18n="ag.stdio.h">Local stdio</h2>
+      <p class="lead-note" data-i18n="ag.stdio.body">Run the container on the same host.</p>
+      <div class="codeblock">
+        <pre class="codeblock-text mono">"ai-memory-local": {
+  "type": "stdio",
+  "command": "docker",
+  "args": ["exec", "-i", "ai-memory-mcp", "ai-memory", "mcp",
+           "--tier", "smart", "--profile", "admin"]
+}</pre>
+        <button class="codeblock-copy" type="button" data-copy='"ai-memory-local": {
+  "type": "stdio",
+  "command": "docker",
+  "args": ["exec", "-i", "ai-memory-mcp", "ai-memory", "mcp",
+           "--tier", "smart", "--profile", "admin"]
+}' data-i18n="common.copy">Copy</button>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2 data-i18n="ag.ssh.h">SSH stdio</h2>
+      <p class="lead-note" data-i18n="ag.ssh.body">Connect over SSH. The forced command pins the tier.</p>
+      <div class="codeblock">
+        <pre class="codeblock-text mono">"ai-memory": {
+  "command": "ssh",
+  "args": ["ai-memory"]
+}</pre>
+        <button class="codeblock-copy" type="button" data-copy='"ai-memory": {
+  "command": "ssh",
+  "args": ["ai-memory"]
+}' data-i18n="common.copy">Copy</button>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2 data-i18n="admins.signin.h">How you sign in</h2>
+      <p class="lead-note" data-i18n="admins.signin.body">Your identity is the email or Google account listed in the Cloudflare Access policy. There is no password in this portal, so there is nothing to reset.</p>
+      <div class="readonly">
+        <dl class="kv">
+          <dt data-i18n="admins.methods.h">Ways in</dt>
+          <dd>
+            <span data-i18n="admins.methods.google">Google account — primary</span><br>
+            <span data-i18n="admins.methods.otp">Email one-time code — backup</span>
+          </dd>
+        </dl>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2 data-i18n="admins.keys.h">Keep more than one key</h2>
+      <p class="lead-note" data-i18n="admins.keys.body">List at least two emails in the policy. Any one of them gets you in, so losing a mailbox is not a lockout.</p>
+      <div class="readonly">
+        <ul>
+          <li data-i18n="admins.keys.i1">Two or more emails listed in the policy</li>
+          <li data-i18n="admins.keys.i2">A Google account set as the primary login</li>
+          <li data-i18n="admins.keys.i3">Cloudflare recovery codes stored offline</li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2 data-i18n="admins.session.h">Session</h2>
+      <p class="lead-note" data-i18n="admins.session.body">A session lasts about a month today. Three months is the target; the platform may cap it lower. A new device asks you to verify again.</p>
+      <dl class="how-to">
+        <dt data-i18n="admins.cf.where">Where</dt>
+        <dd data-i18n="admins.cf.where_v">Cloudflare Zero Trust → Access → Applications → your admin host.</dd>
+        <dt data-i18n="admins.cf.session">Session</dt>
+        <dd data-i18n="admins.cf.session_v">Set session duration there. The console caps it at 1 month; longer needs the API. Applies to new logins.</dd>
+        <dt data-i18n="admins.cf.login">Sign-in</dt>
+        <dd data-i18n="admins.cf.login_v">Google is primary, email one-time code is the backup. A new device asks again.</dd>
+        <dt data-i18n="admins.cf.who">Who gets in</dt>
+        <dd data-i18n="admins.cf.who_v">The emails in the Allow policy. Add a second one so a lost mailbox is not a lockout.</dd>
+      </dl>
+    </section>
+
+    <section class="section">
+      <h2 data-i18n="admins.fallback.h">If you lose access</h2>
+      <p class="lead-note" data-i18n="admins.fallback.body">Sign in to Cloudflare to change the policy, or use the SSH path, which never goes through this portal.</p>
+      <div class="btn-row" style="margin-top:1.15rem">
+        <a class="btn btn-page" href="https://one.dash.cloudflare.com/" target="_blank" rel="noopener noreferrer" data-i18n="admins.manage">Open Cloudflare Access</a>
+      </div>
+      <p class="field-note" style="margin-top:0.85rem" data-i18n="admins.manage.note">Admins are added and removed in Cloudflare Zero Trust. This page only shows how it works.</p>
+      <dl class="how-to">
+        <dt data-i18n="admins.add.h">Add an admin</dt>
+        <dd data-i18n="admins.add.v">In Zero Trust, open Access → Applications → your admin host → Policies → Allow, add the email, save. They sign in with that email — there is nothing for you to send.</dd>
+        <dt data-i18n="admins.remove.h">Remove an admin</dt>
+        <dd data-i18n="admins.remove.v">Delete the email from that Allow policy. Access ends on their next request; there is no session to revoke.</dd>
+        <dt data-i18n="admins.nopw.h">No password</dt>
+        <dd data-i18n="admins.nopw.v">There is no portal password to set or reset. A new device verifies again.</dd>
+      </dl>
+    </section>
+
+  </main>
+</div>
+
+<footer class="site-footer">
+  <p data-i18n="copyright">copyright © Ethan Huang</p>
+</footer>
+
+<script src="assets/i18n.js"></script>
+<script src="assets/mockup.js"></script>
+</body>
+</html>

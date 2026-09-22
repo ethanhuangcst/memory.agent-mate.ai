@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>memory.agent-mate.ai - AI Memory MCP</title>
+<link rel="icon" href="assets/logo.png" type="image/png">
+<link rel="stylesheet" href="assets/portal.css">
+</head>
+<body class="app-shell" data-title-key="detail.eyebrow">
+<a class="sr-only" href="#content" data-i18n="a11y.skip">Skip to content</a>
+
+<header class="app-header">
+  <a class="logo" href="02-users.html" data-i18n="brand" data-i18n-attr="aria-label" aria-label="memory.agent-mate.ai - AI Memory MCP">
+    <img class="logo-header-mark" src="assets/logo.png" alt="" width="30" height="30" onerror="this.style.visibility='hidden'">
+    <span class="logo-word" data-i18n="brand">memory.agent-mate.ai - AI Memory MCP</span>
+  </a>
+  <button type="button" class="menu-toggle" data-i18n="a11y.menu">Menu</button>
+  <div class="header-end">
+    <a class="header-guide" href="01-instructions.html" data-i18n="nav.site">Instructions</a>
+    <p class="hello mono">admin</p>
+    <div class="locale-switch" role="group" data-i18n="a11y.locale" data-i18n-attr="aria-label">
+      <button type="button" data-locale="EN">EN</button>
+      <button type="button" data-locale="CN">简</button>
+      <button type="button" data-locale="HK">港</button>
+      <button type="button" data-locale="TW">台</button>
+    </div>
+  </div>
+</header>
+
+<div class="app-body">
+  <aside class="sidebar">
+    <nav class="nav" aria-label="Admin">
+      <a class="active" href="02-users.html" data-i18n="nav.users">Users</a>
+      <a href="04-audit.html" data-i18n="nav.audit">Audit</a>
+      <a href="05-capacity.html" data-i18n="nav.capacity">Capacity</a>
+      <a href="06-admin-mcp.html" data-i18n="nav.guide">Admin MCP config</a>
+    </nav>
+  </aside>
+
+  <main id="content" class="content">
+    <div class="page-head">
+      <p class="eyebrow" data-i18n="detail.eyebrow">USER</p>
+      <h1 class="mono">alice</h1>
+      <div class="page-head-row">
+        <p class="page-head-lead"><span class="path">/data/users/alice/ai-memory.db</span></p>
+        <div class="page-head-actions">
+          <span class="status" data-i18n="detail.st.active">Active</span>
+          <a class="btn-text" href="02-users.html" data-i18n="detail.back">Back to users</a>
+        </div>
+      </div>
+    </div>
+
+    <section class="readonly">
+      <dl class="kv">
+        <dt data-i18n="detail.kv.identity">Memory identity</dt>
+        <dd class="mono">human:alice</dd>
+        <dt data-i18n="detail.kv.path">Database path</dt>
+        <dd class="path">/data/users/alice/ai-memory.db</dd>
+        <dt data-i18n="detail.kv.keydir">Key directory</dt>
+        <dd class="path">/data/users/alice/keys/</dd>
+        <dt data-i18n="detail.kv.created">Created</dt>
+        <dd class="mono">2026-09-18 10:04</dd>
+      </dl>
+    </section>
+
+    <section class="section">
+      <h2 data-i18n="detail.tokens.h">Tokens</h2>
+      <div class="page-head-row" style="margin-bottom:1rem">
+        <p class="page-head-lead" data-i18n="detail.tokens.lead">Plaintext shows once. Tokens of one user share one memory.</p>
+        <div class="page-head-actions">
+          <button type="button" class="btn btn-page" data-open-dialog="dialog-issue" data-i18n="detail.issue">Issue token</button>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th data-i18n="detail.col.prefix">Prefix</th>
+              <th data-i18n="detail.col.label">Label</th>
+              <th data-i18n="detail.col.created">Created</th>
+              <th data-i18n="detail.col.lastused">Last used</th>
+              <th data-i18n="detail.col.status">Status</th>
+              <th data-i18n="detail.col.actions">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td data-label="prefix"><span class="mono">memo_a1b2c3d4</span></td>
+              <td data-label="label">MacBook</td>
+              <td data-label="created"><span class="mono">2026-09-18 10:05</span></td>
+              <td data-label="last"><span class="mono">2026-09-22 09:31</span></td>
+              <td data-label="status"><span class="status" data-i18n="detail.st.active">Active</span></td>
+              <td data-label="actions">
+                <div class="row-actions">
+                  <button type="button" class="btn-text" data-open-dialog="dialog-rotate" data-i18n="detail.rotate">Rotate</button>
+                  <button type="button" class="btn-text is-danger" data-open-dialog="dialog-revoke" data-i18n="detail.revoke">Revoke</button>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td data-label="prefix"><span class="mono">memo_q7r8s9t0</span></td>
+              <td data-label="label">Desktop</td>
+              <td data-label="created"><span class="mono">2026-09-20 14:12</span></td>
+              <td data-label="last"><span class="mono">2026-09-21 18:02</span></td>
+              <td data-label="status"><span class="status" data-i18n="detail.st.active">Active</span></td>
+              <td data-label="actions">
+                <div class="row-actions">
+                  <button type="button" class="btn-text" data-open-dialog="dialog-rotate" data-i18n="detail.rotate">Rotate</button>
+                  <button type="button" class="btn-text is-danger" data-open-dialog="dialog-revoke" data-i18n="detail.revoke">Revoke</button>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td data-label="prefix"><span class="mono">memo_u1v2w3x4</span></td>
+              <td data-label="label">Old laptop</td>
+              <td data-label="created"><span class="mono">2026-09-01 08:30</span></td>
+              <td data-label="last"><span class="mono">2026-09-14 17:45</span></td>
+              <td data-label="status"><span class="status is-off" data-i18n="detail.st.revoked">Revoked</span></td>
+              <td data-label="actions"><span class="mono">—</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2 data-i18n="detail.diag.h">Diagnostics (read-only)</h2>
+      <p class="lead-note" data-i18n="detail.diag.lead">Check here before looking at a user session.</p>
+      <div class="readonly">
+        <dl class="kv">
+          <dt data-i18n="detail.diag.selfcheck">Startup self-check</dt>
+          <dd><span class="status" data-i18n="detail.diag.passed">All four checks passed</span> <span class="mono">2026-09-22 11:02</span></dd>
+          <dt data-i18n="detail.diag.dir">User directory</dt>
+          <dd><span class="mono">/data/users</span> · <span class="mono">root:aimem 2775</span></dd>
+          <dt data-i18n="detail.diag.embed">Embeddings</dt>
+          <dd><span class="mono">dim = 1024</span> · <span data-i18n="detail.diag.reachable">reachable</span></dd>
+          <dt data-i18n="detail.diag.maint">Last maintenance</dt>
+          <dd><span class="mono">2026-09-22 03:00</span> · <span data-i18n="detail.diag.maint.ok">expired entries evicted, WAL reclaimed</span></dd>
+        </dl>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2 data-i18n="detail.danger.h">Deactivate this user</h2>
+      <p class="lead-note" data-i18n="detail.danger.lead">Revokes every token at once and refuses new sessions. The memory database stays on disk.</p>
+      <div class="btn-row">
+        <button type="button" class="btn btn-danger btn-page" data-open-dialog="dialog-deactivate" data-i18n="detail.danger.cta">Deactivate user</button>
+      </div>
+      <p class="field-note" style="margin-top:0.85rem" data-i18n="detail.danger.note">Reversible: issue a new token to restore access. Deleting the database is a separate, server-side decision.</p>
+    </section>
+  </main>
+</div>
+
+<footer class="site-footer">
+  <p data-i18n="copyright">copyright © Ethan Huang</p>
+</footer>
+
+<div class="dialog-backdrop" id="dialog-deactivate" role="dialog" aria-modal="true" aria-labelledby="dialog-deactivate-title">
+  <div class="dialog">
+    <h2 class="dialog-title" id="dialog-deactivate-title" data-i18n="dlg.deact.title">Deactivate alice?</h2>
+    <p class="dialog-body" data-i18n="dlg.deact.body">Every token is revoked and new sessions are refused. The memory database is kept; issue a new token to restore access.</p>
+    <div class="dialog-target">
+      <div class="key-meta">
+        <span class="key-meta-label" data-i18n="dlg.target.user">User</span><span class="key-meta-value mono">alice</span>
+        <span class="key-meta-label" data-i18n="dlg.target.active">Active tokens</span><span class="key-meta-value mono">2</span>
+      </div>
+    </div>
+    <div class="dialog-actions">
+      <button type="button" class="btn-text" data-close-dialog data-i18n="common.cancel">Cancel</button>
+      <button type="button" class="btn btn-danger btn-page" data-i18n="dlg.deact.submit">Deactivate</button>
+    </div>
+  </div>
+</div>
+
+<div class="dialog-backdrop" id="dialog-issue" role="dialog" aria-modal="true" aria-labelledby="dialog-issue-title">
+  <div class="dialog">
+    <h2 class="dialog-title" id="dialog-issue-title" data-i18n="dlg.issue.title">Issue a token</h2>
+    <p class="dialog-body" data-i18n="dlg.issue.body">The plaintext shows once. Copy it into the client now.</p>
+    <label class="field-label" for="issue-label" style="margin-top:1.25rem">
+      <span data-i18n="dlg.issue.label">Label</span>
+      <input class="input-box" id="issue-label" type="text" value="MacBook" autocomplete="off" placeholder="MacBook" data-i18n="dlg.issue.label_ph" data-i18n-attr="placeholder">
+    </label>
+    <p class="field-note" style="margin-top:0.5rem" data-i18n="dlg.issue.label_note">One token per device. Revoke one without touching the others.</p>
+    <div class="dialog-target">
+      <div class="key-meta">
+        <span class="key-meta-label" data-i18n="dlg.target.user">User</span><span class="key-meta-value mono">alice</span>
+        <span class="key-meta-label" data-i18n="dlg.target.token">Token prefix</span><span class="key-meta-value" data-i18n="dlg.issue.prefix_note">Generated after issuing</span>
+      </div>
+      <p class="field-note" data-i18n="detail.tokens.lead">Plaintext shows once. Tokens of one user share one memory.</p>
+    </div>
+    <div class="dialog-actions">
+      <button type="button" class="btn-text" data-close-dialog data-i18n="common.cancel">Cancel</button>
+      <button type="button" class="btn btn-page" data-i18n="dlg.issue.submit">Issue</button>
+    </div>
+  </div>
+</div>
+
+<div class="dialog-backdrop" id="dialog-revoke" role="dialog" aria-modal="true" aria-labelledby="dialog-revoke-title">
+  <div class="dialog">
+    <h2 class="dialog-title" id="dialog-revoke-title" data-i18n="dlg.revoke.title">Revoke this token?</h2>
+    <p class="dialog-body" data-i18n="dlg.revoke.body">New sessions are refused and open sessions end. Other tokens and existing memory are unaffected.</p>
+    <div class="dialog-target">
+      <div class="key-meta">
+        <span class="key-meta-label" data-i18n="dlg.target.user">User</span><span class="key-meta-value mono">alice</span>
+        <span class="key-meta-label" data-i18n="dlg.target.token">Token prefix</span><span class="key-meta-value mono">memo_a1b2c3d4</span>
+        <span class="key-meta-label" data-i18n="dlg.target.label">Label</span><span class="key-meta-value">MacBook</span>
+      </div>
+    </div>
+    <div class="dialog-actions">
+      <button type="button" class="btn-text" data-close-dialog data-i18n="common.cancel">Cancel</button>
+      <button type="button" class="btn btn-danger btn-page" data-i18n="dlg.revoke.submit">Revoke</button>
+    </div>
+  </div>
+</div>
+
+<div class="dialog-backdrop" id="dialog-rotate" role="dialog" aria-modal="true" aria-labelledby="dialog-rotate-title">
+  <div class="dialog">
+    <h2 class="dialog-title" id="dialog-rotate-title" data-i18n="dlg.rotate.title">Rotate this token?</h2>
+    <p class="dialog-body" data-i18n="dlg.rotate.body">The old token is revoked and a new one is issued. Memory is unaffected.</p>
+    <div class="dialog-target">
+      <div class="key-meta">
+        <span class="key-meta-label" data-i18n="dlg.target.user">User</span><span class="key-meta-value mono">alice</span>
+        <span class="key-meta-label" data-i18n="dlg.target.token">Token prefix</span><span class="key-meta-value mono">memo_a1b2c3d4</span>
+      </div>
+    </div>
+    <div class="dialog-actions">
+      <button type="button" class="btn-text" data-close-dialog data-i18n="common.cancel">Cancel</button>
+      <button type="button" class="btn btn-page" data-i18n="dlg.rotate.submit">Rotate</button>
+    </div>
+  </div>
+</div>
+
+<script src="assets/i18n.js"></script>
+<script src="assets/mockup.js"></script>
+</body>
+</html>
