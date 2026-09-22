@@ -79,7 +79,7 @@ SCHEME_RE = re.compile(r'^[A-Za-z][A-Za-z0-9+.\-]*:')  # http/https/mailto/... �
 def is_allowed(rel_src, target, path_part):
     """允许清单匹配：源文件路径既可用「相对仓根」也可用「相对产品目录」书写。
 
-    后者（如 `specs/sprint-plan.md`）是清单里的惯用写法，靠后缀匹配兼容，
+    后者（如 `specs/sprint-backlog.md`）是清单里的惯用写法，靠后缀匹配兼容，
     避免清单与脚本对「相对谁」的理解不一致导致豁免静默失效 —— 这正是本护栏要防的缺陷。
     """
     for key, tgts in allow.items():

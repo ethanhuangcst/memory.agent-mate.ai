@@ -7,7 +7,7 @@ tags:
   - sdd
   - scrum
   - docs
-related_spec: sprint-plan.md
+related_spec: sprint-backlog.md
 related:
   - product-backlog.md
   - change-log.md
@@ -61,7 +61,7 @@ RID Registry 只登记 Risk（风险）、Impediment（阻碍）与 Dependency�
 
 ## 2. Sprint plan
 
-[`sprint-plan.md`](./sprint-plan.md) 中每个 Sprint 的 ToDo 表是本 Sprint 执行清单与状态的唯一真源。
+[`sprint-backlog.md`](./sprint-backlog.md) 中每个 Sprint 的 ToDo 表是本 Sprint 执行清单与状态的唯一真源。
 
 ### 2.1 列定义
 
@@ -117,7 +117,7 @@ RID Registry 只登记 Risk（风险）、Impediment（阻碍）与 Dependency�
 表列固定为：`#`、`分类`、`父项`、`标题`、`描述`、`验收条件`、`关联`、`Sprint`、`状态`。
 
 - `描述`、`验收条件`、`关联`与`状态`由 Product Backlog 自主维护。
-- `Sprint` 是 `sprint-plan.md` 排期的投影，不能成为第二套排期真相源。
+- `Sprint` 是 `sprint-backlog.md` 排期的投影，不能成为第二套排期真相源。
 - `验收条件`必须可执行、可观察，并承载 RID 解决方案的验证方法。
 - 被 RID 引用的 Product Backlog 条目必须提供稳定条目锚点；`关联`列必须链接具体 Sprint Backlog 执行条目及设计/测试依据，形成从产品方案到实施与验证的导航链。
 - 回溯引用使用「条目名为主、编号为辅」；编号变化时不得让语义失真。
@@ -137,9 +137,9 @@ Product Backlog 使用与 Sprint Backlog 相同的四态：
 
 | 信息 | 唯一真源 | 其它文档如何引用 |
 |---|---|---|
-| RID 状态、影响与当前处理摘要 | `sprint-plan.md` 的 RID Registry | 只引用 RID 编号与标题 |
+| RID 状态、影响与当前处理摘要 | `sprint-backlog.md` 的 RID Registry | 只引用 RID 编号与标题 |
 | 产品解决方案与验收条件 | `product-backlog.md` | RID 链接具体条目锚点；条目 `关联` 回链 Sprint 执行项与设计/测试依据 |
-| Sprint 排期与执行状态 | `sprint-plan.md` 的 Sprint Backlog | Product Backlog 的 `Sprint` 列只作投影，`关联`列可链接具体执行项 |
+| Sprint 排期与执行状态 | `sprint-backlog.md` 的 Sprint Backlog | Product Backlog 的 `Sprint` 列只作投影，`关联`列可链接具体执行项 |
 | 详细设计与验证矩阵 | 对应设计、测试 spec | 过程表只写摘要与章节链接 |
 | 过程证据与变更原因 | `change-log.md` | 说明列写日期、结论和链接 |
 | 表格体例与状态语义 | 本文件 | 各过程文档头部链接本文件 |
@@ -148,7 +148,7 @@ Product Backlog 使用与 Sprint Backlog 相同的四态：
 
 ## 5. Links
 
-- [`sprint-plan.md`](./sprint-plan.md)：RID Registry 与 Sprint Backlog
+- [`sprint-backlog.md`](./sprint-backlog.md)：RID Registry 与 Sprint Backlog
 - [`product-backlog.md`](./product-backlog.md)：产品条目与验收条件
 - [`change-log.md`](./change-log.md)：过程证据与变更记录
 - [`mcp/mcp-design.md`](./mcp/mcp-design.md) §6.2：V1–V4 完整验证矩阵
@@ -162,4 +162,5 @@ Product Backlog 使用与 Sprint Backlog 相同的四态：
 | 2026-09-21 | 初版：随 SDD/Scrum 体例收口新建，固定 RID Registry、Sprint Backlog 与 Product Backlog 的列定义、四态语义与单一真源边界。决议见 [`ADR-013`](./adr/ADR-013-sdd-scrum-process-doc-boundaries.md) |
 | 2026-09-21 | §2.3 新增 `Retrospective` **单一聚合**约束：只有「做得好」「学到」「下轮改进」三组，同一 Sprint 内的多次回顾合并进这三组，不新增「补记」「附记」类子标题逐条堆叠 |
 | 2026-09-21 | 随本文件同批改写 `sprint_plan.md` → `sprint-plan.md` 的引用 |
-| 2026-09-22 | §2.4 新增**交付批次（PSP）**体例：开发类 Sprint 的 ToDo 可按「设计包 + 2–3 批可交付批次」组织，批次以表行表达（不新增列），并给出四条功能分解判据（有角色 / 有端到端判据 / 无跨批硬依赖 / 不是任务清单）。配套 [`sprint-plan.md`](./sprint-plan.md) 的 Sprint 4 / 5 重排 |
+| 2026-09-22 | §2.4 新增**交付批次（PSP）**体例：开发类 Sprint 的 ToDo 可按「设计包 + 2–3 批可交付批次」组织，批次以表行表达（不新增列），并给出四条功能分解判据（有角色 / 有端到端判据 / 无跨批硬依赖 / 不是任务清单）。配套 [`sprint-backlog.md`](./sprint-backlog.md) 的 Sprint 4 / 5 重排 |
+| 2026-09-22 | 随本文件同批改写 `sprint-plan.md` → `sprint-backlog.md` 的引用（含 §4 单一真源表、§5 文档清单与 front-matter `related_spec`）；旧名只在两次改名记录里保留旧→新映射 |

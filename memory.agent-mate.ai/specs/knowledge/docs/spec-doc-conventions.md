@@ -8,7 +8,7 @@ tags:
   - conventions
   - link-check
   - config-doc
-related_spec: specs/sprint-plan.md
+related_spec: specs/sprint-backlog.md
 related:
   - adr/ADR-010-specs-single-source-and-doc-structure.md
   - ../../change-log.md
@@ -25,13 +25,13 @@ related:
 1. **体例**：`mcp/mcp-capabilities.md` 初版按「族」分 8 组、另附一个端到端例子；改为「6 张档位表、每张只列本档新增、编号全档连续 1–101、示例入表」后，读者才能回答「这一档比上一档多了什么」。
 2. **对齐**：手工补录能力说明时曾写入上游**不存在**的工具（`memory_gc_hard` / `memory_demote`）；以探针 `full` 全集做集合比对（编号连续 + 集合相等）才拦住。
 3. **转述会静默过时**：被引文档改版后，`change-log.md`、`web-portal/web-stories.md` AC6.4、`mcp/mcp-design.md` §8 三处转述立即失真 —— 引用方的描述不会自动跟着变。
-4. **引用治理的坑**：85 处旧引用（`sprint-plan.md` 53 / `product-backlog.md` 32）长期靠 `link-check.allow` 整文件豁免存在；清零后豁免 4 → 2。批量替换有两类典型漏改 —— ① **共享前缀省略**（`dev-plan.md` §3.2 八步落地 **+ §3.3 冒烟**：后半段章节号没有文档名前缀）；② **多对一合并**（`deploy/deployment-plan.md` 与 `dev-plan.md` 都归 `deployment.md` ⇒ 产生重复列举）。
+4. **引用治理的坑**：85 处旧引用（`sprint-backlog.md` 53 / `product-backlog.md` 32）长期靠 `link-check.allow` 整文件豁免存在；清零后豁免 4 → 2。批量替换有两类典型漏改 —— ① **共享前缀省略**（`dev-plan.md` §3.2 八步落地 **+ §3.3 冒烟**：后半段章节号没有文档名前缀）；② **多对一合并**（`deploy/deployment-plan.md` 与 `dev-plan.md` 都归 `deployment.md` ⇒ 产生重复列举）。
 5. **历史叙述不等于引用**：变更记录里的旧文件名是当时事实，只降级为纯文本（去链接、留名字），不改指新文档。
 6. **「修一处漏一处」的典型形态（2026-09-21 复核 Sprint 3 #1–#3）**：attestation 的失准表述在 `mcp-design` §9 B3 / `mcp-test` §4-D 改正后，**被引权威**（`architecture.md` §2.1 #9 —— 恰恰是 §5.2 引用过去的那一节）、引用方（`product-backlog.md` 第 99 行）与两处操作现场（compose 注释、本地踩坑笔记）仍留旧口径。⇒ 只改「结论落点」不够，**被引的那个单点与引用它的转述句都要改**。
 7. **护栏会扫中自己的文档（自指陷阱）**：把「禁用字面量」写进被扫文件（哪怕是「本文件禁用了 X」式的引述）会让扫描器恒红 —— 实测 `attestation-paths-check.sh` 因 `mcp-test.md` 引述被禁短语而 `rc=20`，与文档自称「已完成」直接冲突。⇒ 禁用清单只在脚本内定义，文档**只指向清单名、不复述字面量**。
-8. **状态登记是文档的一部分**：`sprint-plan.md` 的风险表与 ToDo 表描述同一批工作，只更新一处就会出现「同文件自相矛盾」（D2/V1 已标完成，R1/R3/D5 仍写「未落地 / 待验证」）。⇒ 收口时两表同批改，且**被引章节**（`mcp-design` §6.1/§6.2）一并同步。
+8. **状态登记是文档的一部分**：`sprint-backlog.md` 的风险表与 ToDo 表描述同一批工作，只更新一处就会出现「同文件自相矛盾」（D2/V1 已标完成，R1/R3/D5 仍写「未落地 / 待验证」）。⇒ 收口时两表同批改，且**被引章节**（`mcp-design` §6.1/§6.2）一并同步。
 9. **验收条件里不要写尚不存在的产物**：#2 曾把「每库维护命令审计」写进验收，而该命令是 #5 的产物 ⇒ 该项在 #2 时点上**不可验证**却随条目标了「已完成」。⇒ 跨条目产物明确挂到其产出条目（#5），本条目只审「现存」路径并留证据表（`mcp-design` §6.5）。
-10. **编号空间会撞名（2026-09-21 实测）**：`web-portal/web-stories.md` 重写后引入故事号 S1–S13，而仓内早已存在两套**同形**编号 —— `deployment.md` §7.2 与 `web-portal/web-design.md` §5 的「**静默失败点** S1–S4」、`../scripts/i18n-probe.sh` 的测试项标签 `S1–S12`。用 `grep` 做引用清扫时三者会同时命中：既可能把「静默失败点 S4」当成故事 S4 误改，也可能因命中噪声而漏判真正的错指。本轮实测正是后者 —— `product-backlog.md` #7 / #16 / #18 与 `sprint-plan.md` Sprint 4 #6 / #8 共 **5 个条目**错指（S6 被写成 S3、S10 被写成 S9、S12 被写成非法的 `S9 #7`），而 S13 零引用，全部被同形编号掩盖。
+10. **编号空间会撞名（2026-09-21 实测）**：`web-portal/web-stories.md` 重写后引入故事号 S1–S13，而仓内早已存在两套**同形**编号 —— `deployment.md` §7.2 与 `web-portal/web-design.md` §5 的「**静默失败点** S1–S4」、`../scripts/i18n-probe.sh` 的测试项标签 `S1–S12`。用 `grep` 做引用清扫时三者会同时命中：既可能把「静默失败点 S4」当成故事 S4 误改，也可能因命中噪声而漏判真正的错指。本轮实测正是后者 —— `product-backlog.md` #7 / #16 / #18 与 `sprint-backlog.md` Sprint 4 #6 / #8 共 **5 个条目**错指（S6 被写成 S3、S10 被写成 S9、S12 被写成非法的 `S9 #7`），而 S13 零引用，全部被同形编号掩盖。
 11. **「双向可查」不会自动成立（同日实测）**：故事索引里声明了 `Sprint 5 #7`、`Sprint 6 #3` 这类落点，**被指的那一行不会自己长出回链**；只改权威文档、不回填引用方，声明「双向」就等于埋下一处单边引用。本轮由只读评审逐条挖出 S1 / S8 / S9 / S12 / S13 的 Sprint 落点未回链并同轮修完。
 12. **「文档写的」不等于「制品有的」（2026-09-22 实测，Sprint 3 #6）**：`deployment.md` §5.3 曾登记 5 个上游 `src/config.rs` 里**不存在**的配置键（`max_tokens` / `temperature` / `[storage.sqlite].pool_size` / `[memory].max_age_days` / `[context_optimizer].max_results`），并把 `[storage].embedding_dim` 当成配置节（实为运行时结构体 `ResolvedEmbeddings` 的字段）；`[embeddings]` 的后端与模型名也与模板不符（`provider = "fastembed"` / `Qwen3-Embedding-0.6B` vs 实际 `backend = "qwen"` / `qwen3.7-text-embedding`）—— 后者若照抄会把 1024 维向量绑到错的模型上。同一文件的 §5.1 契约表还把「配置挂载」**写反**（声称「不挂 config 文件」，而 compose 实际两服务各挂 `./config.toml → /data/.config/ai-memory/config.toml:ro`），并把 curator 命令写成一整组**上游根本不存在**的参数（真实为 `--daemon --interval-secs 3600 --max-ops 50`）。
 13. **数量与路径类声明必须机械取证（同日实测）**：`deploy/` 工作区可见 9 个条目，但 `git ls-files` 只有 **5 个入仓**，另 4 个是 `.gitignore` 路径无关规则覆盖的运行时派生文件 ⇒ 原「三个事实文件」既不等于 `README.md` 列的四个模板、也不等于实际入仓数。部署目录同样分叉出两套口径：`deployment.md` 与门户样例写 `/opt/ai-memory/`，而 `.env.prod.example` 与 Sprint 2 条目写 `/opt/ai-memory-mcp/`（少数派，需回改）。
@@ -63,12 +63,13 @@ related:
 - **用「字段对照矩阵」代替通读比对**：先枚举维度（挂载 / 命令 / 环境变量 / 容器名 / 网络 / 目录 / 文件清单 / 配置字段），每个维度都要求「文档行号 ↔ 制品行号」两侧证据。通读只能发现显眼的错，矩阵还能发现**缺行**与**臆造的键**。
 - **Sprint 收口要同时核两件事**：条目是否全 `Done`，以及 **Sprint 级结束标记 / 回顾是否同体例定稿** —— 条目 Done ≠ Sprint 已标记结束。
 - **配置文档里「未设置」的键要显式说「未设置、走编译默认」，不要臆列取值**：把上游默认值写成「我们的值」既无法验证，也会在升级时静默变成假信息。
+- **文件改名 ≠ 编号改义：前者全量同步、旧名只留在改名记录里；后者保留历史旧编号**。区别在于旧**文件名**指向**同一份文件**（历史条目用新名指称不失真），旧**编号**指向**不同语义**。先例两次（`sprint_plan.md` → `sprint-plan.md` → `sprint-backlog.md`）均为「全量同步 + 旧名残留 0，只在改名记录里保留旧→新映射」。**实现要点**：替换分三类（① 链接式含深链接锚点 ② 正文提及与 `related_spec` front-matter ③ 旧名映射），且**先把改名记录所在行号列成 skip 集合再批量替换** —— 否则会把「旧名 → 新名」替换成「新名 → 新名」而静默丢失映射；ADR 与 `change-log.md` 内的改名小节只保留映射，**不**追加「路径同步」附注。同批还要连带同步**脚本里的硬编码路径**（如护栏的文档清单数组），否则护栏会因文件不存在直接失败。
 
 ## Links
 
 - [`ADR-010`](../../adr/ADR-010-specs-single-source-and-doc-structure.md)：specs 单一真源与 8 份结构、链接纪律、允许清单书写规则
 - [`change-log.md`](../../change-log.md) `## 2026-09-21`：Sprint 2 #11 收口小节（旧名 → 新落点映射与验证口径）
-- [`sprint-plan.md`](../../sprint-plan.md) Sprint 2 `Retrospective`：本轮「学到 / 改进」
+- [`sprint-backlog.md`](../../sprint-backlog.md) Sprint 2 `Retrospective`：本轮「学到 / 改进」
 - [`git-tooling/gotchas.md`](../git-tooling/gotchas.md)：护栏允许清单会静默失效（与本条互为补充）
 - [`../../../scripts/attestation-paths-check.sh`](../../../scripts/attestation-paths-check.sh)：本轮新增的「被引权威 + 引用方 + 操作现场」三层一致性护栏（`make attestation-paths`，退出码 0/10/20）
 - [`../../web-portal/web-stories.md`](../../web-portal/web-stories.md)「故事索引」：跨文档故事号（S1–S13）与用例号的对照表；本文第 10 / 11 条同形编号与单向引用的来源

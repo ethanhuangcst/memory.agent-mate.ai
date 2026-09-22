@@ -146,7 +146,7 @@ STALE_PATTERNS=(
 SCAN=(
   "$SPECS/architecture.md"
   "$SPECS/product-backlog.md"
-  "$SPECS/sprint-plan.md"
+  "$SPECS/sprint-backlog.md"
   "$DEPLOYMENT"
   "$DESIGN"
   "$SPECS/mcp/mcp-test.md"
