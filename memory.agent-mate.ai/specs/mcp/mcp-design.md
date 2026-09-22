@@ -15,7 +15,7 @@
 | 一用户一 DB 的物理隔离能否成立？ | **能**（双向检索未命中 / `memory_get` → `memory not found` / 主库计数不变） | 探针 P2 · P3 · P5 |
 | 「不设 `AI_MEMORY_DB` 就共用主库」只是理论担忧？ | **不是** —— D2 落地**前**（2026-09-20 实测）：退出码 0、无任何告警，`source` 静默落到 config 的 `db`（`/data/ai-memory.db`）。**该落点已于 2026-09-21（D2）消除**：漏设退化为相对路径并 fail-loud（现行行为见 §6.1 D2 / §6.2 V1） | 探针 P1a（旧行为）· §6.2 V1（现行） |
 | 方案②（单库 + per-user env）能替代吗？ | **不能** —— 读隔离成立，但**写路径完全可伪造**：bob 以 `agent_id=human:iso-alice` 写入成功并回显 alice 身份，alice 随后检索到被注入内容 | 探针 P6 |
-| 错设路径是否也静默？ | 注意：视情况 —— 目标库**打不开**时 fail-loud（`Storage=critical / failed to open database`，rc=2）；**指到有效他库**时仍静默（唯一拦截是 D1 断言，Sprint 4 #7）；**漏设**在 D2 落地后亦 fail-loud | 探针 P4 · §6.2 V1 |
+| 错设路径是否也静默？ | 注意：视情况 —— 目标库**打不开**时 fail-loud（`Storage=critical / failed to open database`，rc=2）；**指到有效他库**时仍静默（唯一拦截是 D1 断言，Sprint 4 PSP-W2）；**漏设**在 D2 落地后亦 fail-loud | 探针 P4 · §6.2 V1 |
 
 ### 0.1 冻结机制（2026-09-20 用户确认，按探针实测形态冻结）
 
@@ -172,7 +172,7 @@ docker exec -e AI_MEMORY_DB=<库> -e AI_MEMORY_REQUIRE_AGENT_ATTESTATION=0 \
 
 退出码契约（维护脚本）：`0` 全部成功 · `1` 至少一个库失败 · `2` 参数错误 · `3` 环境不可用。
 
-**边界**：生产定时器安装 / 日志采集 / 告警留 Sprint 5。归档会随 `gc` 持续累积，`archive purge` 是既有的清理逃生口（其调度同样留 Sprint 5）。覆盖面验证见 [`./mcp-test.md`](./mcp-test.md) §4-C TC-GC。
+**边界**：生产定时器安装 / 日志采集 / 告警留 Sprint 6。归档会随 `gc` 持续累积，`archive purge` 是既有的清理逃生口（其调度同样留 Sprint 6）。覆盖面验证见 [`./mcp-test.md`](./mcp-test.md) §4-C TC-GC。
 
 ### 5.4 备份与配额
 
@@ -193,7 +193,7 @@ docker exec -e AI_MEMORY_DB=<库> -e AI_MEMORY_REQUIRE_AGENT_ATTESTATION=0 \
 aimem-ssh ALL=(root) NOPASSWD: /usr/bin/docker exec -i ai-memory-mcp ai-memory mcp --tier smart
 ```
 
-收益：即使误加一条**没有** forced command 的记录也拿不到完整 docker 权限，且规则不随用户数增长。代价：需在服务器实测无通配符 argv 匹配行为（Sprint 5 前）。
+收益：即使误加一条**没有** forced command 的记录也拿不到完整 docker 权限，且规则不随用户数增长。代价：需在服务器实测无通配符 argv 匹配行为（Sprint 6 前）。
 
 ---
 
@@ -203,11 +203,11 @@ aimem-ssh ALL=(root) NOPASSWD: /usr/bin/docker exec -i ai-memory-mcp ai-memory m
 
 | # | 防线 | 为什么是「条件」 | 状态 |
 |---|---|---|---|
-| **D1** | fail-closed 断言：spawn 前断言 `AI_MEMORY_DB` 非空 + 以 `/data/users/` 开头 + 含该 `handle` | 即使 D2 已让“漏设”失败，错设为存在且可写的他库仍不会报错；必须由门户绑定 handle 与路径 | 待落地：Sprint 4 #7「门户 ↔ MCP 会话桥」 |
-| **D2** | 移除 `config.toml.tmpl` 的 `db` 键；本地派生时机械剥离私有配置遗留的顶层 `db`；现存调用点审计见 §6.5 | 该键是 R1 的共享主库落点；移除后漏设退化为相对路径并 fail-loud | **已落地（本地 2026-09-21，Sprint 3 #2）**；生产复验随 Sprint 5 #8 |
-| **D3** | 一会话一子进程，**禁止跨用户复用/池化** | 单库方案写路径无 caller 边界（P6），会话复用即把边界交还给门户 | 待落地：Sprint 4 #7「门户 ↔ MCP 会话桥」 |
-| **D4** | 会话审计含**解析出的库路径** | 事后可对账；`doctor --json` 的 `source` 即现成来源 | 待落地：Sprint 4 #4「审计视图」 |
-| **D5** | 上线前负向验收（不过则阻断） | 本地门禁先定型，生产 forced-command 路径上线时复验 | 本地：Sprint 3 #3「隔离本地负向回归」；生产：Sprint 5 #8「上线验收」 |
+| **D1** | fail-closed 断言：spawn 前断言 `AI_MEMORY_DB` 非空 + 以 `/data/users/` 开头 + 含该 `handle` | 即使 D2 已让“漏设”失败，错设为存在且可写的他库仍不会报错；必须由门户绑定 handle 与路径 | 待落地：Sprint 4 PSP-W2「端到端接入」 |
+| **D2** | 移除 `config.toml.tmpl` 的 `db` 键；本地派生时机械剥离私有配置遗留的顶层 `db`；现存调用点审计见 §6.5 | 该键是 R1 的共享主库落点；移除后漏设退化为相对路径并 fail-loud | **已落地（本地 2026-09-21，Sprint 3 #2）**；生产复验随 Sprint 6「上线验收」 |
+| **D3** | 一会话一子进程，**禁止跨用户复用/池化** | 单库方案写路径无 caller 边界（P6），会话复用即把边界交还给门户 | 待落地：Sprint 4 PSP-W2「端到端接入」 |
+| **D4** | 会话审计含**解析出的库路径** | 事后可对账；`doctor --json` 的 `source` 即现成来源 | 待落地：Sprint 4 PSP-W3「可运维、可发布」 |
+| **D5** | 上线前负向验收（不过则阻断） | 本地门禁先定型，生产 forced-command 路径上线时复验 | 本地：Sprint 3 #3「隔离本地负向回归」；生产：Sprint 6「上线验收」 |
 
 > D1/D2 不提升隔离**上限**（上限由物理分离给定），只保证**下限**：配置错一次不会静默串号。这是「可实现」与「可信」的分界。
 
@@ -229,8 +229,8 @@ aimem-ssh ALL=(root) NOPASSWD: /usr/bin/docker exec -i ai-memory-mcp ai-memory m
 - [x] 用户 B 显式 `memory_get <A 的记忆 id>` → **不可见**（P2：`memory not found`）
 - [x] `/data/users/<u>/ai-memory.db` 存在且属主 `aimem:aimem`（P2）
 - [ ] cron 维护对每个库都执行成功（日志无错）—— Sprint 3 #5「每用户库维护行为定档」
-- [ ] 备份脚本对全部库产出快照 + manifest（sha256 校验通过）—— Sprint 5 #3/#7
-- [ ] 吊销：删除该用户 `authorized_keys` 行后 SSH 立即失败 —— Sprint 5 #5
+- [ ] 备份脚本对全部库产出快照 + manifest（sha256 校验通过）—— Sprint 6 #5 / #9
+- [ ] 吊销：删除该用户 `authorized_keys` 行后 SSH 立即失败 —— Sprint 6 #7
 
 ### 6.4 未决前提（结论成立不依赖，但上线前必须关闭）
 
@@ -238,14 +238,14 @@ aimem-ssh ALL=(root) NOPASSWD: /usr/bin/docker exec -i ai-memory-mcp ai-memory m
 |---|---|---|
 | 1 | 写路径泄露探针：去重/合成是否把他人私有内容回显给写入者（**只影响已排除的方案②**；方案③无跨库路径） | **已取消**（2026-09-21 范围校准） |
 | 2 | `gc` 是否覆盖每库的 TTL 遗忘 + WAL checkpoint | **已核实并关闭（Sprint 3 #5，2026-09-21）**：`gc` **已覆盖 WAL 回收**（CLI 写命令 post-run `wal_checkpoint(TRUNCATE)`）；TTL 驱逐由 `gc` 负责，且 `store` / `list` / `recall` / `import` 与 MCP `memory_recall` 亦会经 `db::gc_if_needed` **惰性清扫**（故 `gc` 计数 ≠ 过期总量）。结论见本文 §5.3 · [`./mcp-test.md`](./mcp-test.md) §4-C TC-GC |
-| 3 | `AI_MEMORY_DB` 指向**有效但错误的**他库路径 —— 唯一能拦住它的是 D1 的路径断言 | Sprint 4 #7「门户 ↔ MCP 会话桥」 |
-| 4 | sudoers 无通配符 argv 匹配行为 | Sprint 5 前 |
-| 5 | 门户尚未存在（D1/D3/D4 的最终载体） | Sprint 4 #7 / #4 |
+| 3 | `AI_MEMORY_DB` 指向**有效但错误的**他库路径 —— 唯一能拦住它的是 D1 的路径断言 | Sprint 4 PSP-W2「端到端接入」 |
+| 4 | sudoers 无通配符 argv 匹配行为 | Sprint 6 前 |
+| 5 | 门户尚未存在（D1/D3/D4 的最终载体） | Sprint 4 PSP-W2 / PSP-W3 |
 | 6 | `<handle>` 命名规范（大小写/长度/是否等于邮箱别名） | 门户设计 Sprint 4 |
 
 ### 6.5 库路径调用点审计（D2 验收证据，2026-09-21）
 
-> **范围**：核**现存**启动路径是否显式指定目标库（D2 的「调用点审计」）。每库维护命令已随 Sprint 3 #5 定档（§5.3），本表第 6 行于 2026-09-21 补入。「错设为存在且可写的他库」不在本表范围，由门户 D1 断言拦截（Sprint 4 #7）。
+> **范围**：核**现存**启动路径是否显式指定目标库（D2 的「调用点审计」）。每库维护命令已随 Sprint 3 #5 定档（§5.3），本表第 6 行于 2026-09-21 补入。「错设为存在且可写的他库」不在本表范围，由门户 D1 断言拦截（Sprint 4 PSP-W2）。
 >
 > **复跑方式**：`grep -n 'AI_MEMORY_DB' memory.agent-mate.ai/deploy/docker-compose.prod.yml memory.agent-mate.ai/specs/deployment.md memory.agent-mate.ai/specs/web-portal/web-design.md memory.agent-mate.ai/specs/mcp/mcp-design.md`
 
@@ -255,7 +255,7 @@ aimem-ssh ALL=(root) NOPASSWD: /usr/bin/docker exec -i ai-memory-mcp ai-memory m
 | 2 | compose `curator` | 容器级 env | 显式 `AI_MEMORY_DB=/data/ai-memory.db` | 同上第 52 行 |
 | 3 | SSH 管理员行（主人默认库） | forced command → `docker exec` | **不写 `-e`**，依赖 #1 的容器级变量 | [`../deployment.md`](../deployment.md) §4.3 管理员行 · 本文 §5.1 |
 | 4 | SSH 用户行（一用户一库） | forced command → `docker exec -e …` | 逐行显式 `-e AI_MEMORY_DB=/data/users/<handle>/ai-memory.db` | [`../deployment.md`](../deployment.md) §4.3 用户行 · 本文 §5.2 |
-| 5 | 门户 spawn（β′ 子进程） | 子进程 env | 模板 `AI_MEMORY_DB=/data/users/{handle}/ai-memory.db` | [`../web-portal/web-design.md`](../web-portal/web-design.md) §3.3（运行时代码待 Sprint 4 #7） |
+| 5 | 门户 spawn（β′ 子进程） | 子进程 env | 模板 `AI_MEMORY_DB=/data/users/{handle}/ai-memory.db` | [`../web-portal/web-design.md`](../web-portal/web-design.md) §3.3（运行时代码待 Sprint 4 PSP-W2） |
 | 6 | 每库维护（`gc` / `curator --once`） | CLI 参数 | **已定档（Sprint 3 #5，2026-09-21）**：逐库显式 `--db <绝对路径>` + `AI_MEMORY_REQUIRE_AGENT_ATTESTATION=0` | [`../../scripts/maintain-user-dbs.sh`](../../scripts/maintain-user-dbs.sh) · 本文 §5.3 · [`./mcp-test.md`](./mcp-test.md) §4-C TC-GC |
 
 **结论**：现存 5 条（#1–#5）**无一条**依赖 config 的库路径 —— 即 D2 移除顶层 `db` 后，没有任何调用点会受影响；第 6 行（每库维护命令）已随 Sprint 3 #5 定档并逐库显式传 `--db`，D2 的「调用点审计」随之闭环。
@@ -483,3 +483,4 @@ aimem-ssh ALL=(root) NOPASSWD: /usr/bin/docker exec -i ai-memory-mcp ai-memory m
 | 2026-09-21 | **档位定档收口（Sprint 2 #9）**：§8.1 补**实测**引文（探针 [`../../scripts/profile-probe.sh`](../../scripts/profile-probe.sh)：`core=8` / `graph=20` / `admin=22` / `power=57` / `full=101` / `core,lifecycle=14` / 默认档 `=8`，`--profile` 与 `--tier` 并存有效）；§8.3 由「待决策」改为「档位决议与开放问题」——#1 已定（对外 `core`、管理员 `full`，模板落盘归 Sprint 3 #2）、#2 已定（两条用户通道统一 `core`）、#3 验收方式落到 profile-probe、新增 #4（core 不含删除 = 已知限制，开放删除的最小增量是 `core,lifecycle`） |
 | 2026-09-21 | **模板定档落盘 + 用户版能力文档（Sprint 2 #9 收尾）**：① §5.1（管理员自用场景）→ `--profile admin`、§5.2（用户场景）→ `--profile core`，并补「改档须重连」注；② §8.3 #1 管理员入口由 `full`（101）改定 `admin`（22）（Meta / Archive 族不随 admin 开放），并标注**模板已落盘**（SSH 主人行 + 用户行 [`../deployment.md`](../deployment.md) §4.3 · 门户 `launch.argv` [`../web-portal/web-design.md`](../web-portal/web-design.md) §3.3 · 本地客户端条目 [`./mcp-test.md`](./mcp-test.md) §3），#3 的 TC-TIER-01/02 标为已完成；③ §8 顶部登记面向最终用户的通俗版 [`./mcp-capabilities.md`](./mcp-capabilities.md)（门户接入指引页唯一内容源） |
 | 2026-09-21 | **§8 引文同步（能力文档体例定稿）**：面向最终用户的 [`./mcp-capabilities.md`](./mcp-capabilities.md) 体例定为「6 张档位表 + 每张只列本档新增 + 编号全档连续 1–101 + 示例列」；§8 顶部引文随之更新（不再提「一个完整例子」，补编号口径）。同步：`../web-portal/web-stories.md` AC6.4 与 `../change-log.md` 同日小节 |
+| 2026-09-22 | **Sprint 编号随 Replan 改指**：D1 / D3 与两处未决前提的会话桥落点 → `Sprint 4 PSP-W2「端到端接入」`；D4 审计落点 → `Sprint 4 PSP-W3「可运维、可发布」`；D2 / D5 与验收清单的生产落点 → `Sprint 6`（含 `#5` 备份脚本 / `#7` 门户部署 / `#9` 备份与恢复落地，及「上线验收」）；sudoers 实测与归档清理调度 → `Sprint 6 前`。D1–D5 的结论文字未改 |

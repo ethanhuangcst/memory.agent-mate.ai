@@ -183,7 +183,7 @@ memory.agent-mate.ai = 上游 `ai-memory-mcp` 的**私有化部署 + 定制**（
     ├── upstream.lock   # 版本坐标唯一真相源
     ├── deploy/         # 部署事实文件（compose / 模板 / 示例 env）
     ├── scripts/        # 探针与守卫脚本
-    ├── backup/         # 备份脚本（Sprint 5 落地）
+    ├── backup/         # 备份脚本（Sprint 6 落地）
     └── specs/          # 本文档所在目录 = 全部 spec 的唯一真源
 ```
 
@@ -241,6 +241,7 @@ memory.agent-mate.ai = 上游 `ai-memory-mcp` 的**私有化部署 + 定制**（
 | 2026-09-21 | §4.1 高敏感速查补「**检索按语言分级**」：多语言探针（Sprint 2 #8）结论 = **部分支持**——存储 / 语义召回 / 按 id 直取不限语言；关键词通路按 FTS5 默认分词器（`unicode61`）只认完整词元（中文需标点界定整段、简繁不互通、无配置项）。证据：[`mcp/mcp-test.md`](./mcp/mcp-test.md) §4-E（L1.6 探针）与 [`knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md`](./knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md) |
 | 2026-09-21 | §6 改为 RID 薄索引，说明、影响、解决方案与状态统一指向 [`sprint-plan.md`](./sprint-plan.md)；新增过程文档体例 [`sdd-scrum-practices.md`](./sdd-scrum-practices.md)，决议见 [`ADR-013`](./adr/ADR-013-sdd-scrum-process-doc-boundaries.md) |
 | 2026-09-21 | **`sprint_plan.md` → `sprint-plan.md` 改名**：按仓内既有改名口径全量同步引用（16 个文件，含 4 份 ADR、3 个脚本的路径与注释、`spec-doc-conventions.md` 的 `related_spec` 元数据）；旧名残留 0 处，只在改名记录里保留旧→新映射。本文档 §6 与「相关」表的指向随之更新 |
+| 2026-09-22 | **Sprint 重排（8 → 7）连带同步**：§5 仓库布局的备份脚本落点改为 `Sprint 6`；§7「相关」表登记 [`mcp/mcp-stories.md`](./mcp/mcp-stories.md)（Sprint 5 设计包交付物，正文待 Sprint 5 #1 落盘）以避免孤儿 spec |
 
 | 相关 | 用途 |
 |---|---|
@@ -248,5 +249,6 @@ memory.agent-mate.ai = 上游 `ai-memory-mcp` 的**私有化部署 + 定制**（
 | [`deployment.md`](./deployment.md) | 部署 / 配置 / 升级 / 备份 / 回滚 / 排障 |
 | [`mcp/mcp-design.md`](./mcp/mcp-design.md) | MCP 能力、多用户隔离、档位与工具、上游契约面全量 |
 | [`mcp/mcp-test.md`](./mcp/mcp-test.md) | MCP 测试策略 + 计划 + 用例 |
+| [`mcp/mcp-stories.md`](./mcp/mcp-stories.md) | MCP 侧故事与验收条件（Sprint 5 设计包交付物；正文待 Sprint 5 #1 落盘） |
 | [`web-portal/web-design.md`](./web-portal/web-design.md) · [`web-stories.md`](./web-portal/web-stories.md) · [`web-test.md`](./web-portal/web-test.md) | 门户设计 / 故事 / 测试 |
 | [`../upstream.lock`](../upstream.lock) · [`adr/`](./adr/) · [`knowledge/`](./knowledge/) | 版本坐标 · 架构决议 · 可复用知识 |

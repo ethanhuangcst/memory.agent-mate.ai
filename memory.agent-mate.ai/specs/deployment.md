@@ -191,7 +191,7 @@ bash memory.agent-mate.ai/scripts/maintain-user-dbs.sh --dry-run   # 先核对�
 make maintain-user-dbs                                             # 逐库 gc + curator --once
 ```
 
-调度定档为**宿主机 cron**（生产定时器安装 / 日志采集 / 告警留 Sprint 5）。脚本两条硬约束：每条调用**显式 `--db <绝对路径>`**（漏传会静默回落相对路径库；容器内 `AI_MEMORY_DB` 指向主库 ⇒ 有误操作主库的风险）、每条调用显式 `AI_MEMORY_REQUIRE_AGENT_ATTESTATION=0`（v0.11 起上游缺省翻转为全 surface required）。单库失败**不中断**、最终非零退出供 cron 告警。
+调度定档为**宿主机 cron**（生产定时器安装 / 日志采集 / 告警留 Sprint 6）。脚本两条硬约束：每条调用**显式 `--db <绝对路径>`**（漏传会静默回落相对路径库；容器内 `AI_MEMORY_DB` 指向主库 ⇒ 有误操作主库的风险）、每条调用显式 `AI_MEMORY_REQUIRE_AGENT_ATTESTATION=0`（v0.11 起上游缺省翻转为全 surface required）。单库失败**不中断**、最终非零退出供 cron 告警。
 
 退出码契约：`0` 全部成功 · `1` 至少一个库失败 · `2` 参数错误 · `3` 环境不可用（容器未运行）—— 环境不可用时**不得静默成功**，否则 cron 会长期漏维护而不报警。
 
@@ -285,7 +285,7 @@ make curl-probe                # 参考用：直连容器 HTTP API 探针（生�
 6. curator 日志显示 `tagged` 数增长（非 0）
 7. `ai-memory doctor` 双通道 200 + `1024-dim` + `tier: smart`
 
-> 端到端验收脚本由 Sprint 5 编写；MCP 协议层用例见 [`mcp/mcp-test.md`](./mcp/mcp-test.md)。
+> 端到端验收脚本由 Sprint 6 编写；MCP 协议层用例见 [`mcp/mcp-test.md`](./mcp/mcp-test.md)。
 
 ---
 
@@ -294,7 +294,7 @@ make curl-probe                # 参考用：直连容器 HTTP API 探针（生�
 | 项 | 方案 |
 |---|---|
 | 备份对象 | 容器内 `/data`（SQLite + config + keys + cache） |
-| 目录 | `/data/backups`（备份脚本 Sprint 5 落地到 `memory.agent-mate.ai/backup/`） |
+| 目录 | `/data/backups`（备份脚本 Sprint 6 落地到 `memory.agent-mate.ai/backup/`） |
 | 本地快照 | `sqlite3 /data/ai-memory.db ".backup '/data/backups/ai-memory-<ts>.db'"`（**在线备份首选**，非 `cp` 裸文件） |
 | 频率 | **每日 1 次**（对齐 RPO ≤ 24h）；留存 ≥ 30 份，带时间戳 |
 | 外迁 | **每日**同步到 OSS 兼容对象存储 `<OSS_BUCKET>`；同步后**校验 `sha256sum` 一致** |
@@ -410,7 +410,7 @@ bash scripts/pin-update.sh <ref> [--force]          # 更新锁文件（--force 
 
 > 模板原文含真实端点与凭据，**永不入仓**；本节只保留可公开的运维事实。真实值见 gitignored `secrets.local*.md`。
 
-### 12.2 门户接入部署（Sprint 4 起）
+### 12.2 门户接入部署（本地开发 Sprint 4 起；生产接入在 Sprint 6）
 
 - 门户**不依赖**既有容器运行（共享数据卷是唯一耦合点：`/data/users/<handle>/ai-memory.db` 需同时被两边读写）；**不挂 docker socket**（D1 = β′，[`architecture.md`](./architecture.md) §2.1 #8）。
 - 部署动作：新建 `/opt/ai-memory/` 下门户 compose；**两个 stack 独立**，可单独重启。
@@ -453,3 +453,4 @@ bash scripts/pin-update.sh <ref> [--force]          # 更新锁文件（--force 
 | 2026-09-20 | **specs 整合**：`dev-plan.md` / `deployment_strategy.md` / `deploy/README.md` / `deploy/deployment-plan.md` 并入本文档；订正三处历史不一致 —— ① 健康探测**不用 curl**（镜像无 curl，改判 serve 日志 + `doctor`）；② 备份外迁频率统一为**每日**；③ 占位符统一 `<VPS4_IP>`（原文 `<vps4>` 混用）。删除 dev-plan 中误提的 gitleaks（本项目用 `make secret-check`） |
 | 2026-09-21 | **§4.4 改为「用户目录属主引导」**：一次性 `install -d -m 2775 -o root -g 999 /data/users`（setgid）使非 root 门户可自建 `0700` 用户目录，并**删除**原 `NOPASSWD: docker exec -u 0` root 规则（`aimem-ssh` 密钥一律带 forced command，不需要 sudo）；§4.5 改为「root 手工操作，保底」。§12.2 补门户 stack 的挂载/密钥/启动自检前置。§7.2 补 S1 的门户侧新触发路径（缺 `DASHSCOPE_API_KEY` ⇒ 401 + linear scan，工具仍成功）。依据 [`architecture.md`](./architecture.md) §2.3 与 [`knowledge/web-portal/portal-launch-mechanism.md`](./knowledge/web-portal/portal-launch-mechanism.md) |
 | 2026-09-21 | **§4.3 强制命令定档**：主人（默认库 = **管理员入口**）行 → `--profile admin`（22 项）；用户（一用户一库）行 → `--profile core`（8 项，显式声明 —— 不传时默认也是 core 且**不报错**）；补「档位口径」注与「改档须重连」。决议与理由 [`mcp/mcp-design.md`](./mcp/mcp-design.md) §8.3；实测依据 [`../scripts/profile-probe.sh`](../scripts/profile-probe.sh)（7 档全绿）；对外用户版说明 [`mcp/mcp-capabilities.md`](./mcp/mcp-capabilities.md) |
+| 2026-09-22 | **Sprint 编号随 Replan 改指**：§5.3 生产定时器、端到端验收脚本、`/data/backups` 备份脚本目录三处的 Sprint 由旧 Sprint 5 改为 **Sprint 6** |

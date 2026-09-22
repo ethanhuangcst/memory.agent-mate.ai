@@ -32,7 +32,7 @@
 | L1.7 | 配额探针 | [`../../scripts/limits-probe.sh`](../../scripts/limits-probe.sh)（一次性库 `/data/users/limits-probe/` + 每轮全新身份 + **仅 env 注入**小阈值；退出码 0/10/20/30/40/50/60/70，`--self-test` 负向自测） | 上游 `[limits]` **改配置不等于行为生效**：配额逐 `(agent_id, namespace)` 盖章、且 **CLI 一次性写入不计费**，用错验证方式会得出「配额失效」的假结论（用例见 §4-D TC-LIMIT） |
 | L1.8 | 每库维护探针 | [`../../scripts/gc-probe.sh`](../../scripts/gc-probe.sh)（独立一次性库 + 静态审计维护脚本 + `--self-test`；退出码 0/10/20/30/40/50/60/70） | 上游维护覆盖面判错：**TTL 驱逐不只由 `gc` 触发**（`store`/`list`/`recall`/`import` 都会惰性清扫）⇒ 误把 `gc` 计数当「过期总量」；漏传 `--db` ⇒ 静默新建相对路径库或误操作主库；v0.11 attestation 缺省翻转后维护任务升级即失效（用例见 §4-C TC-GC） |
 | L2 | 客户端接入 | Cursor 加载（§3 配置），人肉核对工具清单与一次问答 | 真实客户端环境差异（env / 传输 / 重连） |
-| L3 | 生产通道 | 同 L1 模式，传输换成 `ssh ai-memory`（Sprint 5） | SSH forced command / `no-pty` / 密钥边界 |
+| L3 | 生产通道 | 同 L1 模式，传输换成 `ssh ai-memory`（Sprint 6） | SSH forced command / `no-pty` / 密钥边界 |
 
 原则（承自项目探针惯例）：
 
@@ -55,12 +55,12 @@
 | Sprint 2 #5 | L1.5 隔离探针：本地预实证 A/B/C 三组全绿（P1a 静默证据 → D1/D2 的存在理由） | 已完成 2026-09-20 |
 | Sprint 2 #8 | L1.6 多语言探针：三语言 × 三通路结论矩阵（部分支持，§4-E）+ 客户端通路交叉复现一致 | 已完成 2026-09-21 |
 | 档位核对（原计划项，已提前完成） | TC-TIER：**双探针** `memory_capabilities` + `tools/list` 计数（core=8 / graph=20 / admin=22 / power=57 / full=101） | 已完成 2026-09-21（定档 + 模板四处已写 `--profile`；各档计数实测 7 档全绿，证据见 §4-C） |
-| Sprint 3 #2–#3「D2 + 隔离本地负向回归」 | TC-ISO：移除共享 DB fallback 后重跑 V1，断言 fail-loud、目标非共享主库且主库不变 | 已完成本地验收 2026-09-21（`iso-probe.sh` 退出码 0；生产复验待 Sprint 5） |
-| Sprint 3 #4「上游 `[limits]` 配置与行为验证」 | TC-LIMIT：三类配额 `QUOTA_EXCEEDED` + `quota-status` 交叉核对 + 向量触顶拒绝 + HTTP 专属项对 stdio 无副作用 | 已完成本地验收 2026-09-21（`limits-probe.sh` 退出码 0；HTTP 面超限与生产通道复验待 Sprint 5） |
-| Sprint 3 #5「每用户库维护行为定档」 | TC-GC：`gc` / TTL 驱逐（含读路径惰性清扫）/ WAL 回收 / `curator --once` 的覆盖面对账 + 维护脚本静态审计 | 已完成本地验收 2026-09-21（`gc-probe.sh` 退出码 0，7 项断言；生产定时器与告警待 Sprint 5） |
+| Sprint 3 #2–#3「D2 + 隔离本地负向回归」 | TC-ISO：移除共享 DB fallback 后重跑 V1，断言 fail-loud、目标非共享主库且主库不变 | 已完成本地验收 2026-09-21（`iso-probe.sh` 退出码 0；生产复验待 Sprint 6） |
+| Sprint 3 #4「上游 `[limits]` 配置与行为验证」 | TC-LIMIT：三类配额 `QUOTA_EXCEEDED` + `quota-status` 交叉核对 + 向量触顶拒绝 + HTTP 专属项对 stdio 无副作用 | 已完成本地验收 2026-09-21（`limits-probe.sh` 退出码 0；HTTP 面超限与生产通道复验待 Sprint 6） |
+| Sprint 3 #5「每用户库维护行为定档」 | TC-GC：`gc` / TTL 驱逐（含读路径惰性清扫）/ WAL 回收 / `curator --once` 的覆盖面对账 + 维护脚本静态审计 | 已完成本地验收 2026-09-21（`gc-probe.sh` 退出码 0，7 项断言；生产定时器与告警待 Sprint 6） |
 | 已取消（只影响已排除方案②） | TC-LEAK：去重/合成是否回显他人私有内容 | 已取消 2026-09-21 |
 | Sprint 4 | 门户 / 公网入口若引入：先回到 §0 #5 增补远程接入用例（TC-HTTP） | 待做 |
-| Sprint 5 | 服务器冒烟 L3（ssh 通道跑同构 jsonl）+ 生产 doctor 三静默失败点；备份（TC-BAK）/ 恢复（TC-REV）/ 吊销（TC-SSH-03） | 待做 |
+| Sprint 6 | 服务器冒烟 L3（ssh 通道跑同构 jsonl）+ 生产 doctor 三静默失败点；备份（TC-BAK）/ 恢复（TC-REV）/ 吊销（TC-SSH-03） | 待做 |
 | 回归触发 | 每次改动 config（含 `[limits]`）/ 镜像 tag / 档位 / forced command、**任一 attestation 模板**或**每库维护脚本**后重跑 L0 + L1 + L1.5（含 TC-ATT-01）+ L1.7（TC-LIMIT）+ L1.8（TC-GC），并跑静态 `make attestation-paths`（TC-ATT-02，已含第五条路径） | 持续 |
 
 ---
@@ -87,7 +87,7 @@
 - 生效核对：Settings → MCP 出现 `ai-memory-local` 且可见 8 个 `memory_*` 工具。
 - **改档位**：在 `args` 里加 `--profile <family>`（如 `--profile core,graph`）；改完**必须重启该 MCP 条目 / reconnect**（harness 不支持延迟注册）。
 
-### 生产（Sprint 5 上线后，与本地条目并存）
+### 生产（Sprint 6 上线后，与本地条目并存）
 
 ```json
 "ai-memory": { "command": "ssh", "args": ["ai-memory"] }
@@ -153,19 +153,19 @@
 
 > 现役探针：[`../../scripts/iso-probe.sh`](../../scripts/iso-probe.sh)（退出码 0 全通过 / 10 前置 / 20 解析链 / 30 隔离 / 40 维护 / 50 方案②会话），组 A=P1a/P1b/P4，组 B=P2/P3/P5，组 C=P6。可重复性已验证：第二次起必然命中 near-duplicate 去重，探针**分会话**处理（写入会话先取「生效标记」再另开会话检索），故重复运行稳定。
 
-### D. 生产通道与运维（Sprint 4–5 占位）
+### D. 生产通道与运维（Sprint 4 / 6 占位）
 
 | ID | 用例 | 断言 | 阶段 |
 |---|---|---|---|
-| TC-SSH-01 | `ssh ai-memory` 跑 §4-A 同构 jsonl 会话 | 与 L1 结果一致（握手 + 8 工具 + 写入 + 跨进程召回） | Sprint 5 |
-| TC-SSH-02 | `no-pty` / 误加 `-t` 负例 | 加 `-t` 时 stdio 帧损坏 → 客户端报错（证明 `no-pty` 必要） | Sprint 5 |
-| TC-SSH-03 | 吊销：删除该用户 `authorized_keys` 行 | 该密钥 SSH **立即失败** | Sprint 5 #5 |
-| TC-BAK-01 | 备份脚本遍历全部库产出快照 + manifest | `sha256sum` 与 manifest 一致；外迁后回读比对通过 | Sprint 5 #3/#7 |
-| TC-REV-01 | 恢复演练（在**临时库**上） | 恢复后原库被 rename 为 `pre-restore-*`（in-place 行为，契约面 I5） | Sprint 5 |
-| TC-LIMIT-01 | **`[limits]` 三类配额行为**（本地基线，Sprint 3 #4） | 探针 [`../../scripts/limits-probe.sh`](../../scripts/limits-probe.sh) 在**独立一次性库 + 每轮全新身份**上只经 env 注入小阈值（模板零污染）：① `AI_MEMORY_MAX_MEMORIES_PER_DAY=1` → 第 2 次 `memory_store` 返回 `QUOTA_EXCEEDED`；② `AI_MEMORY_MAX_STORAGE_BYTES=1` → 首次写入即 `QUOTA_EXCEEDED`；③ `AI_MEMORY_MAX_LINKS_PER_DAY=1`（会话内 `--profile graph`）→ 第 1 条 `memory_link` 成功、第 2 条被拒；④ 三类均以 `ai-memory quota-status --namespace global --json`（**刻意去掉注入 env**，namespace 与 `memory_store` 默认值一致）交叉核对配额行**仍等于注入值** —— 证明配额行在首次写入时已被盖章，而非重读 env；若查错 namespace，会读到现场新建行的默认值而误报「注入没生效」 | **已完成本地验收 2026-09-21**（退出码 0；`--self-test` 负向自测通过）。生产 SSH 通道复核留 Sprint 5 |
-| TC-LIMIT-02 | **向量索引容量 + HTTP 专属项对 stdio 的非生效对照** | ① `AI_MEMORY_VECTOR_INDEX_CAPACITY=1` + `AI_MEMORY_VECTOR_INDEX_HARD_FAIL=true`：跨进程预热 ≥1 条后，插入被上游拒绝（stderr 出现 `hnsw.eviction` 的 `vector index at capacity: rejecting insert (hard-fail-at-cap mode)` ERROR），且记忆行仍落库（上游 `insert` 返回 `void`，不回滚写入）。**注意**：该 target 不在默认 `ai_memory=info` 过滤器内，探针须显式放宽 `RUST_LOG` 才能观测，且须先断言阻塞预热已落地；② `AI_MEMORY_MAX_PAGE_SIZE=1` / `AI_MEMORY_MAX_INFLIGHT_REQUESTS=1` 下 stdio 会话的 `memory_store` 与 `memory_list` **均正常** | **已完成本地验收 2026-09-21**；HTTP 面超限行为本地**无法触发**（容器不发布端口、镜像无 curl/wget）→ 留 Sprint 5 |
+| TC-SSH-01 | `ssh ai-memory` 跑 §4-A 同构 jsonl 会话 | 与 L1 结果一致（握手 + 8 工具 + 写入 + 跨进程召回） | Sprint 6 |
+| TC-SSH-02 | `no-pty` / 误加 `-t` 负例 | 加 `-t` 时 stdio 帧损坏 → 客户端报错（证明 `no-pty` 必要） | Sprint 6 |
+| TC-SSH-03 | 吊销：删除该用户 `authorized_keys` 行 | 该密钥 SSH **立即失败** | Sprint 6 #7 |
+| TC-BAK-01 | 备份脚本遍历全部库产出快照 + manifest | `sha256sum` 与 manifest 一致；外迁后回读比对通过 | Sprint 6 #5 / #9 |
+| TC-REV-01 | 恢复演练（在**临时库**上） | 恢复后原库被 rename 为 `pre-restore-*`（in-place 行为，契约面 I5） | Sprint 6 |
+| TC-LIMIT-01 | **`[limits]` 三类配额行为**（本地基线，Sprint 3 #4） | 探针 [`../../scripts/limits-probe.sh`](../../scripts/limits-probe.sh) 在**独立一次性库 + 每轮全新身份**上只经 env 注入小阈值（模板零污染）：① `AI_MEMORY_MAX_MEMORIES_PER_DAY=1` → 第 2 次 `memory_store` 返回 `QUOTA_EXCEEDED`；② `AI_MEMORY_MAX_STORAGE_BYTES=1` → 首次写入即 `QUOTA_EXCEEDED`；③ `AI_MEMORY_MAX_LINKS_PER_DAY=1`（会话内 `--profile graph`）→ 第 1 条 `memory_link` 成功、第 2 条被拒；④ 三类均以 `ai-memory quota-status --namespace global --json`（**刻意去掉注入 env**，namespace 与 `memory_store` 默认值一致）交叉核对配额行**仍等于注入值** —— 证明配额行在首次写入时已被盖章，而非重读 env；若查错 namespace，会读到现场新建行的默认值而误报「注入没生效」 | **已完成本地验收 2026-09-21**（退出码 0；`--self-test` 负向自测通过）。生产 SSH 通道复核留 Sprint 6 |
+| TC-LIMIT-02 | **向量索引容量 + HTTP 专属项对 stdio 的非生效对照** | ① `AI_MEMORY_VECTOR_INDEX_CAPACITY=1` + `AI_MEMORY_VECTOR_INDEX_HARD_FAIL=true`：跨进程预热 ≥1 条后，插入被上游拒绝（stderr 出现 `hnsw.eviction` 的 `vector index at capacity: rejecting insert (hard-fail-at-cap mode)` ERROR），且记忆行仍落库（上游 `insert` 返回 `void`，不回滚写入）。**注意**：该 target 不在默认 `ai_memory=info` 过滤器内，探针须显式放宽 `RUST_LOG` 才能观测，且须先断言阻塞预热已落地；② `AI_MEMORY_MAX_PAGE_SIZE=1` / `AI_MEMORY_MAX_INFLIGHT_REQUESTS=1` 下 stdio 会话的 `memory_store` 与 `memory_list` **均正常** | **已完成本地验收 2026-09-21**；HTTP 面超限行为本地**无法触发**（容器不发布端口、镜像无 curl/wget）→ 留 Sprint 6 |
 | TC-I18N-01 | 多语言检索（占位 → 已由 §4-E 六用例扩展替代） | 见 §4-E（TC-I18N-01..06，2026-09-21 全通过） | 已完成 2026-09-21 |
-| TC-ATT-01 | `AI_MEMORY_REQUIRE_AGENT_ATTESTATION` 开关生效（**正负对照**，不断言字段） | `=0`：`memory_store` 成功（无 `isError`，行落库）；`=1`：同一写入被拒（`isError=true` + `agent attestation failed: … this write is unsigned`）。**`attest_level=claimed` 不可直接断言**：v0.10.0 的 MCP 响应 / `memory_get` / `export` / `memories` 表都不暴露该值 —— 它是上游**文档与启动告警的措辞**（仅在 daemon 绑非回环且宽松时打印） | **已完成 2026-09-21**（本地基线，探针 [`../../scripts/mcp-smoke.sh`](../../scripts/mcp-smoke.sh) 会话 C；生产 SSH 通道复核留 Sprint 5） |
+| TC-ATT-01 | `AI_MEMORY_REQUIRE_AGENT_ATTESTATION` 开关生效（**正负对照**，不断言字段） | `=0`：`memory_store` 成功（无 `isError`，行落库）；`=1`：同一写入被拒（`isError=true` + `agent attestation failed: … this write is unsigned`）。**`attest_level=claimed` 不可直接断言**：v0.10.0 的 MCP 响应 / `memory_get` / `export` / `memories` 表都不暴露该值 —— 它是上游**文档与启动告警的措辞**（仅在 daemon 绑非回环且宽松时打印） | **已完成 2026-09-21**（本地基线，探针 [`../../scripts/mcp-smoke.sh`](../../scripts/mcp-smoke.sh) 会话 C；生产 SSH 通道复核留 Sprint 6） |
 | TC-ATT-02 | **attestation 四路径口径静态一致**（无 Docker、无网络） | compose `ai-memory` / `curator` 各一处 `"0"`（恰好 2）；`deployment.md` 用户行与 `mcp-design.md` §5.2 模板的 `-e` 子句**逐字一致**且含该 env；门户 `web-design.md` §3.3 launch 模板含该 env；现行文档无已证伪口径回流 —— **禁用字面模式清单见脚本内 `STALE_PATTERNS`**，本表不复述，以免扫描器扫中自身 | **已完成 2026-09-21**（探针 [`../../scripts/attestation-paths-check.sh`](../../scripts/attestation-paths-check.sh)，`make attestation-paths`；退出码 0/10/20，五类负向注入自测通过） |
 | TC-HTTP-01 | （仅当开放 HTTP 入口）url + api_key 接入；未带 key → 401；`X-API-Key` 头生效 | §0 #5 前置配置已落地 | Sprint 4 或 §0 #5 落地时 |
 
@@ -201,3 +201,4 @@
 | 2026-09-21 | **新增 TC-ATT-02 静态护栏（Sprint 3 #1 完成质量修复）**：新增探针 [`../../scripts/attestation-paths-check.sh`](../../scripts/attestation-paths-check.sh)（`make attestation-paths`，只读 / 无 Docker / 无网络，退出码 0/10/20）—— 断言四路径模板 attestation 口径一致（compose ×2 恰好两处、`deployment.md` 用户行与 `mcp-design.md` §5.2 的 `-e` 子句逐字一致、门户 launch 模板含该 env）并阻断已证伪口径回流；§2 回归触发条件纳入该静态门禁；§4-C TC-ISO-01 与 §4-D TC-ATT-01 的判据同步为探针实际断言 |
 | 2026-09-21 | **Sprint 3 #4：`[limits]` 容量与配额落盘 + 行为探针**：`../deploy/config.toml.tmpl` 补 `[limits]` 七键（**显式等于 v0.10.0 编译默认**，防升级静默漂移）；新增探针 [`../../scripts/limits-probe.sh`](../../scripts/limits-probe.sh)（**独立一次性库 + 每轮全新身份 + 仅 env 注入**小阈值，退出码 0）实测 ① 写入量 / 存储字节 / 链接三类返回 `QUOTA_EXCEEDED` 且 `quota-status` 配额行等于注入值；② 向量 `capacity=1` + `hard_fail=true` 触发上游 `hnsw.eviction` 拒绝日志而**记忆行仍落库**；③ `max_page_size` / `max_inflight_requests` 对 stdio **无副作用**（HTTP 面专属）。§4-D `TC-LIMIT-01` 具体化 + 新增 `TC-LIMIT-02`。同步：`./mcp-design.md` §5.4 / §9 L · `../deployment.md` §5.3 · `../product-backlog.md` #17 · [`../knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md`](../knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md) 实测表 + 教训 20 |
 | 2026-09-21 | **Sprint 3 #5：每用户库维护行为定档（新增 L1.8 + TC-GC-01..04）**：① 新增探针 [`../../scripts/gc-probe.sh`](../../scripts/gc-probe.sh)（独立一次性库 + 静态审计 + `--self-test`，退出码 0/10/20/30/40/50/60/70，实跑退出码 0、7 项断言）② 新增维护入口 [`../../scripts/maintain-user-dbs.sh`](../../scripts/maintain-user-dbs.sh)（宿主机 cron 入口；逐库显式 `--db` + `AI_MEMORY_REQUIRE_AGENT_ATTESTATION=0`；单库失败不中断但非零退出）+ `make maintain-user-dbs` 目标 ③ **实测覆盖面三项结论** —— TTL 驱逐由 `gc` 负责但**读/写路径也会惰性清扫**（`db::gc_if_needed` 被 `store`/`list`/`recall`/`import` 与 MCP `memory_recall` 调用 ⇒ `gc` 计数 ≠ 过期总量）；WAL 回收**已被 `gc` 覆盖**（写命令 post-run `wal_checkpoint(TRUNCATE)`，实测 1499712 → 0 字节）；`curator --once` rc=0 且确实读到目标库 ④ §1 新增 **L1.8 每库维护探针层**；§2 登记完成态并把 L1.8 纳入回归触发 ⑤ `make attestation-paths` 扩到**五路径**（新增每库维护命令断言 + 负向自测）⑥ 同步 `./mcp-design.md` §5.3 · `../deployment.md` §5.3 · `../product-backlog.md` #13 · `../sprint-plan.md` #5 · [`../knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md`](../knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md) 实测表 + 教训 21 |
+| 2026-09-22 | **Sprint 编号随 Replan 改指**：L3 生产通道层与 §1 计划中的生产类阶段由旧 Sprint 5 改为 **Sprint 6**；`TC-SSH-03` → `Sprint 6 #7`；`TC-BAK-01` → `Sprint 6 #5 / #9`；§4-D 标题改为「Sprint 4 / 6 占位」。用例断言与判据未改 |

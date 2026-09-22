@@ -273,7 +273,7 @@ for label in ("stdio-a", "stdio-b"):
     if "LIMIT-%s-%s" % (label, sys.argv[2]) not in text:
         raise SystemExit("missing %s in list result: %s" % (label, text[:300]))
 PY
-ok "max_page_size=1 / max_inflight_requests=1 对 stdio 无副作用；HTTP 超限留 Sprint 5 验证"
+ok "max_page_size=1 / max_inflight_requests=1 对 stdio 无副作用；HTTP 超限留 Sprint 6 验证"
 
 cat <<EOF
 

@@ -38,9 +38,9 @@ Sprint 2 #5 的验收要求给出「多用户隔离是否可实现」的明确�
 - **正向**：多用户场景的风险面从"任意跨库伪造"收缩到"配置与运维错误"；后者由 D1/D2 显式阻断，并可被 V1（负向）在生产前验收。
 - **成本**：每用户库需要各自的周期维护（`--db <path> gc` / `curator --once`）与**逐一备份**（外迁前缀 `tenants/<handle>/`）。`gc` 是否覆盖每库的 TTL 遗忘与 WAL checkpoint **已于 2026-09-21 核实（Sprint 3 #5「每用户库维护行为定档」）**：`gc` **覆盖 WAL 回收**（CLI 写命令 post-run `wal_checkpoint(TRUNCATE)`）；TTL 驱逐由 `gc` 负责，且读/写路径亦会惰性清扫 —— 结论与可复跑证据见 [`../mcp/mcp-design.md`](../mcp/mcp-design.md) §5.3 与 [`../mcp/mcp-test.md`](../mcp/mcp-test.md) §4-C TC-GC。
 - **对门户的约束**：必须"一会话一子进程、禁止跨用户复用/池化"（D3），且 key 的创建/轮换/吊销要同步管理库目录与 `authorized_keys` 行。
-- **仍未关闭的上游风险**：`AI_MEMORY_DB` 若被错设为一个**有效但错误**的他库路径（非空、非 `/data/users/`），sqlite 不会报错 —— 只能靠 D1 的路径断言拦住（归 Sprint 4 #7「门户 ↔ MCP 会话桥」）。
+- **仍未关闭的上游风险**：`AI_MEMORY_DB` 若被错设为一个**有效但错误**的他库路径（非空、非 `/data/users/`），sqlite 不会报错 —— 只能靠 D1 的路径断言拦住（归 Sprint 4 PSP-W2「端到端接入」）。
 - **待定**：`<handle>` 命名规范（大小写/长度/是否等于邮箱别名）与 sudoers 无通配符 argv 匹配的实测（`specs/mcp/mcp-design.md` §6.4）。
-- **本 ADR 不实施任何防线**：D2 与 D5 本地门禁由 Sprint 3 #2–#3 落地；D1/D3/D4 由 Sprint 4 #7/#4 落地；生产 D5 由 Sprint 5 #8 复验。本 ADR 只固定形态与判据。
+- **本 ADR 不实施任何防线**：D2 与 D5 本地门禁由 Sprint 3 #2–#3 落地；D1/D3/D4 由 Sprint 4 PSP-W2 / PSP-W3 落地；生产 D5 由 Sprint 6「上线验收」复验。本 ADR 只固定形态与判据。
 
 ## Date
 
