@@ -37,7 +37,7 @@
 
 | # | 故事 | 角色 | AC | Product Backlog | Sprint | 设计 | 测试用例 |
 |---|---|---|---|---|---|---|---|
-| <a id="ms1"></a>MS1 | 对外 MCP 端点与令牌接入 | 用户 | AC-M1.1–AC-M1.4 | [`product-backlog.md`](../product-backlog.md) #32 · #14 · #30 | Sprint 4 PSP-W2「端到端接入」 | [`mcp-design.md`](./mcp-design.md) §5.6.2 | TC-M-L1-01 · TC-M-L1-02 · TC-M-L2-01 |
+| <a id="ms1"></a>MS1 | 对外 MCP 端点与令牌接入 | 用户 | AC-M1.1–AC-M1.4 | [`product-backlog.md`](../product-backlog.md) #32 · #14 · #30 | Sprint 4 PSP-W2「端到端接入」 | [`mcp-design.md`](./mcp-design.md) §5.6.2 | TC-M-L1-01 · TC-M-L1-02 · TC-M-L2-01 · TC-P-L1-03 · TC-P-L2-01 · TC-P-L2-02（门户侧执行） |
 | <a id="ms2"></a>MS2 | 跨用户物理隔离的可观察判据 | 用户 | AC-M2.1–AC-M2.4 | [`product-backlog.md`](../product-backlog.md) #4 · #11 | Sprint 4 PSP-W2「端到端接入」 | [`mcp-design.md`](./mcp-design.md) §3 · §6.1 D3 · §6.2 V3 | TC-M-L1-03 · TC-M-L1-04 · TC-M-L3-01 |
 | <a id="ms3"></a>MS3 | 会话桥与子进程生命周期 | 集成方 | AC-M3.1–AC-M3.4 | [`product-backlog.md`](../product-backlog.md) #33 | Sprint 4 PSP-W2「端到端接入」 | [`mcp-design.md`](./mcp-design.md) §5.6.2 | TC-M-L1-05 · TC-M-L1-06 |
 | <a id="ms4"></a>MS4 | 启动模板与身份注入契约 | 集成方 | AC-M4.1–AC-M4.4 | [`product-backlog.md`](../product-backlog.md) #34 | Sprint 4 PSP-W2「端到端接入」 | [`mcp-design.md`](./mcp-design.md) §5.6.1 · §5.6.4 | TC-M-L0-01 · TC-M-L1-07 · TC-M-L3-02 |
@@ -402,3 +402,4 @@ Scenario: 环境不可用时不得把「什么都没维护」当作成功
 |---|---|
 | 2026-09-22 | 占位创建：随 Replan（Sprint 4–7 重排）登记为 **Sprint 5 #1 的交付物**，并进入 [`../architecture.md`](../architecture.md) §7「相关」表；正文待落盘 |
 | 2026-09-22 | **正文落盘（Sprint 4 #1 文档边界修正）**：由占位转正文。① 从 [`../web-portal/web-stories.md`](../web-portal/web-stories.md) **迁入** 5 条跨进程/上游契约 AC（`AC3.1` / `AC3.2` / `AC3.6` / `AC4.1` / `AC4.2` → `AC-M1.1` / `AC-M1.2` / `AC-M6.1` / `AC-M2.1` / `AC-M2.2`，逐条映射见「迁入映射」）；② 为 MCP 本产品**新增功能**新写 8 条故事的其余验收条件（`MS1` 端点与令牌接入 · `MS2` 物理隔离判据 · `MS3` 会话桥与子进程生命周期 · `MS4` 启动模板与身份注入 · `MS5` 制品契约与耦合面守护 · `MS6` 档位与工具可达性 · `MS7` 配额生效 · `MS8` 每库维护），**不含**上游自带功能的复述；③ 建立本文件独立的 `MS{n}` / `AC-M{n}.{m}` 编号空间，门户侧原 `AC3.*` / `AC4.*` 编号**不重排**（锚点与编号冻结）；④ 交付物由 Sprint 5 #1 提前到 Sprint 4 #1 ⇒ Sprint 5 #1 范围按此收窄（见 [`../sprint-plan.md`](../sprint-plan.md)） |
+| 2026-09-22 | **承接门户侧执行证据（修引用链断点）**：`MS1` 索引行的「测试用例」列补 `TC-P-L1-03` · `TC-P-L2-01` · `TC-P-L2-02`（门户侧执行）。三条用例定义在 [`../web-portal/web-test.md`](../web-portal/web-test.md) §2，验证的是 `AC-M1.1`「持有效令牌完成一次工具调用」与 `AC-M1.2`「凭据缺失或已失效时拒绝建立会话」的**门户侧执行**；两条 AC 于本文件建立时（v2.1 边界修正）由 `S3 AC3.1` / `AC3.2` 迁入，但用例号未随之挂接 ⇒ 全仓**零引用**（不属任何故事索引、也无回链），机械核对报为孤儿。现由 AC 的**现主人** `MS1` 挂接，引用链闭合：全仓 `TC-P-*` 引用与用例定义集合**双向一致（0 悬空 / 0 孤儿）** |
