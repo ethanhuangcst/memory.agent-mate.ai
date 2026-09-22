@@ -6,6 +6,31 @@
 
 ---
 
+## 2026-09-22
+
+### Sprint 3 #6 收口：部署文档与部署制品逐字段收敛（+ 完工项状态置 Done）
+
+**为什么**：`deployment.md` 是部署侧的唯一真相源，但它的 §5.1 契约表与 §5.3 关键字段表已与真实制品（`deploy/docker-compose.prod.yml` / `config.toml.tmpl` / `.env.prod.example`）失联到「照抄会出错」的程度 —— 配置挂载方向写反、curator 参数集在上游**根本不存在**、`[embeddings]` 的模型名与后端不符（这一项直接关系到 1024 维向量绑定）。
+
+**做了什么**（六维字段对照矩阵，每项都指到「文档行号 ↔ 制品行号」两侧证据）：
+
+- **§5.1 compose 契约表**：改正 2 处实质失准 —— ①「配置来源 = 环境变量，**不挂 config 文件**」→ 真实为 `./config.toml → /data/.config/ai-memory/config.toml:ro`（**两服务各一处、只读**；该行原本与本文 §7.2 S3、§12.2 自相矛盾）；② curator 命令 `--sqlite-path / --auto-tag / --poll-interval 60 / --skip-setup-wizard` → 真实 `curator --daemon --interval-secs 3600 --max-ops 50`（**参数集完全不同**）。补 5 类缺行：`config 挂载`、网络（`external: true` 的 `portainer_network`）、两服务环境变量（`HOME=/data` · `AI_MEMORY_DB=/data/ai-memory.db` · `AI_MEMORY_REQUIRE_AGENT_ATTESTATION="0"`）、curator 容器名 `ai-memory-mcp-curator`、serve 命令 `serve --host 127.0.0.1 --port 9077`。
+- **§5.3 关键字段表**：按 `config.toml.tmpl` **逐键重写** —— 删去上游 `src/config.rs` 里**不存在**的 5 个键（`max_tokens` / `temperature` / `[storage.sqlite].pool_size` / `[memory].max_age_days` / `[context_optimizer].max_results`）；`[embeddings]` 由 `provider = "fastembed"` / `model = "qwen/Qwen3-Embedding-0.6B"` 更正为 `backend = "qwen"` / `model = "qwen3.7-text-embedding"`，并补 `schema_version` / `tier` / `api_key_env` / `backfill_batch`。原「两个静态常量」更正为**仅 `[embeddings].dim`** —— `[storage].embedding_dim` 不是配置节，而是上游 `ResolvedEmbeddings` 的运行时字段。
+- **§5.2 三个必改点**：第 1 条由「默认 `BAAI/bge-small-zh`」更正为「smart 档 preset 默认走 **Ollama 的 Nomic**」。
+- **§1 事实文件清单**：由「三个事实文件」更正为**入仓 5 个**（`docker-compose.prod.yml` · `config.toml.tmpl` · `.env.prod.example` · `portal.env.example` · `README.md`）+ **派生 4 个不入仓**（`config.toml` · `.env` · `portal.env` · `config.local.toml`），并指向 `deploy/README.md` 为权威清单（`README.md` 同步标注「入仓共 5 个」）。依据是 `git ls-files` 与 `.gitignore` 的 `11/12/14/15/17` 行。
+- **§2/§5.4 `.env` 键**：与 `.env.prod.example` 逐键对齐为 `IMAGE_TAG` + `DASHSCOPE_API_KEY`，删去本部署不用的 `GLM_API_KEY` / `QWEN_API_KEY`；补门户 `portal.env` 的独立说明。
+- **部署目录口径统一**：`.env.prod.example` 与 Sprint 2 条目里的 `/opt/ai-memory-mcp/` 统一为 `/opt/ai-memory/`（真源 `deployment.md` §2/§4.1/§12.2 与门户样例均为后者）；§2/§3/§4.1 的 `/opt/ai-memory/data/` 更正为 `/opt/ai-memory/`，并注明运行时数据在**命名卷** `ai_memory_data` 而非宿主机目录。
+- **ADR-009「未核实」表述**：把「`gc` 是否覆盖每库 TTL 遗忘与 WAL checkpoint 仍属未核实项」更新为**已核实**并指向唯一真源（`mcp-design.md` §5.3 · `mcp-test.md` §4-C TC-GC）；ADR 的 Context / Decision / Rationale **未动**。
+- **编号引用收口**：1 处失准 —— `mcp-design.md` §8.3 #1 用 `Sprint 3 #2` 指「把 `--profile` 写入模板」，而现行 #2 已改指 D2 ⇒ 改用条目名（Backlog #12）。3 处「措辞过时」同步关闭：`mcp-design.md` §6.4 未决前提 #2、§6.5 第 6 行与 `ADR-009` 后果行（原写「待定档 / 未核实」，现均标为已定档 / 已核实）。历史变更日志与当时叙述按纪律**保留原编号**。
+- **#1–#5 结论落点核查**：逐条核实 22 个声称落点，**全部真实存在且内容对得上**（含 `mcp-design` §9 B3 / §5.3 / §5.4 / §9 L / §6.2 / §6.5、`mcp-test` §1 L1.8 / §4-C / §4-D、`limits-probe.sh` / `gc-probe.sh` / `maintain-user-dbs.sh` / `attestation-paths-check.sh`、`Makefile` 的 `maintain-user-dbs`、`deployment.md` §5.3、`product-backlog` #13 / #17、知识文档教训 20 / 21）。
+- **完工项状态与 Sprint 收口**：Sprint 3 的 **#2 / #3 / #4 / #5 由 `Implemented` 改为 `Done`**（本地验收已闭环，**说明列保留「生产复验归 Sprint 5」边界**）；**#6 由 `WIP` 改为 `Done`**。复核确认 **#1–#7 全部 `Done`**，故按 Sprint 1 / 2 的既有体例在标题区补上缺失的 **`**状态：已结束**（全部条目完成，2026-09-22）`** 与「收口说明」（说明其中四条的生产复验已作为已登记条目移交 Sprint 5）。
+
+**验证**：`make doc-links`（33 个 Markdown / 相对链接 0 悬空）· `make secret-check` · `make attestation-paths`（五路径）· `make preflight-test`（5/5）· 四支探针 `mcp-smoke.sh` / `iso-probe.sh` / `limits-probe.sh` / `gc-probe.sh` 均 `rc=0` · `git diff --check` 干净。
+
+**边界**：生产环境落地（定时器 / 备份外迁 / 生产通道复验）仍属 Sprint 5；本次只收敛文档与制品的口径，不改任何架构决策，也不动在途的改名故事与门户故事改动。
+
+**ADR：无新增** —— 本轮是既有决议的文档一致性维护（含一处状态性表述更新），未引入新的架构或流程取舍。
+
 ## 2026-09-21
 
 ### `sprint_plan.md` → `sprint-plan.md` 改名 + Sprint 回顾体例收口（含 Sprint 4 归属校正）

@@ -9,5 +9,5 @@
 | `.env.prod.example` | 密钥样例；落地时改名为 `.env`（`chmod 600`） |
 | `portal.env.example` | **门户 stack** 环境文件样例（Sprint 4）；落地时改名为 `portal.env`（`chmod 600`）—— 与主 `.env` 分离，只放门户专用 MaaS key |
 
-- `config.toml` / `.env` / `portal.env` 为**派生文件**，路径无关忽略规则已覆盖（永不入仓）。
+- 入仓事实文件共 **5 个**（上表 4 个 + 本 `README.md`）。派生文件 `config.toml` / `.env` / `portal.env`（服务器侧）与 `config.local.toml` / `.env.local`（本机开发）均**永不入仓**，由 `.gitignore` 的路径无关忽略规则覆盖。
 - 合规性检查：`make secret-check`（密钥 / 公网 IP / 私有端点）。

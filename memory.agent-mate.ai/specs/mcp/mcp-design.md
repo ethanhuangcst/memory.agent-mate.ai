@@ -237,7 +237,7 @@ aimem-ssh ALL=(root) NOPASSWD: /usr/bin/docker exec -i ai-memory-mcp ai-memory m
 | # | 前提 | 归属 |
 |---|---|---|
 | 1 | 写路径泄露探针：去重/合成是否把他人私有内容回显给写入者（**只影响已排除的方案②**；方案③无跨库路径） | **已取消**（2026-09-21 范围校准） |
-| 2 | `gc` 是否覆盖每库的 TTL 遗忘 + WAL checkpoint | Sprint 3 #5「每用户库维护行为定档」 |
+| 2 | `gc` 是否覆盖每库的 TTL 遗忘 + WAL checkpoint | **已核实并关闭（Sprint 3 #5，2026-09-21）**：`gc` **已覆盖 WAL 回收**（CLI 写命令 post-run `wal_checkpoint(TRUNCATE)`）；TTL 驱逐由 `gc` 负责，且 `store` / `list` / `recall` / `import` 与 MCP `memory_recall` 亦会经 `db::gc_if_needed` **惰性清扫**（故 `gc` 计数 ≠ 过期总量）。结论见本文 §5.3 · [`./mcp-test.md`](./mcp-test.md) §4-C TC-GC |
 | 3 | `AI_MEMORY_DB` 指向**有效但错误的**他库路径 —— 唯一能拦住它的是 D1 的路径断言 | Sprint 4 #7「门户 ↔ MCP 会话桥」 |
 | 4 | sudoers 无通配符 argv 匹配行为 | Sprint 5 前 |
 | 5 | 门户尚未存在（D1/D3/D4 的最终载体） | Sprint 4 #7 / #4 |
@@ -245,7 +245,7 @@ aimem-ssh ALL=(root) NOPASSWD: /usr/bin/docker exec -i ai-memory-mcp ai-memory m
 
 ### 6.5 库路径调用点审计（D2 验收证据，2026-09-21）
 
-> **范围**：只核**现存**启动路径是否显式指定目标库（D2 的「调用点审计」）。**不含**每库维护命令 —— 那要等 §5.3 定档（Sprint 3 #5）。「错设为存在且可写的他库」也不在本表范围，由门户 D1 断言拦截（Sprint 4 #7）。
+> **范围**：核**现存**启动路径是否显式指定目标库（D2 的「调用点审计」）。每库维护命令已随 Sprint 3 #5 定档（§5.3），本表第 6 行于 2026-09-21 补入。「错设为存在且可写的他库」不在本表范围，由门户 D1 断言拦截（Sprint 4 #7）。
 >
 > **复跑方式**：`grep -n 'AI_MEMORY_DB' memory.agent-mate.ai/deploy/docker-compose.prod.yml memory.agent-mate.ai/specs/deployment.md memory.agent-mate.ai/specs/web-portal/web-design.md memory.agent-mate.ai/specs/mcp/mcp-design.md`
 
@@ -256,9 +256,9 @@ aimem-ssh ALL=(root) NOPASSWD: /usr/bin/docker exec -i ai-memory-mcp ai-memory m
 | 3 | SSH 管理员行（主人默认库） | forced command → `docker exec` | **不写 `-e`**，依赖 #1 的容器级变量 | [`../deployment.md`](../deployment.md) §4.3 管理员行 · 本文 §5.1 |
 | 4 | SSH 用户行（一用户一库） | forced command → `docker exec -e …` | 逐行显式 `-e AI_MEMORY_DB=/data/users/<handle>/ai-memory.db` | [`../deployment.md`](../deployment.md) §4.3 用户行 · 本文 §5.2 |
 | 5 | 门户 spawn（β′ 子进程） | 子进程 env | 模板 `AI_MEMORY_DB=/data/users/{handle}/ai-memory.db` | [`../web-portal/web-design.md`](../web-portal/web-design.md) §3.3（运行时代码待 Sprint 4 #7） |
-| 6 | 每库维护（`gc` / `curator --once`） | CLI 参数 | **待定档**：必须显式 `--db <path>` | 本文 §5.3 · Sprint 3 #5「每用户库维护行为定档」 |
+| 6 | 每库维护（`gc` / `curator --once`） | CLI 参数 | **已定档（Sprint 3 #5，2026-09-21）**：逐库显式 `--db <绝对路径>` + `AI_MEMORY_REQUIRE_AGENT_ATTESTATION=0` | [`../../scripts/maintain-user-dbs.sh`](../../scripts/maintain-user-dbs.sh) · 本文 §5.3 · [`./mcp-test.md`](./mcp-test.md) §4-C TC-GC |
 
-**结论**：现存 5 条（#1–#5）**无一条**依赖 config 的库路径 —— 即 D2 移除顶层 `db` 后，没有任何调用点会受影响；#6 定档时须同样显式传 `--db`，且届时本表随之补行。
+**结论**：现存 5 条（#1–#5）**无一条**依赖 config 的库路径 —— 即 D2 移除顶层 `db` 后，没有任何调用点会受影响；第 6 行（每库维护命令）已随 Sprint 3 #5 定档并逐库显式传 `--db`，D2 的「调用点审计」随之闭环。
 
 ---
 
@@ -317,7 +317,7 @@ aimem-ssh ALL=(root) NOPASSWD: /usr/bin/docker exec -i ai-memory-mcp ai-memory m
 
 | # | 决策 | 现状 |
 |---|---|---|
-| 1 | 对用户暴露哪一档 | **已定（2026-09-21）**：对外（SSH 与门户**统一**）= **`core`（8 项）**；管理员另设入口 = **`admin`（22 项）**，两条模板分离。理由：对外取最小面（不开放删除，代价见 #4）；管理员通道要在同一入口里做删除 / 遗忘 / 清理与治理审批（Lifecycle + Governance）—— `core` 做不到；而 Meta / Archive 族（`memory_stats` / `memory_agent_list` / `memory_archive_stats`）属 `full` 档，**不随 `admin` 开放**（管理员若确需只读统计类工具，另开条目评估）。**模板已落盘（2026-09-21 收尾，原「移交 Sprint 3 #2 / Backlog #12」提前完成）**：SSH 主人行 `admin` + 用户行 `core`（[`../deployment.md`](../deployment.md) §4.3）、完整配方（本文 §5.1 `admin` / §5.2 `core`）、门户 `launch.argv`（[`../web-portal/web-design.md`](../web-portal/web-design.md) §3.3）、本地客户端条目（[`./mcp-test.md`](./mcp-test.md) §3） |
+| 1 | 对用户暴露哪一档 | **已定（2026-09-21）**：对外（SSH 与门户**统一**）= **`core`（8 项）**；管理员另设入口 = **`admin`（22 项）**，两条模板分离。理由：对外取最小面（不开放删除，代价见 #4）；管理员通道要在同一入口里做删除 / 遗忘 / 清理与治理审批（Lifecycle + Governance）—— `core` 做不到；而 Meta / Archive 族（`memory_stats` / `memory_agent_list` / `memory_archive_stats`）属 `full` 档，**不随 `admin` 开放**（管理员若确需只读统计类工具，另开条目评估）。**模板已落盘（2026-09-21 收尾，原「移交 Backlog #12（把 `--profile` 写入门户 / SSH 模板）」提前完成 —— 该工作当时挂在旧的 Sprint 3 #2 名下，现行 #2 已改指 D2，故按条目名引用）**：SSH 主人行 `admin` + 用户行 `core`（[`../deployment.md`](../deployment.md) §4.3）、完整配方（本文 §5.1 `admin` / §5.2 `core`）、门户 `launch.argv`（[`../web-portal/web-design.md`](../web-portal/web-design.md) §3.3）、本地客户端条目（[`./mcp-test.md`](./mcp-test.md) §3） |
 | 2 | 门户模板与 SSH 模板是否统一档位 | **已定**：统一为 `core`（同上 #1）；管理员入口（`admin`）单独一条，不与用户通道混用 |
 | 3 | 选档后如何验收 | 用 `initialize` + `tools/list` 实测计数 —— 能力已由 [`../../scripts/profile-probe.sh`](../../scripts/profile-probe.sh) 提供（7 档全绿）；**TC-TIER-01 / 02 已完成 2026-09-21**（各档计数实测 + `memory_capabilities` 交叉一致；四处模板均已含 `--profile`），登记在 [`./mcp-test.md`](./mcp-test.md) §4-C |
 | 4 | `core` 档**不含删除类工具**（`memory_delete` / `memory_forget` / `memory_gc`） | **已知限制，本轮接受**：用户无法自行删除或遗忘自己的记忆。若要开放删除，**最小增量档位是 `core,lifecycle`（实测 14 项）**，不是 `admin`（22）或 `full`（101）——后者会同时引入治理面与自治编排面。是否开放、何时开放另开条目评估，**不在 #9 结论内** |

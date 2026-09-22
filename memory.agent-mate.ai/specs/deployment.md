@@ -12,7 +12,7 @@
 | 层 | 要求 |
 |---|---|
 | 服务器 | Ubuntu 22.04+，已装 Docker + Compose，能拉 `ghcr.io` |
-| 仓内 | `memory.agent-mate.ai/deploy/` 三个事实文件：`docker-compose.prod.yml`（compose 契约唯一真相源）· `config.toml.tmpl`（配置模板）· `.env.prod.example`（密钥样例） |
+| 仓内 | `memory.agent-mate.ai/deploy/` 下**入仓事实文件 5 个**（权威清单见 [`../deploy/README.md`](../deploy/README.md)）：`docker-compose.prod.yml`（compose 契约唯一真相源）· `config.toml.tmpl`（配置模板）· `.env.prod.example`（主 stack `.env` 样例）· `portal.env.example`（门户 stack 样例）· `README.md`。另有 **4 个运行时派生文件不入仓**（`.gitignore` 路径无关规则覆盖）：`config.toml` · `.env` · `portal.env` · `config.local.toml` |
 | 密钥 | qwen MaaS API key（私有 workspace base_url）· 用户 SSH 公钥（Sprint 3+） |
 | 本地 | `docker` CLI；无 compose 插件时脚本自动回退 `docker-compose` |
 | 纪律 | 改 `.gitignore` 之后才能 `git add -A`；提交前 `make secret-check`（pre-commit 已挂） |
@@ -23,10 +23,10 @@
 
 | # | 项 | 是否必需 |
 |---|---|---|
-| 1 | 创建数据目录 `/opt/ai-memory/data/` | **必需** |
+| 1 | 创建落地目录 `/opt/ai-memory/`（compose / `config.toml` / `.env` 三个文件的落地位置） | **必需** |
 | 2 | 落地 `docker-compose.prod.yml` 到 `/opt/ai-memory/` | **必需** |
 | 3 | 重命名 `config.toml.tmpl` → `config.toml` 并改三处（见 §5.2） | **必需** |
-| 4 | 落地 `.env`（GLM/Qwen/DASHSCOPE key，**只设本轮用的**） | **必需** |
+| 4 | 落地 `.env`（键只有 `IMAGE_TAG` + `DASHSCOPE_API_KEY`，**只设本轮用的**，见 §5.4） | **必需** |
 | 5 | `docker compose config`（语法自检） | **必需** |
 | 6 | `docker compose up -d` | **必需** |
 | 7 | 从日志确认 embedder / LLM（**不 curl**：镜像无 curl，见 §7.1） | **必需** |
@@ -34,7 +34,7 @@
 | 9 | 备份（宿主机快照 → 外迁） | 待办 |
 | 10 | Cloudflare Access + 反向代理 | 门户阶段 |
 
-**明确不需要**：Dockerfile · 自建镜像 · 官方镜像外的额外镜像层 · 额外 volumes（一个卷足够）· 额外网络声明（默认网络足够）· `postgres` / `redis` 服务 · 任何上游源码改动。
+**明确不需要**：Dockerfile · 自建镜像 · 官方镜像外的额外镜像层 · 额外 volumes（一个卷足够）· **compose 自建网络**（compose 的 `default` 网络是 `external: true` 的 `portainer_network`，由宿主机提供，见 §5.1）· `postgres` / `redis` 服务 · 任何上游源码改动。
 
 ---
 
@@ -43,7 +43,7 @@
 | # | 步骤 | 产出 | 对应决策 |
 |---|---|---|---|
 | 1 | 装环境 | Docker + Compose | 宿主机 1 |
-| 2 | 建目录 | `/opt/ai-memory/data/` | 宿主机 1 |
+| 2 | 建目录 | `/opt/ai-memory/` | 宿主机 1 |
 | 3 | 落地 compose | 服务拓扑 | 存储选型 ① |
 | 4 | 改 config | 三个断点修好 | 存储选型 ② |
 | 5 | 写 env | 密钥就位 | v2.0 新增 |
@@ -58,11 +58,13 @@
 ### 4.1 目录与文件
 
 ```bash
-sudo mkdir -p /opt/ai-memory/data
+sudo mkdir -p /opt/ai-memory
 # compose → /opt/ai-memory/docker-compose.prod.yml
 # config  → /opt/ai-memory/config.toml（由 config.toml.tmpl 改名并改三处，见 §5.2）
 # env     → /opt/ai-memory/.env（由 .env.prod.example 改名填值；chmod 600）
 ```
+
+> **运行时数据不在宿主机目录**：compose 用**命名卷** `ai_memory_data` 挂到容器 `/data`（见 §5.1），宿主机侧只需 `/opt/ai-memory/` 放下上述三个文件即可 —— 不要试图在宿主机上找 `/data`。
 
 ### 4.2 专用系统账号（Sprint 3 起）
 
@@ -120,45 +122,51 @@ sudo docker exec -u 0 ai-memory-mcp install -d -m 0700 /data/users/alice/keys
 
 ### 5.1 compose 契约（摘自 `../deploy/docker-compose.prod.yml`）
 
+> 两个服务（`ai-memory` = serve / `curator` = 整理守护进程）**共用**同一镜像、同一 `env_file: .env`、同一数据卷与同一 config 挂载。
+
 | 契约 | 值 | 说明 |
 |---|---|---|
-| 卷 | `ai_memory_data:/data` | 容器重启保留全部状态 |
-| 容器名 | `ai-memory-mcp` | forced command 硬编码此名 |
-| 重启策略 | `unless-stopped` | 服务常驻 |
-| 端口映射 | **无** | 容器端口不映射主机（SSH 接入不需要） |
-| 配置来源 | **环境变量，不挂 config 文件** | 规避挂载失败静默降级 |
-| 默认库 | `/data/ai-memory.db` | HOME=/data 推导 |
-| 特性 | 官方默认（`sqlite-bundled`） | **不含 postgres** |
-| curator 命令 | `curator --sqlite-path /data/ai-memory.db --auto-tag --poll-interval 60 --skip-setup-wizard` | 后台智能整理 |
-| 拉取策略 | 显式 `image: ghcr.io/alphaonedev/ai-memory:<tag>`（**禁用 latest**） | 与锁文件指纹一致 |
+| 卷 | `ai_memory_data:/data` | 两服务共享；容器重启保留全部状态 |
+| **config 挂载** | `./config.toml` → `/data/.config/ai-memory/config.toml:ro` | **两服务各挂一处**（共 2 处），**只读**。目标路径必须与 `HOME=/data` 的推导一致，否则配置被**静默忽略**（见 §7.2 S3） |
+| 容器名 | `ai-memory-mcp`（serve）· `ai-memory-mcp-curator`（curator） | forced command 硬编码前者 |
+| 网络 | `default`：`external: true`，名 **`portainer_network`** | 不是 compose 自建网络；本机基线由 [`../scripts/local-up.sh`](../scripts/local-up.sh) 先建同名网络 |
+| 重启策略 | `unless-stopped` | 两服务均常驻 |
+| 端口映射 | **无** | 容器端口不映射主机（SSH 接入不需要）；容器内绑 `127.0.0.1:9077` |
+| serve 命令 | `serve --host 127.0.0.1 --port 9077` | 无 `--tier`（档位只认 config 的 `tier`） |
+| curator 命令 | `curator --daemon --interval-secs 3600 --max-ops 50` | 后台智能整理；`--max-ops` 限每轮 LLM 操作数 |
+| 环境变量 | 两服务**各设 3 项、取值一致**：`HOME=/data` · `AI_MEMORY_DB=/data/ai-memory.db` · `AI_MEMORY_REQUIRE_AGENT_ATTESTATION="0"` | 注意 compose 里 attestation 写作**带双引号**的 `"0"`；口径与实测判据见 [`mcp/mcp-design.md`](./mcp/mcp-design.md) §9 B3，静态护栏 `make attestation-paths` |
+| 特性 | 官方默认（`sqlite-bundled`） | compose 未声明 `features`；**不含 postgres** |
+| 拉取策略 | 显式 `image: ghcr.io/alphaonedev/ai-memory:${IMAGE_TAG}`（**禁用 latest**） | 与锁文件指纹一致 |
 
 ### 5.2 `config.toml` 三个必改点（否则静默失败）
 
 | # | 断点 | 修复 |
 |---|---|---|
-| 1 | 嵌入模型不适配（默认 `BAAI/bge-small-zh` 与我的库不符） | 改 `[embeddings].model` / `.dim` |
+| 1 | 嵌入后端与模型不适配（smart 档 preset 默认走 **Ollama 的 Nomic**，本部署无 Ollama） | 显式写 `[embeddings]`：`backend = "qwen"`、`model = "qwen3.7-text-embedding"` |
 | 2 | 未显式指定 dim（无环境变量，只能写配置） | `dim = **1024**`（qwen3.7-text-embedding；**静态常量，改了必须重建**） |
-| 3 | LLM 端点指向默认（默认 dashscope 公网端点，不是私有 MaaS） | `[llm]` **显式** `base_url = "<QWEN_BASE_URL>"`、`model = "qwen-plus"`；`[llm.auto_tag]` **只写 model** = `qwen-turbo`（**不写 base_url** → 继承「修正后的」主 LLM 端点，避免照抄上游 `backend="ollama"` 导致静默全挂） |
+| 3 | LLM 端点指向默认（`backend = "qwen"` 默认打到 dashscope **公网**端点，不是私有 MaaS） | `[llm]` **显式** `base_url = "<QWEN_BASE_URL>"`、`model = "qwen-plus"`、`api_key_env = "DASHSCOPE_API_KEY"`；`[llm.auto_tag]` **只写 model** = `qwen-turbo`（**不写 `backend`** → 逐字段继承 `[llm]`，避免照抄上游 `backend="ollama"` 导致静默全挂） |
 
-### 5.3 `config.toml` 关键字段
+### 5.3 `config.toml` 关键字段（与 `../deploy/config.toml.tmpl` 逐键一致）
 
-| 节 | 字段 | 值 |
-|---|---|---|
-| `[llm]` | `backend` | `openai` |
-| | `base_url` | `<QWEN_BASE_URL>`（**必须显式覆盖**） |
-| | `model` | `qwen-plus`（便宜档；`qwen-max` 仅当万不得已） |
-| | `max_tokens` | `2000` |
-| | `temperature` | `0.3` |
-| `[llm.auto_tag]` | `model` | `qwen-turbo`（**只写 model**；`enabled` / `temperature` 默认 true / 0.1） |
-| `[embeddings]` | `provider` | `fastembed` |
-| | `model` | `qwen/Qwen3-Embedding-0.6B` |
-| | `dim` | **`1024`** |
-| `[storage.sqlite]` | `pool_size` | `10` |
-| `[memory]` | `max_age_days` | 保留默认（`0` = 仅软删除） |
-| `[context_optimizer]` | `max_results` | 保留默认 5（或 10） |
-| `[server]` | `api_key` | **不设置**（不对外暴露 HTTP API） |
+> 本节只登记**模板里真实存在**的键。模板未出现的上游键一律「未设置、走编译默认」，不在此处臆列取值。
 
-> **两个静态常量，改了必须重建**：`[embeddings].dim` 与 `[storage].embedding_dim`。
+| 节 / 顶层 | 字段 | 值 | 说明 |
+|---|---|---|---|
+| 顶层 | `schema_version` | `2` | sectioned 形态（v1 扁平形态用 `ai-memory config migrate`） |
+| 顶层 | `tier` | `smart` | `serve` 无 `--tier`，档位只认这里 |
+| 顶层 | `api_key` | **不设置** | 不对外暴露 HTTP API；将来开放须同时设 `AI_MEMORY_REQUIRE_API_KEY=1`，认证头是 `X-API-Key`（不是 `Authorization: Bearer`） |
+| `[llm]` | `backend` | `qwen` | 官方一等别名（等价 dashscope），但其**默认指向公网端点** ⇒ 必须配合 `base_url` |
+| | `model` | `qwen-plus` | 便宜档；`qwen-max` 仅当万不得已 |
+| | `base_url` | `<QWEN_BASE_URL>` | **必须显式覆盖**为私有 MaaS，否则 workspace 级 key 在公网端点不通 |
+| | `api_key_env` | `DASHSCOPE_API_KEY` | 只写**环境变量名**，不是 key 本身（内联 `api_key` 会在解析期被拒） |
+| `[llm.auto_tag]` | `model` | `qwen-turbo` | **只写 model**；其余字段逐字段继承 `[llm]` |
+| `[embeddings]` | `backend` | `qwen` | smart 档 preset 默认走 Ollama 的 Nomic ⇒ **必须显式覆盖** |
+| | `model` | `qwen3.7-text-embedding` | 端点 `/models` 实测存在（[`../scripts/qwen-verify.sh`](../scripts/qwen-verify.sh)） |
+| | `dim` | `1024` | **静态常量**，见下方提示 |
+| | `base_url` | `<QWEN_BASE_URL>` | 与 `[llm]` 同一私有 MaaS 端点 |
+| | `backfill_batch` | `100` | 回填批次（上游界 `1..=10000`，越界回落 100 并告警） |
+
+> **静态常量：`[embeddings].dim`（`1024`）** —— 改了必须重建 / 回填向量索引。四个易踩点：① qwen 的 embedding 模型**不在**上游 `KNOWN_EMBEDDING_DIMS` 表内，查不到即返回 `None`；② 不设 `dim` 会退回 tier preset 的 **768**，与实际 1024 不符；③ **不存在 `AI_MEMORY_EMBED_DIM` 环境变量**，只能写配置；④ 填 `0`（非正值）会被**静默忽略**并回落。同为 1024 维的 `qwen3.7-text-embedding-flash` 也不等于向量可比。
 
 #### `[limits]` 容量与配额（显式等于 v0.10.0 编译默认）
 
@@ -191,12 +199,15 @@ make maintain-user-dbs                                             # 逐库 gc +
 
 ### 5.4 `.env` 只设本轮用到的 key
 
+与 [`../deploy/.env.prod.example`](../deploy/.env.prod.example) **逐键一致** —— 只有两个键：
+
 ```text
-DASHSCOPE_API_KEY=<填>     # 嵌入（provider 为 fastembed 时经 dashscope 兼容层）
-GLM_API_KEY=<填>           # LLM（若 backend 走 glm）
-QWEN_API_KEY=<填>          # 私有 MaaS
+IMAGE_TAG=<填>             # 镜像 tag；版本坐标唯一真相源是 ../upstream.lock（不要另抄一份）
+DASHSCOPE_API_KEY=<填>     # 供 config 的 [llm] 与 [embeddings] 使用（配置里只写变量名）
 ```
 
+> 门户 stack 用**独立的** [`../deploy/portal.env.example`](../deploy/portal.env.example)（服务器 `/opt/ai-memory/portal.env`，`chmod 600`）：只放一把**门户专用** `DASHSCOPE_API_KEY`，须与主 key **同 workspace / 同模型权限**；见 §12.2 与 [`architecture.md`](./architecture.md) §2.3 #2。
+> **不要写** `GLM_API_KEY` / `QWEN_API_KEY`：本部署 LLM 与嵌入都只经 `DASHSCOPE_API_KEY`（config 里 `api_key_env` 指向它）。
 > 官方镜像**不读** `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `OPENAI_BASE_URL`（在 `AI_MEMORY_LLM_*` 体系外）。
 
 ---
@@ -436,6 +447,7 @@ bash scripts/pin-update.sh <ref> [--force]          # 更新锁文件（--force 
 
 | 日期 | 变更 |
 |---|---|
+| 2026-09-22 | **与部署制品逐字段收敛（Sprint 3 #6）**：§5.1 compose 契约表改正两处实质失准 —— ①「配置来源」由「环境变量，不挂 config 文件」改为真实的 `./config.toml → /data/.config/ai-memory/config.toml:ro`（两服务各一处、只读）；② curator 命令由不存在的 `--sqlite-path / --auto-tag / --poll-interval / --skip-setup-wizard` 改为真实的 `--daemon --interval-secs 3600 --max-ops 50`。补登 `config 挂载` · 网络（`external: true` 的 `portainer_network`）· 两服务环境变量（`HOME` · `AI_MEMORY_DB` · `AI_MEMORY_REQUIRE_AGENT_ATTESTATION="0"`）· curator 容器名 `ai-memory-mcp-curator` · serve 命令。§5.3 关键字段表按 `config.toml.tmpl` 逐键重写（删去上游**不存在**的 `max_tokens` / `temperature` / `[storage.sqlite].pool_size` / `[memory].max_age_days` / `[context_optimizer].max_results`；`[embeddings]` 的 `provider=fastembed` / `model=qwen/Qwen3-Embedding-0.6B` 更正为 `backend=qwen` / `model=qwen3.7-text-embedding`）；「两个静态常量」更正为仅 `[embeddings].dim`（上游无 `[storage].embedding_dim`，那是运行时结构体字段）。§1 事实文件清单由「三个」改为**入仓 5 个 + 派生 4 个**；§2/§5.4 的 `.env` 键与 `.env.prod.example` 对齐（`IMAGE_TAG` + `DASHSCOPE_API_KEY`，去掉未使用的 `GLM_API_KEY` / `QWEN_API_KEY`）；§2/§3/§4.1 部署目录由 `/opt/ai-memory/data/` 更正为 `/opt/ai-memory/` 并注明运行时数据在**命名卷**。另把 `.env.prod.example` 的服务器路径 `/opt/ai-memory-mcp/` 统一为 `/opt/ai-memory/` |
 | 2026-09-21 | **每库维护定档（Sprint 3 #5）**：§5.3 新增「每库维护（宿主机 cron）」小节 —— 维护入口 [`../scripts/maintain-user-dbs.sh`](../scripts/maintain-user-dbs.sh) / `make maintain-user-dbs`、两条硬约束（显式 `--db`、显式 `AI_MEMORY_REQUIRE_AGENT_ATTESTATION=0`）与失败语义；生产定时器安装留 Sprint 5。覆盖率证据见 [`mcp/mcp-test.md`](./mcp/mcp-test.md) §4-C TC-GC |
 | 2026-09-21 | **补 `[limits]` 容量与配额（Sprint 3 #4）**：§5.3 新增七键表（显式等于 v0.10.0 编译默认）与优先级 / 逐行盖章 / HTTP 面专属说明；模板 [`../deploy/config.toml.tmpl`](../deploy/config.toml.tmpl) 同步落盘；行为证据见 [`mcp/mcp-test.md`](./mcp/mcp-test.md) §4-D TC-LIMIT |
 | 2026-09-20 | **specs 整合**：`dev-plan.md` / `deployment_strategy.md` / `deploy/README.md` / `deploy/deployment-plan.md` 并入本文档；订正三处历史不一致 —— ① 健康探测**不用 curl**（镜像无 curl，改判 serve 日志 + `doctor`）；② 备份外迁频率统一为**每日**；③ 占位符统一 `<VPS4_IP>`（原文 `<vps4>` 混用）。删除 dev-plan 中误提的 gitleaks（本项目用 `make secret-check`） |
