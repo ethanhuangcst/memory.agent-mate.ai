@@ -1,0 +1,36 @@
+{
+  "name": "admin-portal",
+  "version": "0.1.0",
+  "private": true,
+  "description": "memory.agent-mate.ai 门户（portal-web）—— 管理面与公开说明页。实现批次 PSP-W1 起。",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts",
+    "migrate": "tsx src/web/db/migrate.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "@fastify/static": "10.1.4",
+    "better-sqlite3": "13.0.3",
+    "fastify": "5.12.5",
+    "jose": "6.2.12",
+    "nunjucks": "3.2.4",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "9.6.0",
+    "@types/node": "22.19.2",
+    "@types/nunjucks": "3.2.6",
+    "@vitest/coverage-v8": "5.0.1",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3",
+    "vitest": "5.0.1"
+  }
+}

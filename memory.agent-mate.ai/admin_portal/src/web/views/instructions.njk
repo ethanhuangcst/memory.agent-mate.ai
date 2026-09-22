@@ -1,0 +1,27 @@
+{# 公开说明页（本批为占位；真实三步接入说明属 PSP-W3）。
+   公开面没有管理身份，故不复用管理面外壳（外壳需要身份与侧栏上下文）。 #}
+<!DOCTYPE html>
+<html lang="{{ htmlLang }}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ t('placeholder.instructions.title') }} — {{ t('brand') }}</title>
+<link rel="icon" href="/assets/logo.png" type="image/png">
+<link rel="stylesheet" href="/assets/portal.css">
+</head>
+<body class="app-shell">
+<main id="content" class="content">
+  <section class="section">
+    <p class="eyebrow">{{ t('placeholder.eyebrow') }}</p>
+    <h1>{{ t('placeholder.instructions.title') }}</h1>
+    <p class="lead-note">{{ t('placeholder.instructions.body') }}</p>
+    <div class="callout callout-info">
+      <p>{{ t('placeholder.batchNote') }}</p>
+    </div>
+  </section>
+</main>
+<footer class="site-footer">
+  <p>{{ t('copyright') }}</p>
+</footer>
+</body>
+</html>

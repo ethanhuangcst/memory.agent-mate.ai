@@ -1,0 +1,240 @@
+{% extends "layout.njk" %}
+
+{# 用户详情：身份只读块 → Tokens（表 + 签发/轮换/吊销）→ Diagnostics（只读）→ 危险区。
+   动作一律走 `/admin/api/*` 的真实表单（无 JS 可用）；签发/轮换的明文只在**本次响应**里出现一次。 #}
+
+{% block content %}
+    <div class="page-head">
+      <p class="eyebrow">{{ t('detail.eyebrow') }}</p>
+      <h1 class="mono">{{ user.handle }}</h1>
+      <div class="page-head-row">
+        <p class="page-head-lead"><span class="path">{{ user.dbPath }}</span></p>
+        <div class="page-head-actions">
+          {% if user.active %}<span class="status">{{ t('detail.st.active') }}</span>{% else %}<span class="status is-off">{{ t('detail.st.revoked') }}</span>{% endif %}
+          <a class="btn-text" href="/admin/users">{{ t('detail.back') }}</a>
+        </div>
+      </div>
+    </div>
+
+    {% if errorKey %}
+    <div data-error>
+      <p class="error-inline">{{ t(errorKey) }}</p>
+    </div>
+    {% endif %}
+
+    {% if issuedToken %}
+    <section class="section">
+      <h2>{{ t('detail.issued.title') }}</h2>
+      <div class="readonly">
+        <p class="lead-note">{{ t('detail.issued.body') }}</p>
+        <div class="codeblock">
+          <div class="codeblock-head">
+            <span class="codeblock-tag">{{ t('detail.issued.hint') }}</span>
+            <button type="button" class="codeblock-copy" data-copy="#issued-token" data-copied-label="{{ t('common.copied') }}">{{ t('common.copy') }}</button>
+          </div>
+          <pre class="codeblock-text" id="issued-token">{{ issuedToken }}</pre>
+        </div>
+      </div>
+    </section>
+    {% endif %}
+
+    <section class="section">
+      <div class="readonly">
+        <dl class="kv">
+          <dt>{{ t('detail.kv.identity') }}</dt>
+          <dd class="mono">{{ user.identity }}</dd>
+          <dt>{{ t('detail.kv.path') }}</dt>
+          <dd><span class="path">{{ user.dbPath }}</span></dd>
+          <dt>{{ t('detail.kv.keydir') }}</dt>
+          <dd><span class="path">{{ user.keyDir }}</span></dd>
+          <dt>{{ t('detail.kv.created') }}</dt>
+          <dd class="mono">{{ user.createdAt }}</dd>
+        </dl>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>{{ t('detail.tokens.h') }}</h2>
+      <div class="page-head-row">
+        <p class="page-head-lead">{{ t('detail.tokens.lead') }}</p>
+        <div class="page-head-actions">
+          {% if user.active %}<a class="btn btn-page" href="{{ detailPath }}?dialog=issue">{{ t('detail.issue') }}</a>{% else %}<a class="btn btn-page" href="{{ detailPath }}?dialog=restore">{{ t('detail.restore') }}</a>{% endif %}
+        </div>
+      </div>
+
+      {% if tokens.length > 0 %}
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>{{ t('detail.col.prefix') }}</th>
+              <th>{{ t('detail.col.label') }}</th>
+              <th>{{ t('detail.col.created') }}</th>
+              <th>{{ t('detail.col.lastused') }}</th>
+              <th>{{ t('detail.col.status') }}</th>
+              <th>{{ t('detail.col.actions') }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for token in tokens %}
+            <tr>
+              <td data-label="{{ t('detail.col.prefix') }}"><span class="mono">{{ token.prefix }}</span></td>
+              <td data-label="{{ t('detail.col.label') }}">{{ token.label }}</td>
+              <td data-label="{{ t('detail.col.created') }}"><span class="mono">{{ token.createdAt }}</span></td>
+              <td data-label="{{ t('detail.col.lastused') }}"><span class="mono">{{ token.lastUsedAt }}</span></td>
+              <td data-label="{{ t('detail.col.status') }}">
+                {% if token.active %}<span class="status">{{ t('detail.st.active') }}</span>{% else %}<span class="status is-off">{{ t('detail.st.revoked') }}</span>{% endif %}
+              </td>
+              <td data-label="{{ t('detail.col.actions') }}">
+                {% if token.active %}
+                <div class="row-actions">
+                  <a class="btn-text" href="{{ detailPath }}?dialog=rotate&amp;prefix={{ token.prefix }}">{{ t('detail.rotate') }}</a>
+                  <a class="btn-text is-danger" href="{{ detailPath }}?dialog=revoke&amp;prefix={{ token.prefix }}">{{ t('detail.revoke') }}</a>
+                </div>
+                {% else %}&mdash;{% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="empty">
+        <p>{{ t('detail.tokens.lead') }}</p>
+        {% if user.active %}<a class="btn btn-page" href="{{ detailPath }}?dialog=issue">{{ t('detail.issue') }}</a>{% else %}<a class="btn btn-page" href="{{ detailPath }}?dialog=restore">{{ t('detail.restore') }}</a>{% endif %}
+      </div>
+      {% endif %}
+    </section>
+
+    <section class="section">
+      <h2>{{ t('detail.diag.h') }}</h2>
+      <p class="lead-note">{{ t('detail.diag.lead') }}</p>
+      <div class="readonly">
+        <dl class="kv">
+          <dt>{{ t('detail.diag.selfcheck') }}</dt>
+          <dd>{{ t('detail.diag.w1') }}</dd>
+          <dt>{{ t('detail.diag.dir') }}</dt>
+          <dd><span class="path">{{ user.keyDir }}</span></dd>
+          <dt>{{ t('detail.diag.embed') }}</dt>
+          <dd>{{ t('detail.diag.deferred') }}</dd>
+        </dl>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>{{ t('detail.danger.h') }}</h2>
+      <p class="lead-note">{{ t('detail.danger.lead') }}</p>
+      {% if user.active %}
+      <div class="btn-row">
+        <a class="btn btn-danger btn-page" href="{{ detailPath }}?dialog=deactivate">{{ t('detail.danger.cta') }}</a>
+      </div>
+      {% endif %}
+      <p class="field-note">{{ t('detail.danger.note') }}</p>
+    </section>
+{% endblock %}
+
+{% block dialogs %}
+{% if dialog == 'issue' %}
+<div class="dialog-backdrop is-open" id="dialog-issue" role="dialog" aria-modal="true" aria-labelledby="dialog-issue-title">
+  <div class="dialog">
+    <h2 class="dialog-title" id="dialog-issue-title">{{ t('dlg.issue.title') }}</h2>
+    <p class="dialog-body">{{ t('dlg.issue.body') }}</p>
+    <form method="post" action="/admin/api/users/{{ user.handle }}/tokens">
+      <input type="hidden" name="action" value="issue">
+      <label class="field-label" for="issue-label">
+        {{ t('dlg.issue.label') }}
+        <input class="input-box" id="issue-label" name="label" type="text" placeholder="{{ t('dlg.issue.label_ph') }}" value="{{ dialogLabel }}" autocomplete="off">
+      </label>
+      <p class="field-note">{{ t('dlg.issue.label_note') }}</p>
+      <div class="dialog-target">
+        <p class="key-meta"><span class="key-meta-label">{{ t('dlg.target.user') }}</span><span class="key-meta-value mono">{{ user.handle }}</span></p>
+        <p class="key-meta"><span class="key-meta-label">{{ t('dlg.target.token') }}</span><span class="key-meta-value mono">{{ t('dlg.issue.prefix_note') }}</span></p>
+      </div>
+      <div class="dialog-actions">
+        <a class="btn-text" href="{{ detailPath }}">{{ t('common.cancel') }}</a>
+        <button type="submit" class="btn btn-page">{{ t('dlg.issue.submit') }}</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+{% if dialog == 'rotate' and dialogPrefix %}
+<div class="dialog-backdrop is-open" id="dialog-rotate" role="dialog" aria-modal="true" aria-labelledby="dialog-rotate-title">
+  <div class="dialog">
+    <h2 class="dialog-title" id="dialog-rotate-title">{{ t('dlg.rotate.title') }}</h2>
+    <p class="dialog-body">{{ t('dlg.rotate.body') }}</p>
+    <form method="post" action="/admin/api/users/{{ user.handle }}/tokens">
+      <input type="hidden" name="action" value="rotate">
+      <input type="hidden" name="prefix" value="{{ dialogPrefix }}">
+      <div class="dialog-target">
+        <p class="key-meta"><span class="key-meta-label">{{ t('dlg.target.user') }}</span><span class="key-meta-value mono">{{ user.handle }}</span></p>
+        <p class="key-meta"><span class="key-meta-label">{{ t('dlg.target.token') }}</span><span class="key-meta-value mono">{{ dialogPrefix }}</span></p>
+      </div>
+      <div class="dialog-actions">
+        <a class="btn-text" href="{{ detailPath }}">{{ t('common.cancel') }}</a>
+        <button type="submit" class="btn btn-page">{{ t('dlg.rotate.submit') }}</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+{% if dialog == 'revoke' and dialogPrefix %}
+<div class="dialog-backdrop is-open" id="dialog-revoke" role="dialog" aria-modal="true" aria-labelledby="dialog-revoke-title">
+  <div class="dialog">
+    <h2 class="dialog-title" id="dialog-revoke-title">{{ t('dlg.revoke.title') }}</h2>
+    <p class="dialog-body">{{ t('dlg.revoke.body') }}</p>
+    <form method="post" action="/admin/api/users/{{ user.handle }}/tokens">
+      <input type="hidden" name="action" value="revoke">
+      <input type="hidden" name="prefix" value="{{ dialogPrefix }}">
+      <div class="dialog-target">
+        <p class="key-meta"><span class="key-meta-label">{{ t('dlg.target.user') }}</span><span class="key-meta-value mono">{{ user.handle }}</span></p>
+        <p class="key-meta"><span class="key-meta-label">{{ t('dlg.target.token') }}</span><span class="key-meta-value mono">{{ dialogPrefix }}</span></p>
+      </div>
+      <div class="dialog-actions">
+        <a class="btn-text" href="{{ detailPath }}">{{ t('common.cancel') }}</a>
+        <button type="submit" class="btn btn-danger btn-page">{{ t('dlg.revoke.submit') }}</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+{% if dialog == 'restore' and not user.active %}
+<div class="dialog-backdrop is-open" id="dialog-restore" role="dialog" aria-modal="true" aria-labelledby="dialog-restore-title">
+  <div class="dialog">
+    <h2 class="dialog-title" id="dialog-restore-title">{{ t('detail.restore') }}</h2>
+    <p class="dialog-body">{{ t('detail.danger.note') }}</p>
+    <form method="post" action="/admin/api/users/{{ user.handle }}/restore">
+      <div class="dialog-target">
+        <p class="key-meta"><span class="key-meta-label">{{ t('dlg.target.user') }}</span><span class="key-meta-value mono">{{ user.handle }}</span></p>
+      </div>
+      <div class="dialog-actions">
+        <a class="btn-text" href="{{ detailPath }}">{{ t('common.cancel') }}</a>
+        <button type="submit" class="btn btn-page">{{ t('detail.restore') }}</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+{% if dialog == 'deactivate' %}
+<div class="dialog-backdrop is-open" id="dialog-deactivate" role="dialog" aria-modal="true" aria-labelledby="dialog-deactivate-title">
+  <div class="dialog">
+    <h2 class="dialog-title" id="dialog-deactivate-title">{{ t('dlg.deact.title', { handle: user.handle }) }}</h2>
+    <p class="dialog-body">{{ t('dlg.deact.body') }}</p>
+    <form method="post" action="/admin/api/users/{{ user.handle }}/deactivate">
+      <div class="dialog-target">
+        <p class="key-meta"><span class="key-meta-label">{{ t('dlg.target.user') }}</span><span class="key-meta-value mono">{{ user.handle }}</span></p>
+        <p class="key-meta"><span class="key-meta-label">{{ t('dlg.target.active') }}</span><span class="key-meta-value mono">{{ user.activeTokenCount }}</span></p>
+      </div>
+      <div class="dialog-actions">
+        <a class="btn-text" href="{{ detailPath }}">{{ t('common.cancel') }}</a>
+        <button type="submit" class="btn btn-danger btn-page">{{ t('dlg.deact.submit') }}</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

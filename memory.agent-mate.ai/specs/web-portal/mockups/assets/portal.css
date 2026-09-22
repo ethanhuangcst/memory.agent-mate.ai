@@ -24,6 +24,16 @@
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
   --max: 760px;
   --guide-max: 56rem;
+  /* ---- 令牌收口（2026-09-22）：以下 7 个值此前只以字面量散落在规则里，
+          且 `var(--placeholder)` 被引用却未定义 ⇒ 收进 `:root`，
+          使「令牌 ↔ 计算样式」可机械核对（web-design.md §13.1 列的就是这 30 个）。 */
+  --bg-soft: #f7f7f7;
+  --placeholder: #9a9a9a;
+  --code-bg: #f4f4f4;
+  --danger-wash: #faf6f6;
+  --dur-fast: 120ms;
+  --dur-base: 180ms;
+  --ease: cubic-bezier(.2,.8,.2,1);
 }
 
 *,
@@ -2229,7 +2239,7 @@ td.table-check {
 .empty p { margin: 0 0 1.15rem; }
 
 /* ---- 数据与数值 ---- */
-.path { font-family: var(--font-mono); font-size: 0.82rem; word-break: break-all; color: var(--ink-2); }
+.path { font-family: var(--font-mono); font-size: 0.82rem; overflow-wrap: anywhere; color: var(--ink-2); }
 .num { text-align: right; font-family: var(--font-mono); }
 .row-end { margin-left: auto; }
 
@@ -2383,12 +2393,15 @@ select.input-box:focus { border-color: var(--ink); background-color: var(--bg-el
 .guide-caps-table td:nth-child(2) { white-space: normal; }
 
 /* ---- C. 数据不折断：路径 / 时间戳 / 工具名一律不折行，窄屏交给横向滚动 -- */
-.path,
+/* 长路径/长标识必须**换行**，否则表格横向溢出或被裁切。
+   口径：不逐字符折断（不用 break-all），但必要时允许在任意处断（anywhere）。
+   这里是**唯一**决定折行行为的地方 —— 不得再用后置追加块覆盖上方 .path 规则，
+   历史上两条互相矛盾的规则（break-all 与 nowrap）就是这样互相抵消的。 */
 .table-wrap .mono,
-.table-wrap .path,
 .table-wrap code,
 .num { white-space: nowrap; }
-.path { word-break: normal; overflow-wrap: normal; }
+.path,
+.table-wrap .path { white-space: normal; word-break: normal; overflow-wrap: anywhere; }
 
 /* ---- D. 内容列：左对齐 + 贴近可用宽度（issues.md 第二轮-1「宽度变窄」）----
    曾用 `margin-inline: auto` 居中，但网格项一旦设 auto 外边距就**取消 stretch**、

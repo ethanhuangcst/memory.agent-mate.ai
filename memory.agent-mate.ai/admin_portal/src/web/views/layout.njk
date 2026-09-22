@@ -1,0 +1,81 @@
+{# 外壳：结构与 specs/web-portal/mockups/*.html 对齐（顶栏 / 侧栏 / 内容 / 页脚）。
+   渐进增强：无 JS 也能完成全部管理动作（语言组是 GET 表单、导航与动作都是链接/表单）；
+   内联脚本只做「移动端菜单开合」与「复制回显」两件锦上添花的事。 #}
+<!DOCTYPE html>
+<html lang="{{ htmlLang }}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ t(titleKey) }} — {{ t('brand') }}</title>
+<link rel="icon" href="/assets/logo.png" type="image/png">
+<link rel="stylesheet" href="/assets/portal.css">
+</head>
+<body class="app-shell">
+<a class="sr-only" href="#content">{{ t('a11y.skip') }}</a>
+
+<header class="app-header">
+  <a class="logo" href="/admin/users" aria-label="{{ t('brand') }}">
+    <img class="logo-header-mark" src="/assets/logo.png" alt="" width="30" height="30">
+    <span class="logo-word">{{ t('brand') }}</span>
+  </a>
+  <button type="button" class="menu-toggle" data-nav-toggle>{{ t('a11y.menu') }}</button>
+  <div class="header-end">
+    <a class="header-guide" href="/">{{ t('nav.site') }}</a>
+    <p class="hello mono">{{ adminEmail }}</p>
+    <form method="get" action="{{ formAction }}">
+      {% for param in preservedQuery %}
+      <input type="hidden" name="{{ param.key }}" value="{{ param.value }}">
+      {% endfor %}
+      <div class="locale-switch" role="group" aria-label="{{ t('a11y.locale') }}">
+        {% for option in localeOptions %}
+        <button type="submit" name="lang" value="{{ option.code }}"{% if option.code == locale %} class="is-active" aria-pressed="true"{% else %} aria-pressed="false"{% endif %}>{{ option.label }}</button>
+        {% endfor %}
+      </div>
+    </form>
+  </div>
+</header>
+
+<div class="app-body">
+  <aside class="sidebar">
+    <nav class="nav" aria-label="{{ t('nav.users') }}">
+      {% for item in navItems %}
+      <a href="{{ item.href }}"{% if item.active %} class="active"{% endif %}>{{ t(item.key) }}</a>
+      {% endfor %}
+    </nav>
+  </aside>
+
+  <main id="content" class="content">
+    {% block content %}{% endblock %}
+  </main>
+</div>
+
+<footer class="site-footer">
+  <p>{{ t('copyright') }}</p>
+</footer>
+
+{% block dialogs %}{% endblock %}
+
+<script>
+  (function () {
+    var shell = document.querySelector('.app-shell');
+    var toggle = document.querySelector('[data-nav-toggle]');
+    if (toggle && shell) {
+      toggle.addEventListener('click', function () { shell.classList.toggle('is-nav-open'); });
+    }
+    document.querySelectorAll('[data-copy]').forEach(function (button) {
+      button.addEventListener('click', function () {
+        var target = document.querySelector(button.getAttribute('data-copy'));
+        if (!target) return;
+        var text = target.textContent || '';
+        var done = button.getAttribute('data-copied-label') || 'Copied';
+        navigator.clipboard.writeText(text.trim()).then(function () {
+          var original = button.textContent;
+          button.textContent = done;
+          window.setTimeout(function () { button.textContent = original; }, 1600);
+        });
+      });
+    });
+  })();
+</script>
+</body>
+</html>

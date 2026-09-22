@@ -1,0 +1,41 @@
+{# 开发登录页（**仅本机开发**）：把「获得身份」变成一个**可点击**的动作。
+   为什么存在：此前要求人手工往浏览器注入 cookie —— 不在产品里、依赖浏览器细节，
+   失败时又与「未登录」完全同形 ⇒ 不可诊断（见 issues-log Issue 6 [FATAL]）。
+   与 401 页一样是**独立文档**（此时还没有身份，不复用管理面外壳）。 #}
+<!DOCTYPE html>
+<html lang="{{ htmlLang }}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ t('devLogin.title') }} — {{ t('brand') }}</title>
+<link rel="icon" href="/assets/logo.png" type="image/png">
+<link rel="stylesheet" href="/assets/portal.css">
+</head>
+<body class="app-shell">
+<main id="content" class="content">
+  <section class="section" data-dev-login>
+    <p class="eyebrow">{{ t('placeholder.eyebrow') }}</p>
+    <h1>{{ t('devLogin.title') }}</h1>
+    <p class="lead-note">{{ t('devLogin.lead') }}</p>
+
+    {% if hasToken %}
+    <form method="post" action="/admin/dev-login">
+      <div class="btn-row">
+        <button type="submit" class="btn btn-page">{{ t('devLogin.submit') }}</button>
+        <a class="btn-text" href="/">{{ t('nav.site') }}</a>
+      </div>
+    </form>
+    {% else %}
+    <div data-dev-login-missing>
+      <p class="error-inline">{{ t('devLogin.noToken') }}</p>
+      <p class="field-note">{{ t('devLogin.hint') }}</p>
+      <p class="dialog-path"><span class="mono">{{ tokenFile }}</span></p>
+    </div>
+    {% endif %}
+  </section>
+</main>
+<footer class="site-footer">
+  <p>{{ t('copyright') }}</p>
+</footer>
+</body>
+</html>

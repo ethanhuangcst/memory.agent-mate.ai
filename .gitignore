@@ -18,3 +18,13 @@ secrets.local*
 
 # IDE / 工具数据：Plan Mode 计划文件等（公开仓不入库，防 `git add .` 误带）
 .codebuddy/
+
+# 门户（PSP-W1 起）：依赖与本机运行产物不入库
+#   注：环境文件 admin_portal/.env 已被上方 `.env` 规则覆盖，此处不重复；
+#       `.env.local` 是**不同 basename**，`.env` 规则不覆盖它 —— 必须显式忽略
+#       （快速路径环境文件；用路径无关模式，目录改名也不会失配）
+**/admin_portal/.env.local
+memory.agent-mate.ai/admin_portal/node_modules/
+memory.agent-mate.ai/admin_portal/.portal-data/
+memory.agent-mate.ai/admin_portal/coverage/
+memory.agent-mate.ai/admin_portal/tests/e2e/artifacts/

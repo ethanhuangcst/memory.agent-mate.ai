@@ -1,0 +1,94 @@
+{% extends "layout.njk" %}
+
+{% block content %}
+    <div class="page-head">
+      <p class="eyebrow">{{ t('users.eyebrow') }}</p>
+      <h1>{{ t('users.title') }}</h1>
+      <div class="page-head-row">
+        <p class="page-head-lead">{{ t('users.lead') }}</p>
+        <div class="page-head-actions">
+          <a class="btn btn-page" href="{{ basePath }}?new=1{% if page > 1 %}&amp;page={{ page }}{% endif %}">{{ t('users.issue') }}</a>
+        </div>
+      </div>
+    </div>
+
+    {% if errorKey %}
+    <div data-error>
+      <p class="error-inline">{{ t(errorKey) }}</p>
+    </div>
+    {% endif %}
+
+    {% if users.length > 0 %}
+    <div class="table-wrap" data-users-table>
+      <table>
+        <caption class="field-note">{{ t('users.caption') }}</caption>
+        <thead>
+          <tr>
+            <th>{{ t('users.col.handle') }}</th>
+            <th>{{ t('users.col.path') }}</th>
+            <th>{{ t('users.col.tokens') }}</th>
+            <th>{{ t('users.col.created') }}</th>
+            <th>{{ t('users.col.status') }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for user in users %}
+          <tr>
+            <td data-label="{{ t('users.col.handle') }}"><a href="{{ basePath }}/{{ user.handle }}">{{ user.handle }}</a></td>
+            <td data-label="{{ t('users.col.path') }}"><span class="path">{{ user.dbPath }}</span></td>
+            <td data-label="{{ t('users.col.tokens') }}" class="num">{{ user.tokenCount }}</td>
+            <td data-label="{{ t('users.col.created') }}"><span class="mono">{{ user.createdAt }}</span></td>
+            <td data-label="{{ t('users.col.status') }}">
+              {% if user.active %}<span class="status">{{ t('users.st.active') }}</span>{% else %}<span class="status is-off">{{ t('users.st.revoked') }}</span>{% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <nav class="pager" aria-label="{{ t('pager.prev') }} / {{ t('pager.next') }}">
+      <p class="pager-count">{{ t('pager.showing', { from: from, to: to, total: total }) }}</p>
+      <div class="pager-controls">
+        {% if prevHref %}<a class="btn-text" href="{{ prevHref }}">{{ t('pager.prev') }}</a>{% else %}<button type="button" class="btn-text" disabled>{{ t('pager.prev') }}</button>{% endif %}
+        <span class="pager-page is-current" aria-current="page">{{ page }}</span>
+        {% if nextHref %}<a class="btn-text" href="{{ nextHref }}">{{ t('pager.next') }}</a>{% else %}<button type="button" class="btn-text" disabled>{{ t('pager.next') }}</button>{% endif %}
+      </div>
+    </nav>
+    {% else %}
+    <div class="empty" data-users-empty>
+      <p>{{ t('users.empty') }}</p>
+      <a class="btn btn-page" href="{{ basePath }}?new=1">{{ t('users.issue') }}</a>
+    </div>
+    {% endif %}
+{% endblock %}
+
+{% block dialogs %}
+{% if dialogOpen %}
+<div class="dialog-backdrop is-open" id="dialog-new-user" role="dialog" aria-modal="true" aria-labelledby="dialog-new-user-title">
+  <div class="dialog">
+    <h2 class="dialog-title" id="dialog-new-user-title">{{ t('users.issue') }}</h2>
+    <p class="dialog-body">{{ t('users.lead') }}</p>
+    <form method="post" action="/admin/api/users">
+      <input type="hidden" name="returnTo" value="html">
+      <label class="field-label" for="new-handle">
+        {{ t('users.field.handle') }}
+        <input class="input-box is-mono" id="new-handle" name="handle" type="text" value="{{ handleValue }}" autocomplete="off" required>
+      </label>
+      {# 失败原因必须渲染在**弹窗内**：弹窗是遮罩层，页面顶部的错误条会被盖住 ⇒ 用户看到的是「没有报错但停在弹窗」（P0：Issue「重名没报错」） #}
+      {% if errorKey %}<p class="error-inline" data-dialog-error>{{ t(errorKey) }}</p>{% endif %}
+      <p class="error-inline"{% if not handleInvalid %} hidden{% endif %}>{{ t('users.invalid') }}</p>
+      {# 路径只显示**可读尾段**（`…/users/<用户名>/`），完整绝对路径放进 `title`（悬停可见）。
+         原因（Issue 3 实测）：把一整条绝对路径塞进狭窄弹窗，必然绕成又高又碎的一坨 ——
+         断点会落在 `-` 与 `.` 上（`memory.agent-` / `mate.ai`），读起来像乱码。
+         这是**显示口径**问题，不是 CSS 折行规则问题。 #}
+      <p class="dialog-path"><span class="mono" title="{{ usersRoot }}/{{ handleValue }}/">…/{{ usersRootTail }}/{{ handleValue }}/</span></p>
+      <div class="dialog-actions">
+        <a class="btn-text" href="{{ basePath }}">{{ t('common.cancel') }}</a>
+        <button type="submit" class="btn btn-page">{{ t('users.issue') }}</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

@@ -12,3 +12,4 @@
 | [local-dev/ai-memory-local-run-gotchas.md](local-dev/ai-memory-local-run-gotchas.md) | Apple Silicon 上跑 amd64 版 ai-memory：binfmt 免装 qemu、配置挂载点、CLI 参数形态、`printf` 拼 JSON 的坑 | 2026-09-20 |
 | [web-portal/portal-launch-mechanism.md](web-portal/portal-launch-mechanism.md) | 门户启动机制 β′ 的实测证据（镜像契约 C1–C3、端到端探针配方）、两个落地缺口（`/data/users` 属主 root ⇒ 需 setgid 引导；门户必须注入 LLM key 否则静默降级）、α 无法用 socket 代理收窄 | 2026-09-21 |
 | [docs/spec-doc-conventions.md](docs/spec-doc-conventions.md) | 自有 spec 的写作与维护约定：对外说明「只列增量 + 全档连续编号」、说明必须与探针实测逐项对齐（含集合比对断言）、被引文档改版要连带扫引用方转述、删并文档后的引用治理与护栏豁免收口 | 2026-09-21 |
+| [web-portal/portal-implementation-notes.md](web-portal/portal-implementation-notes.md) | 门户实现笔记（`PSP-W1` 起）：把设计包变成可运行代码时的坑 —— 词表键名沿袭原型的陷阱、令牌 `43 字符` 口径、CSS 令牌收口与护栏断言、E2E 的语言与状态隐式输入、明文一次性不可走 PRG、同目录「本来就在」与「本次创建」的记账 | 2026-09-22 |

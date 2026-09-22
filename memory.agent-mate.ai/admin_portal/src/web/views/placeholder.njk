@@ -1,0 +1,16 @@
+{% extends "layout.njk" %}
+
+{# 占位页：导航齐全，但该面尚未交付 —— 明确写出交付批次，不伪装成已完成。 #}
+{% block content %}
+    <div class="page-head">
+      <p class="eyebrow">{{ t('placeholder.eyebrow') }}</p>
+      <h1>{{ t(pageTitleKey) }}</h1>
+      <div class="page-head-row">
+        <p class="page-head-lead">{{ t(pageBodyKey) }}</p>
+      </div>
+    </div>
+
+    <div class="callout callout-info">
+      <p>{{ t('placeholder.batchNote') }}</p>
+    </div>
+{% endblock %}

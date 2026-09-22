@@ -310,7 +310,7 @@ COPY --from=ghcr.io/alphaonedev/ai-memory:<tag> \
 | 样式 | **原生 CSS + `:root` 设计令牌**（单文件 `portal.css`） | 与参考 mockup **同一手法且同一令牌体系**（令牌集中在自定义属性，见 §13.1）；无 CDN 样式依赖、无打包器 |
 | 字体 | `Outfit`（拉丁 UI）+ `Noto Sans SC` / `Noto Sans TC`（中日韩）+ `JetBrains Mono`（数据与代码） | 经 Google Fonts `@import` 加载（照参考稿）；栈内含 `system-ui` / `ui-monospace` ⇒ **离线降级为系统字体栈** |
 | MCP 桥 | **`@modelcontextprotocol/sdk`**：服务端用 **Streamable HTTP server transport**，客户端用 **stdio client transport** | §10 #4 明令「**优先复用官方 SDK**、**不自行实现协议**」；**不手写帧解析** |
-| 门户库 | **SQLite**（单文件，落在 `admin_portal_data` 卷） | 单机、零外部依赖、备份与恢复简单；与上游同技术栈；**不在 `/data` 下**（§4.4） |
+| 门户库 | **SQLite**（单文件，落在 `admin_portal_data` 卷）；驱动定档 **`better-sqlite3`**（同步 API ⇒ 事务边界清晰，天然支撑 fail-closed 审计；`engines: node >= 22` 与容器底座一致） | 单机、零外部依赖、备份与恢复简单；与上游同技术栈；**不在 `/data` 下**（§4.4） |
 | 入参校验 | **Zod** | `handle` 白名单与请求体校验；与 MCP SDK 的 schema 习惯一致 |
 | i18n | **四语言服务端词表**（`en` / `zh-CN` / `zh-HK` / `zh-TW`）+ `Accept-Language` / `?lang=` / `localStorage` | 与参考稿一致的四语言；**协议名、工具名、标识符一律不翻译**；**新增语言不改业务逻辑**（TC-P-L2-05）；纪律见 §12.4，字号规则见 §13.2 |
 | 容器 | `node:22-bookworm-slim` + `ca-certificates`；`aimem` **uid/gid 999**、非 root、只读根（临时目录用 tmpfs） | §3.2 · TC-P-L1-11 / TC-P-L1-12 / TC-P-L1-13 |
@@ -414,7 +414,7 @@ admin_portal/
 - **索引**：`keys(key_hash)` **唯一**（认证查询热路径）；`keys(user_id)`；`audit(ts)` 与 `audit(actor)`（审计检索）。
 - **敏感字段纪律**：`keys` 只存 `key_hash` + `key_prefix`，**无明文列**；`audit.detail_json` **不得**含令牌明文或记忆正文（T8 / TC-P-L0-05）。
 - **存储位置**：`admin_portal_data` 卷 → `/srv/portal`，**不在 `/data` 下**（TC-P-L1-10 / TC-P-L3-08）。
-- **审计写入失败的策略**：**待决议**（见「已知限制」）—— 本设计**不预设** fail-open。
+- **审计写入失败的策略**：**已定：fail-closed（无审计不动作）**（2026-09-22 用户定夺，随 `PSP-W1` 落地）。实现方式：业务写与审计写放在**同一个 SQLite 事务**内（`shared/audit.ts` 的 `withAudit`），审计插入失败即整体回滚 —— 用户/令牌不落库、也不产生半成品；反向亦然：动作抛错时不写审计（失败的动作不留痕）。因二者同库同事务，**不需要补偿逻辑**。**失败的动作也不得写审计**（`AC1.6` / `AC2.9`：不得产生虚假的成功记录）。
 
 ### 12.7 门户自建的并发、限流与超时（§7 的落地形态）
 
@@ -448,6 +448,21 @@ admin_portal/
 | `PORTAL_RESPONSE_MAX_BYTES` | 单响应上限（背压保护） | 是 |
 | `DASHSCOPE_API_KEY` | 门户专用 MaaS key（与主 key 同 workspace，§3.4 前置 2） | 是 |
 | `PORTAL_I18N_DEFAULT` | 默认语言（`zh-CN`） | 否 |
+
+**本地开发认证实施口径（2026-09-22 定档，随 `PSP-W1` 落地）**
+
+> 背景：§6.1 规定身份由 Cloudflare Access 认定，但**全仓此前未规定本地开发如何替代它**。定档如下（用户决策）。
+
+| 项 | 口径 |
+|---|---|
+| 身份来源（唯一） | **Cloudflare Access 签名断言**。Web 界面经 `Cf-Access-Jwt-Assertion` 头；**浏览器导航回落到 `CF_Authorization` cookie**（生产本来就如此）。验签走 JWKS + `iss` + `aud` + `exp`（含 30s 时钟偏移） |
+| `CF-Access-Authenticated-User-Email` | **只作交叉校验**：与断言内 `email` 不一致即判 401；**绝不单独采信**（该头可伪造） |
+| Service Token | **门户侧无需专门代码**：由 Cloudflare 在边缘校验后注入**同一断言**（此时断言只有 `common_name`）。门户据 `common_name` 把来源记为 `service-token` 以便审计与排障 |
+| 本机开发 | **命名隧道 + Access 应用**（`make portal-tunnel` 打印配置清单）⇒ 本地与生产同源，不引入「本地关掉认证」的分支 |
+| 自动化（离线） | **自签 JWT + 测试密钥对**（`PORTAL_TEST_JWT_ENABLED=1`，只允许绑定回环 Host）⇒ 覆盖验签、过期、受众不符、头不一致等分支，**零网络** |
+| 自动化（在线） | **Access Service Token** 头（`CF-Access-Client-Id` / `Secret`）⇒ 验真链路；缺前置时 `make portal-e2e ARGS=--online` 以**退出码 40 明确跳过**（不伪装通过） |
+| 生产 fail-closed | `PORTAL_ENV=production` 下：必须配齐团队域与 `aud`，且**启用自签通道即拒绝启动**；若 Host 非回环而自签通道开启，同样拒绝启动 |
+| 新增环境键 | `PORTAL_ENV` · `PORTAL_ACCESS_TEAM_DOMAIN` · `PORTAL_ACCESS_AUD` · `PORTAL_ACCESS_JWKS_URL`（可选，默认由团队域推导）· `PORTAL_TEST_JWT_ENABLED` / `_JWKS` / `_ISS` / `_AUD`（仅测试） |
 
 ### 12.10 与其它组件的依赖与待办（防遗漏）
 
@@ -712,3 +727,4 @@ admin_portal/
 | 2026-09-22 | **UI 二次迭代（Sprint 4 #1 追加）：色系改纯单色（D10）+ 管理面认证实施细则（D11）**：① §0 新增 **D10**——全站**无品牌色变量**，主按钮墨黑实底、活动态与聚焦环一律墨色、唯一有色为危险红；**推翻**同日上午的「保留 logo 橙」并计入**需求变更**（`logo.png` 图像自身橙色属品牌资产，不参与 UI 色系核对）；② §0 新增 **D11** + 新增 **§6.1「管理面认证实施细则」**——身份由 Cloudflare Access 认定、登录方式 Google 主 + 邮箱 OTP 兜底、多把钥匙=策略内多邮箱、**会话时长目标 3 个月但平台上限疑为 1 个月（实施期实测，不得断言）**、**根凭证=CF 账号 2FA 恢复码须离线保存（新增缺口）**、三层失效链、明确**撤销**「门户内邀请 admin / 重设密码 / 门户自建账号」；③ §13 整体改为**纯单色令牌**（移除 `--accent` / `--accent-deep` 与 `--ok` / `--warn` / `--info`，新增 `--bg-soft` / `--placeholder` / `--danger-wash`），并新增**三步接入纵向版式**、**说明页截图**、**Contact Admin 悬浮窗**三条组件规范与灰阶语义映射表；④ 同步 `portal.css`（残留彩色令牌 0 处） |
 | 2026-09-22 | **UI 迭代轮收口（§13.9 / §13.10 / §14 / §15 落盘）**：① **§0 新增 D12 / D13 / D14**（页面集 6 页与 07 撤销 · 用户停用为可逆软操作 · 外框冻结与代码块圆角例外）；② **§12.3 路由表修正**：`/admin/guide（管理员接入指南）` → **`/admin/mcp（Admin MCP 配置）`**（含「公开页不含机密」同处引用），§12.2 目录树的 `routes/admin.guide` → `admin.mcp`；③ **§13.1 补 `--control-fs` 令牌**、登记 **代码块 8px 圆角例外**（曾误压平并回滚）、新增**根字号基准 17px**（`rem` 折算易错点）、更新**栏宽口径**（内容列 `min(100%, 72rem)` 左对齐 + 正文 `46rem` 限宽，`--max` 不再约束）；④ **新增 §13.9 组件规范**（分页 / 说明型区块 / 危险按钮 / 对话框补充 / `.dialog-path` 形态纪律 —— 并登记各自**缺失时的表现**，因此前多处类名在 CSS 中无规则）；⑤ **新增 §13.10 外框与滚动**（顶栏与页脚 `sticky` + 不透明底 + **禁止用 `margin-inline: auto` 居中内容列**的原因与被撑破视口的实测）；⑥ **新增 §14 逐页 UI 设计**（6 页 × 原型 ↔ 模板 ↔ 路由 ↔ 区块 ↔ 组件，含 11 种变体态）与 **§15 UI 资产清单**（单一真源、同步方式与哈希核对、**不入库清单**、AI 客户端图标的许可提示）—— 二者闭合 §12.2 的前向引用；⑦ 移除 `.content` 中已被覆盖的死规则 `max-width: calc(var(--max) + 4rem)` |
 | 2026-09-22 | **两处待决项定夺并回填（用户逐项确认，均选「保留现状」）**：① §13 开头的 `logo.png` 说明第 ② 条由「是否有意为之由用户决定」改为**已定：保留** —— 徽标黄（实测 `#F6EC34`，占不透明像素 **2.1%**；其余为灰 `rgb(115,115,115)` 79.7%）**不**立强调色令牌、**不**要求灰阶化，口径收敛为「**UI 无品牌色；品牌资产图像自带色**」；这与 `AC14.1` 的扫描面（元素计算样式）一致，§13.1 仍**无品牌色变量**，实现不得据此新增 `--accent`；② §15「品牌标识」行补记**语义重复已定保留** —— 徽标为横向锁定款（自带 `MEMORY MCP` + `agent-mate.ai`），与 hero 的 `AI Memory MCP`、顶栏的 `memory.agent-mate.ai - AI Memory MCP` 重复，但 `AC6.11` 要求顶栏出现完整品牌串、`AC14.12` 要求两处**各有一处** logo ⇒ 重复是两条 AC 的**结构性结果**；同批把该行的高度口径补为**实测值**（hero `112×216`、顶栏 `72px`、`≤720px` 时 `40px`）|
+| 2026-09-22 | **`PSP-W1`「账号与凭证」实现落地，设计文档同步五处**：① **§12.6 审计写入失败策略定档 fail-closed**（原「待决议」）—— 业务写与审计写同事务、审计写不进即整体回滚；并明确「失败的动作不写审计」（`AC1.6` / `AC2.9`）；② **§12.0 门户库驱动定档 `better-sqlite3`**（同步 API ⇒ 事务边界清晰、天然支撑 fail-closed；`engines: node >= 22` 与容器底座一致）；③ **§12.9 之后新增「本地开发认证实施口径」**（命名隧道 + Access 应用取得真身份；自动化分两层：离线自签 JWT、在线 Access Service Token；`CF-Access-Authenticated-User-Email` 只作交叉校验）；④ **§13.1 令牌收口落地**：`portal.css` 的 `:root` 补齐 `--bg-soft` / `--placeholder` / `--code-bg` / `--danger-wash` / `--dur-fast` / `--dur-base` / `--ease` 七个变量 ⇒ **恰好 30 个**，与本节总表一致，且 `var(--placeholder)` 的未定义引用消除；原型 134 项断言复跑全绿、交付副本 sha256 一致；⑤ 四语言词表由 `i18n.js` 的 220 键转为 `src/web/i18n/*.json` 并**新增 28 键**（错误提示、占位页、明文一次面板、401 页），键集合四语言一致（**248 键 ×4**）；另把 `dlg.deact.title` 改写为带 `{handle}` 插值（原型里写死了 `alice`）|

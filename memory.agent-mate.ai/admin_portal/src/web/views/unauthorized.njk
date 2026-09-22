@@ -1,0 +1,44 @@
+{# 401 页：没有身份，因此**不复用管理面外壳**（外壳需要身份与导航上下文）。
+   不暴露失败原因（原因只进日志），只说明「本门户没有密码」。 #}
+<!DOCTYPE html>
+<html lang="{{ htmlLang }}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ t('admin.unauthorized.title') }} — {{ t('brand') }}</title>
+<link rel="icon" href="/assets/logo.png" type="image/png">
+<link rel="stylesheet" href="/assets/portal.css">
+</head>
+<body class="app-shell">
+<main id="content" class="content">
+  <section class="section">
+    <p class="eyebrow">{{ t('placeholder.eyebrow') }}</p>
+    <h1>{{ t('admin.unauthorized.title') }}</h1>
+    <p class="lead-note">{{ t('admin.unauthorized.body') }}</p>
+    <div class="btn-row">
+      <a class="btn btn-page" href="/">{{ t('nav.site') }}</a>
+    </div>
+
+    {# 自诊断：**仅非生产**（生产不传 devDiagnostics ⇒ 本块不渲染）。 #}
+    {% if devDiagnostics %}
+    <section class="callout callout-info" data-dev-diagnostics>
+      <p>{{ t('unauth.diag.host') }} <span class="mono">{{ devDiagnostics.host }}</span></p>
+      {% if devDiagnostics.testJwtEnabled %}
+      <p>{{ t('unauth.diag.channelOn') }}</p>
+      <p>{{ t('unauth.diag.tokenFile') }} <span class="mono">{{ devDiagnostics.tokenFile }}</span></p>
+      <div class="btn-row">
+        <a class="btn btn-page" href="{{ devDiagnostics.devLoginPath }}">{{ t('devLogin.submit') }}</a>
+        <a class="btn-text" href="/">{{ t('nav.site') }}</a>
+      </div>
+      {% else %}
+      <p>{{ t('unauth.diag.channelOff') }}</p>
+      {% endif %}
+    </section>
+    {% endif %}
+  </section>
+</main>
+<footer class="site-footer">
+  <p>{{ t('copyright') }}</p>
+</footer>
+</body>
+</html>

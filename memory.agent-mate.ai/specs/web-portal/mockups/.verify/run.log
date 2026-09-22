@@ -1,0 +1,91 @@
+PASS 01-instructions.html · 控制台无错误
+PASS 01-instructions.html · 无 404
+PASS 01-instructions.html · 单色令牌（无橙色）
+PASS 01-instructions.html · 品牌名
+PASS 01-instructions.html · title 含品牌名
+PASS 02-users.html · 控制台无错误
+PASS 02-users.html · 无 404
+PASS 02-users.html · 单色令牌（无橙色）
+PASS 02-users.html · 品牌名
+PASS 02-users.html · title 含品牌名
+PASS 03-user-detail.html · 控制台无错误
+PASS 03-user-detail.html · 无 404
+PASS 03-user-detail.html · 单色令牌（无橙色）
+PASS 03-user-detail.html · 品牌名
+PASS 03-user-detail.html · title 含品牌名
+PASS 04-audit.html · 控制台无错误
+PASS 04-audit.html · 无 404
+PASS 04-audit.html · 单色令牌（无橙色）
+PASS 04-audit.html · 品牌名
+PASS 04-audit.html · title 含品牌名
+PASS 05-capacity.html · 控制台无错误
+PASS 05-capacity.html · 无 404
+PASS 05-capacity.html · 单色令牌（无橙色）
+PASS 05-capacity.html · 品牌名
+PASS 05-capacity.html · title 含品牌名
+PASS 06-admin-mcp.html · 控制台无错误
+PASS 06-admin-mcp.html · 无 404
+PASS 06-admin-mcp.html · 单色令牌（无橙色）
+PASS 06-admin-mcp.html · 品牌名
+PASS 06-admin-mcp.html · title 含品牌名
+PASS 07-admins.html · 控制台无错误
+PASS 07-admins.html · 无 404
+PASS 07-admins.html · 单色令牌（无橙色）
+PASS 07-admins.html · 品牌名
+PASS 07-admins.html · title 含品牌名
+PASS index.html · 控制台无错误
+PASS index.html · 无 404
+PASS index.html · 单色令牌（无橙色）
+PASS index.html · 品牌名
+PASS index.html · title 含品牌名
+PASS 首页 · 目录仅 3 项
+PASS 首页 · 已删除取令牌节
+PASS 首页 · 已删除客户端配置节
+PASS 首页 · 八项能力表
+PASS 首页 · 三步存在
+PASS 首页 · 三步纵向（flex column + 同 x 递增 y）
+PASS 首页 · 悬浮窗默认隐藏
+PASS 首页 · hover 后悬浮窗可见
+PASS 首页 · 微信二维码真实加载
+PASS 首页 · 悬浮窗含邮箱
+PASS 首页 · 聊天截图真实加载
+PASS 首页 · ?hover=contact 变体
+PASS 四语言 · CN
+PASS 四语言 · HK
+PASS 四语言 · TW
+PASS 四语言 · EN
+PASS 用户页 · Create user 主按钮
+FAIL 用户页 · Manage admins 深链
+PASS 用户页 · 无 Invite Admin 文案
+FAIL 管理员页 · 无操作词 'invite'
+FAIL 管理员页 · 无操作词 'reset'
+FAIL 管理员页 · 无操作词 'delete'
+PASS 管理员页 · 无对话框触发器
+PASS 管理员页 · 无表单输入
+PASS 管理员页 · 含后台深链
+PASS 管理员页 · 导航活动项为 07
+PASS 管理员页 · 导航含 06-admin-mcp
+PASS 01-instructions.html · 窄屏无横向溢出
+FAIL 02-users.html · 窄屏无横向溢出 | 5
+FAIL 07-admins.html · 窄屏无横向溢出 | 5
+PASS 首页 · 窄屏三步转单列
+
+==== 汇总 ====
+共 71 项，通过 65，失败 6
+FAILED: 用户页 · Manage admins 深链 | 
+FAILED: 管理员页 · 无操作词 'invite' | 
+FAILED: 管理员页 · 无操作词 'reset' | 
+FAILED: 管理员页 · 无操作词 'delete' | 
+FAILED: 02-users.html · 窄屏无横向溢出 | 5
+FAILED: 07-admins.html · 窄屏无横向溢出 | 5
+Starting server 1/1: python3 -m http.server 8787
+Waiting for server on port 8787...
+Server ready on port 8787
+
+All 1 server(s) ready
+Running: python3 .verify/verify.py
+
+
+Stopping 1 server(s)...
+Server 1 stopped
+All servers stopped
