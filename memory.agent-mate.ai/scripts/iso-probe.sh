@@ -5,7 +5,7 @@
 #       同构：docker exec -i [-e ...] ai-memory-mcp ai-memory mcp --tier smart（-i 不加 -t）。
 #
 # 目的：为「多用户隔离是否可实现」提供**实测证据**（源码依据见 specs/mcp/mcp-design.md §2 /
-#       specs/sprint_plan.md「阻断级风险」）。
+#       specs/sprint-plan.md「阻断级风险」）。
 #
 #   A 组 负向（D2 落地后的 R1 / V1 解析链）
 #     P1a 漏设 AI_MEMORY_DB（unset）→ doctor 必须 fail-loud；source 不得为共享主库，解析后的
@@ -15,7 +15,7 @@
 #
 #   B 组 方案 ③ 一用户一 DB 正向
 #     P2  双用户（iso-alice / iso-bob）独立 MCP 会话：A 的标记 B 检索不到；A↔B 互相 get 不可见；
-#         用户库文件存在且属主 aimem；共享主库记忆计数不变（sprint_plan V2/V3 的本地版）
+#         用户库文件存在且属主 aimem；共享主库记忆计数不变（sprint-plan V2/V3 的本地版）
 #     P3  用与用户会话相同的**四项服务端 env** 跑 doctor --json，断言 source == 该用户库（V4 的本地版）
 #     P5  每库显式维护通路：ai-memory --db <user> stats 可用（mcp/mcp-design.md §5.3 的前置）
 #

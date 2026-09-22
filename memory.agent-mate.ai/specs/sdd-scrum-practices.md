@@ -7,7 +7,7 @@ tags:
   - sdd
   - scrum
   - docs
-related_spec: sprint_plan.md
+related_spec: sprint-plan.md
 related:
   - product-backlog.md
   - change-log.md
@@ -61,7 +61,7 @@ RID Registry 只登记 Risk（风险）、Impediment（阻碍）与 Dependency�
 
 ## 2. Sprint plan
 
-[`sprint_plan.md`](./sprint_plan.md) 中每个 Sprint 的 ToDo 表是本 Sprint 执行清单与状态的唯一真源。
+[`sprint-plan.md`](./sprint-plan.md) 中每个 Sprint 的 ToDo 表是本 Sprint 执行清单与状态的唯一真源。
 
 ### 2.1 列定义
 
@@ -87,6 +87,7 @@ RID Registry 只登记 Risk（风险）、Impediment（阻碍）与 Dependency�
 
 - `#N` 只表示所在 Sprint 内的条目编号；跨文档引用优先写条目名，编号只作辅助定位。
 - 每个 Sprint 必须保留 `Retrospective`，至少记录「做得好」「待改进」「学到」。每次 story / task 完成后的 retrospective 必须写入实际交付该工作的 Sprint 回顾章节；ADR 与 `specs/knowledge/` 仅在有持久决策或可复用知识时追加，并从 Sprint 回顾链接过去。即使没有 ADR 或知识文档，Sprint 回顾仍必须更新。
+- `Retrospective` 保持**单一聚合**结构：章节内只有「做得好」「学到」「下轮改进」三组。同一 Sprint 内的多次回顾**合并进这三组**，不新增「补记」「附记」类子标题逐条堆叠；同一教训只在最贴切的那一组出现一次，条内写结论与证据指针（spec 章节 / 探针 / `change-log.md` 日期小节），不复述过程细节。
 - 变更排期时，同批更新 Product Backlog 的 `Sprint` 投影；变更实现状态时，按两张表各自职责回写，不用一张表代替另一张表。
 
 ## 3. Product Backlog
@@ -98,7 +99,7 @@ RID Registry 只登记 Risk（风险）、Impediment（阻碍）与 Dependency�
 表列固定为：`#`、`分类`、`父项`、`标题`、`描述`、`验收条件`、`关联`、`Sprint`、`状态`。
 
 - `描述`、`验收条件`、`关联`与`状态`由 Product Backlog 自主维护。
-- `Sprint` 是 `sprint_plan.md` 排期的投影，不能成为第二套排期真相源。
+- `Sprint` 是 `sprint-plan.md` 排期的投影，不能成为第二套排期真相源。
 - `验收条件`必须可执行、可观察，并承载 RID 解决方案的验证方法。
 - 被 RID 引用的 Product Backlog 条目必须提供稳定条目锚点；`关联`列必须链接具体 Sprint Backlog 执行条目及设计/测试依据，形成从产品方案到实施与验证的导航链。
 - 回溯引用使用「条目名为主、编号为辅」；编号变化时不得让语义失真。
@@ -118,9 +119,9 @@ Product Backlog 使用与 Sprint Backlog 相同的四态：
 
 | 信息 | 唯一真源 | 其它文档如何引用 |
 |---|---|---|
-| RID 状态、影响与当前处理摘要 | `sprint_plan.md` 的 RID Registry | 只引用 RID 编号与标题 |
+| RID 状态、影响与当前处理摘要 | `sprint-plan.md` 的 RID Registry | 只引用 RID 编号与标题 |
 | 产品解决方案与验收条件 | `product-backlog.md` | RID 链接具体条目锚点；条目 `关联` 回链 Sprint 执行项与设计/测试依据 |
-| Sprint 排期与执行状态 | `sprint_plan.md` 的 Sprint Backlog | Product Backlog 的 `Sprint` 列只作投影，`关联`列可链接具体执行项 |
+| Sprint 排期与执行状态 | `sprint-plan.md` 的 Sprint Backlog | Product Backlog 的 `Sprint` 列只作投影，`关联`列可链接具体执行项 |
 | 详细设计与验证矩阵 | 对应设计、测试 spec | 过程表只写摘要与章节链接 |
 | 过程证据与变更原因 | `change-log.md` | 说明列写日期、结论和链接 |
 | 表格体例与状态语义 | 本文件 | 各过程文档头部链接本文件 |
@@ -129,9 +130,17 @@ Product Backlog 使用与 Sprint Backlog 相同的四态：
 
 ## 5. Links
 
-- [`sprint_plan.md`](./sprint_plan.md)：RID Registry 与 Sprint Backlog
+- [`sprint-plan.md`](./sprint-plan.md)：RID Registry 与 Sprint Backlog
 - [`product-backlog.md`](./product-backlog.md)：产品条目与验收条件
 - [`change-log.md`](./change-log.md)：过程证据与变更记录
 - [`mcp/mcp-design.md`](./mcp/mcp-design.md) §6.2：V1–V4 完整验证矩阵
 - [`ADR-013`](./adr/ADR-013-sdd-scrum-process-doc-boundaries.md)：过程文档边界与结构变更决议
 - [`knowledge/docs/spec-doc-conventions.md`](./knowledge/docs/spec-doc-conventions.md)：通用 spec 写作与引用治理约定
+
+## 6. 变更记录
+
+| 日期 | 变更 |
+|---|---|
+| 2026-09-21 | 初版：随 SDD/Scrum 体例收口新建，固定 RID Registry、Sprint Backlog 与 Product Backlog 的列定义、四态语义与单一真源边界。决议见 [`ADR-013`](./adr/ADR-013-sdd-scrum-process-doc-boundaries.md) |
+| 2026-09-21 | §2.3 新增 `Retrospective` **单一聚合**约束：只有「做得好」「学到」「下轮改进」三组，同一 Sprint 内的多次回顾合并进这三组，不新增「补记」「附记」类子标题逐条堆叠 |
+| 2026-09-21 | 随本文件同批改写 `sprint_plan.md` → `sprint-plan.md` 的引用 |

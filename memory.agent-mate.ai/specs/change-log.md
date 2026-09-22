@@ -8,6 +8,36 @@
 
 ## 2026-09-21
 
+### `sprint_plan.md` → `sprint-plan.md` 改名 + Sprint 回顾体例收口（含 Sprint 4 归属校正）
+
+**为什么**：① 文件名用下划线，与仓内其余 spec（`product-backlog.md` / `sdd-scrum-practices.md` / `web-design.md`）的连字符风格不一致；② Sprint 回顾章节此前是**逐条累加**式的（同一 Sprint 里出现「主块 + 多个补记子标题」），越到后期越难看出当前结论；③ 上一批（门户故事引用收口）被记在 Sprint 3，但它实际是 **Sprint 4 #0「web-portal 设计」** 的第一个增量 —— 按 [`sdd-scrum-practices.md`](sdd-scrum-practices.md) §2.3「写入**实际交付该工作的 Sprint**」，应归 Sprint 4。
+
+**做了什么**：
+
+- **改名**：`git mv memory.agent-mate.ai/specs/sprint_plan.md → sprint-plan.md`，按仓内既有改名口径（先例：`hk_vps_4/` → `memory.agent-mate.ai/` 的「引用 227 处 → 0」）全量同步引用，共 **16 个文件** —— specs 内 13 份（[`architecture.md`](architecture.md) · [`change-log.md`](change-log.md) · [`product-backlog.md`](product-backlog.md) · [`sdd-scrum-practices.md`](sdd-scrum-practices.md) · [`web-portal/web-stories.md`](web-portal/web-stories.md) · [`mcp/mcp-test.md`](mcp/mcp-test.md) · [`adr/ADR-006`](adr/ADR-006-public-repo-ip-placeholder-deidentification.md) / [`ADR-010`](adr/ADR-010-specs-single-source-and-doc-structure.md) / [`ADR-011`](adr/ADR-011-doc-style-text-over-icons.md) / [`ADR-013`](adr/ADR-013-sdd-scrum-process-doc-boundaries.md) · [`knowledge/docs/spec-doc-conventions.md`](knowledge/docs/spec-doc-conventions.md)（含 front-matter `related_spec`）· [`knowledge/git-tooling/gotchas.md`](knowledge/git-tooling/gotchas.md) · 本文件）与脚本 3 个（[`../scripts/iso-probe.sh`](../scripts/iso-probe.sh) 注释 · [`../scripts/link-check.sh`](../scripts/link-check.sh) 注释 · [`../scripts/attestation-paths-check.sh`](../scripts/attestation-paths-check.sh) 的 `$SPECS` 文档清单）。旧名残留由 20+ 处降到 **0 处**，只在改名记录里保留旧→新映射。
+- **回顾体例收口**：[`sdd-scrum-practices.md`](sdd-scrum-practices.md) §2.3 新增约束 —— `Retrospective` 只有「做得好」「学到」「下轮改进」三组，同一 Sprint 内的多次回顾**合并进这三组**，不新增「补记」类子标题；并据此把 Sprint 3 已有的三段回顾（主块 + 门户故事引用补记 + #5 维护定档补记）**合并为一组**。
+- **归属校正**：门户故事引用收口的回顾由 Sprint 3 迁至 **Sprint 4**；Sprint 4 #0「web-portal 设计」的 `关联文档` 由纯文本清单改为可点击链接，并补「首个增量已落盘、待整体批准」的说明 —— 状态仍为 `ToDo`，因为其验收条件是「用户批准验收」整份门户设计，不因一个增量而关闭。
+
+**验证**：`make doc-links` 33 文件 / **0 悬空**（改名后路径全部可解析）· `make attestation-paths` 五路径通过（`$SPECS/sprint-plan.md` 已同步）· `make secret-check` 干净 · `git diff --check` 干净 · 全仓 `grep sprint_plan` **0 残留**。
+
+**边界**：4 份 ADR（006 / 010 / 011 / 013）内的文件名引用**已随改名同步**，但**未**在 ADR 正文追加「路径同步」附注 —— ADR 是不可变决议记录，历史事实由本小节与 git 历史承载；旧名只在本次改名记录里出现。
+
+### 门户故事号引用订正 + S11/S12/S13 用例登记（web-stories v2.0 收口）
+
+**为什么**：[`web-portal/web-stories.md`](web-portal/web-stories.md) 重写为 ATDD 体例后新增了 S10–S13，但**引用方不会自动跟着变** —— [`product-backlog.md`](product-backlog.md) 与 [`sprint-plan.md`](sprint-plan.md) 中写死的 `S3` / `S9` 仍指向重写前的语义，[`knowledge/web-portal/portal-launch-mechanism.md`](knowledge/web-portal/portal-launch-mechanism.md) 也只引到 `S1/S8`。这正是 [`spec-doc-conventions.md`](knowledge/docs/spec-doc-conventions.md) 记录的「转述会静默过时」；且 S10–S13 在全仓**没有任何一处正确的外部引用**（S10 被写成 `S9`、S11/S12 被写成 `S9 #7`、S13 零引用）。
+
+**做了什么**：
+
+- **订正 5 个条目的错指（6 处文本 —— `#16` 含描述句与 `关联` 列两处）**：[`product-backlog.md`](product-backlog.md) #7 `S3`→`S6`（接入说明页与 i18n）· #16 `S9`→`S10`（管理面访问控制与面隔离）· #18 `S9 #7`→`S11 / S12`（启动自检版本断言 + 制品契约与升级治理）；[`sprint-plan.md`](sprint-plan.md) Sprint 4 #6 `S3`→`S6` · #8 `S9`→`S10 / S13`。
+- **补全缺口引用**：[`sprint-plan.md`](sprint-plan.md) Sprint 4 #1 补 `S10` · #3 补 `S1 / S4` · #5 补 `S7` · #7 补 `S3 / S4 / S13` · #9 补 `S11 / S12`；Sprint 5 #6 补 `S8` · #7 补 `S9` · #8 补 `S7`；Sprint 6 #3 补 `S12` —— 使故事索引里声明的 Sprint 落点全部**双向可查**。[`portal-launch-mechanism.md`](knowledge/web-portal/portal-launch-mechanism.md) Links 由 `S1/S8` 补为 `S1 / S8 / S11 / S12 / S13`（该文件正是这三条的 E1–E7 实测证据来源）。
+- **登记用例**：[`web-portal/web-test.md`](web-portal/web-test.md) §2 新增 `TC-P-L0-06`–`TC-P-L0-09`（启动自检四项：用户目录可写 / 向量服务可用性与 1024 维 / 版本断言 / 关键校验在位）与 `TC-P-L1-11`–`TC-P-L1-13`（制品契约三项核对、版本标签由版本锁注入且不继承上游默认值、非 root 运行与容器加固）。`AC12.4`（升级清单含重建门户镜像并演练）是流程留痕项，登记在 §1 测试计划为**人工项**，不设自动化用例。
+- **不扩写既有用例号**：`TC-P-L1-08`（无 docker socket）语义保持不变 —— S13 的另两条断言另立 `TC-P-L1-13`，避免同一用例号承载两种语义而使既有引用静默失真。
+- **闭合双向映射**：[`web-stories.md`](web-portal/web-stories.md) 故事索引新增 `AC` 列并回填 S11/S12/S13 的具体用例号（含既有 `TC-P-L1-09` 对应 `AC12.2`）；S3 的 Backlog 归属由 `#3 / #14` 校正为 `#14 / #28`（`#3` 只回链 `S2`、`#28` 明确引用 `S3 AC3.5`）；去掉 S4 行重复的同一 Sprint 条目；体例说明补「AC 与用例按区间覆盖、人工项在 §1 登记」的口径；「已知限制与开放问题」第 3 条由「尚无对应用例」改为**已登记**。
+
+**验证**：`make doc-links` · `make secret-check` · `make attestation-paths` · `git diff --check` 退出码 0；全仓复核**错指零残留**（旧故事号只出现在历史变更记录里且为纯文本）；每张被改表的 `|` 计数与列数一致；新增 TC ID 全局唯一且连续（L0 到 09、L1 到 13），并与故事索引双向可查。
+
+**边界**：不扫历史变更记录中的旧故事号（历史叙述不等于引用）。「**静默失败点**」编号与故事号**同名不同义**，一律不动：[`deployment.md`](deployment.md) §7.2 的 S1–S3、[`web-portal/web-design.md`](web-portal/web-design.md) §5 的 S4，以及 [`web-portal/web-test.md`](web-portal/web-test.md) 与 [`sprint-plan.md`](sprint-plan.md) 中沿用该编号的行；[`../scripts/i18n-probe.sh`](../scripts/i18n-probe.sh) 的测试项标签 `S1–S12` 同理。[`product-backlog.md`](product-backlog.md) 中「本应引用故事号但当前未引用」的条目（#2 / #6 / #11 / #17 / #26 / #29）本轮未动；#14 已引 `S3`，其缺的是 S8 侧（已由 Sprint 5 #6 补上）。如需继续补齐另开。
+
 ### Sprint 3 #5 收口：每用户库维护行为定档（宿主机 cron + 覆盖面实测）
 
 **做了什么**：把「每个用户的库由谁定期打扫、按什么命令、失败怎么办」定档，并给出**行为级**证据（不再停留在设计文档的「覆盖面未验」）。
@@ -33,7 +63,7 @@
 
 **跨条目挂账闭环**：ToDo #1 挂账的「每用户维护命令随 #5 验收」与 ToDo #2 挂账的「每库维护命令随 #5 定档时同批审计（须显式 `--db`）」已同时闭环 —— [`../scripts/attestation-paths-check.sh`](../scripts/attestation-paths-check.sh) 扩到**五路径**，新增断言 E（维护命令沿用与 `deployment.md` 用户行**同一** attestation 取值、且每条 `ai-memory` 调用显式 `--db`）并补负向注入自测（缺 `--db` / 缺 attestation 均 fail-closed）。提交说明中已记录：本次同时落盘此前未提交的 TC-ATT-02 护栏文件。
 
-**结论回写唯一真源**：[`mcp/mcp-design.md`](mcp/mcp-design.md) §5.3（调度定档 + 覆盖面表 + 两条硬约束 + 失败语义 + 边界）· [`mcp/mcp-test.md`](mcp/mcp-test.md) §1 新增 **L1.8** / §2 完成态 / §4-C `TC-GC-01..04` / §5 · [`deployment.md`](deployment.md) §5.3「每库维护」小节 + §14 · [`product-backlog.md`](product-backlog.md) #13（`Implemented`）· [`sprint_plan.md`](sprint_plan.md) #5（`Implemented`）+ Sprint 3 Retrospective 补记 · [`knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md`](knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md) 表行 + 教训 21 + Links · 根 `Makefile` 新增 `maintain-user-dbs` 目标并把 `attestation-paths` 描述改为五路径。
+**结论回写唯一真源**：[`mcp/mcp-design.md`](mcp/mcp-design.md) §5.3（调度定档 + 覆盖面表 + 两条硬约束 + 失败语义 + 边界）· [`mcp/mcp-test.md`](mcp/mcp-test.md) §1 新增 **L1.8** / §2 完成态 / §4-C `TC-GC-01..04` / §5 · [`deployment.md`](deployment.md) §5.3「每库维护」小节 + §14 · [`product-backlog.md`](product-backlog.md) #13（`Implemented`）· [`sprint-plan.md`](sprint-plan.md) #5（`Implemented`）+ Sprint 3 Retrospective 补记 · [`knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md`](knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md) 表行 + 教训 21 + Links · 根 `Makefile` 新增 `maintain-user-dbs` 目标并把 `attestation-paths` 描述改为五路径。
 
 **可复跑验证**：`bash memory.agent-mate.ai/scripts/gc-probe.sh`（退出码 0）· `--self-test` · `bash memory.agent-mate.ai/scripts/attestation-paths-check.sh --self-test` · 回归 `mcp-smoke.sh` / `iso-probe.sh` / `limits-probe.sh` · `make doc-links` / `make secret-check` / `make attestation-paths` / `make preflight-test` · `git diff --check`。
 
@@ -78,7 +108,7 @@
   2. 向量容量：`capacity=1` + `hard_fail=true`，**跨进程**预热 ≥1 条后插入被拒（先断言阻塞预热已落地），同时断言**记忆行仍落库**（`insert` 返回 `void`，不回滚）。
   3. 面归属：`max_page_size=1` / `max_inflight_requests=1` 下 stdio 会话的写入与列表**均正常** ⇒ 二者确为 HTTP 面专属。
   4. 探针内还机械断言模板七键恒等于编译默认、且未混入测试阈值（防「测试值污染生产」）。
-- **结论回写唯一真源**：[`mcp/mcp-design.md`](mcp/mcp-design.md) §5.4（配额契约）+ §9 新增「**L. 容量与配额**」7 条依赖与陷阱 · [`mcp/mcp-test.md`](mcp/mcp-test.md) §4-D（`TC-LIMIT-01` 具体化 + 新增 `TC-LIMIT-02`）· [`deployment.md`](deployment.md) §5.3 七键表 + §14 · [`sprint_plan.md`](sprint_plan.md) #4 完成态 · [`product-backlog.md`](product-backlog.md) #17（两套前缀更正）· [`knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md`](knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md) 实测表 + 教训 20。
+- **结论回写唯一真源**：[`mcp/mcp-design.md`](mcp/mcp-design.md) §5.4（配额契约）+ §9 新增「**L. 容量与配额**」7 条依赖与陷阱 · [`mcp/mcp-test.md`](mcp/mcp-test.md) §4-D（`TC-LIMIT-01` 具体化 + 新增 `TC-LIMIT-02`）· [`deployment.md`](deployment.md) §5.3 七键表 + §14 · [`sprint-plan.md`](sprint-plan.md) #4 完成态 · [`product-backlog.md`](product-backlog.md) #17（两套前缀更正）· [`knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md`](knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md) 实测表 + 教训 20。
 
 **三个只能实测得到的坑**（已全部沉淀）：
 1. **默认日志过滤器看不见触顶** —— 触顶日志 target 是 `hnsw.eviction`，而 MCP 默认 directive 只有 `ai_memory=info`；不显式放宽 `RUST_LOG` 就永远观测不到，容易被误判为「功能失效」。首轮断言失败即栽在这里。
@@ -94,15 +124,15 @@
 
 ### Sprint 3 #1–#3 完成质量修复：口径单点化 + 调用点审计留痕 + 状态登记校正 + 静态护栏
 
-**为什么**：对 #1–#3 做只读质量复核，发现三类问题 —— ① #1 的「失准表述更正」只落到了 `mcp-design` §9 B3 与 `mcp-test` §4-D，**被引权威与引用方仍有 4 处残留**；② #2 的验收里含「每库维护命令审计」，而该命令是 #5 的产物、当时并不存在，属**不可验证项**，且审计无留痕；③ #3 的探针扎实，但 `sprint_plan.md` 风险表 D2/D5/V1/V2 的状态与同文件 Sprint 3 表的「已完成」**互相矛盾**，V4 的「与模板完全相同的 env」措辞也强于实现（实际只传三项）。
+**为什么**：对 #1–#3 做只读质量复核，发现三类问题 —— ① #1 的「失准表述更正」只落到了 `mcp-design` §9 B3 与 `mcp-test` §4-D，**被引权威与引用方仍有 4 处残留**；② #2 的验收里含「每库维护命令审计」，而该命令是 #5 的产物、当时并不存在，属**不可验证项**，且审计无留痕；③ #3 的探针扎实，但 `sprint-plan.md` 风险表 D2/D5/V1/V2 的状态与同文件 Sprint 3 表的「已完成」**互相矛盾**，V4 的「与模板完全相同的 env」措辞也强于实现（实际只传三项）。
 
 **根因**：这正是 [`ADR-010`](adr/ADR-010-specs-single-source-and-doc-structure.md) 与 Sprint 2 Retrospective 记过的「**被引文档/权威未同步 ⇒ 转述静默过时**」——修一处漏一处，且没有护栏能发现。
 
 **做了什么**
 
 1. **口径单点化**：`architecture.md` §2.1 #9（attestation 单点权威，也是 `mcp-design.md` §5.2 引用的目标）、`product-backlog.md` 第 99 行、`docker-compose.prod.yml` 第 27 行注释、`knowledge/local-dev/ai-memory-local-run-gotchas.md` 第 31 行，全部删除已证伪的「不设会 403」与不可观测的「写入标记为 `claimed`」，改为 v0.9 / v0.10.0（surface-scoped）/ v0.11（缺省翻转）三段式，并指向真源 `mcp-design.md` §9 B3。`product-backlog.md` #15 的「三路径」计数与同事实其他表述统一为**四处**，状态由「进行中」改 **Done**。
-2. **审计可验证化 + 留痕**：`mcp-design.md` 新增 **§6.5 库路径调用点审计**（现存 5 条：compose ×2 / SSH 管理员行 / SSH 用户行 / 门户模板，逐条给出「库路径来源 + 证据位置」与复跑 grep 命令），结论是**无一条依赖 config 的库路径**。`sprint_plan.md` #2 验收把「每库维护命令」移出本条目（明确随 #5 定档时同批审计），标题改为「现存路径调用点审计」，并回链 §6.5。
-3. **状态登记校正**：`sprint_plan.md` 风险表 D2 / D5 / V1 / V2 / V3 / V4 与 R1 / R3 的状态列改为与 Sprint 3 表一致（本地已完成项标完成、生产项留 Sprint 5 #8、D1 留 Sprint 4 #7），消除同文件自相矛盾；`mcp-design.md` §6.1 D2 与 §6.2 V1–V4 同步；§0 的「漏设即静默落主库」补上 **D2 前/后**限定，§0.1「会话 env 三件套」注明实际为**四项**（含 attestation）。
+2. **审计可验证化 + 留痕**：`mcp-design.md` 新增 **§6.5 库路径调用点审计**（现存 5 条：compose ×2 / SSH 管理员行 / SSH 用户行 / 门户模板，逐条给出「库路径来源 + 证据位置」与复跑 grep 命令），结论是**无一条依赖 config 的库路径**。`sprint-plan.md` #2 验收把「每库维护命令」移出本条目（明确随 #5 定档时同批审计），标题改为「现存路径调用点审计」，并回链 §6.5。
+3. **状态登记校正**：`sprint-plan.md` 风险表 D2 / D5 / V1 / V2 / V3 / V4 与 R1 / R3 的状态列改为与 Sprint 3 表一致（本地已完成项标完成、生产项留 Sprint 5 #8、D1 留 Sprint 4 #7），消除同文件自相矛盾；`mcp-design.md` §6.1 D2 与 §6.2 V1–V4 同步；§0 的「漏设即静默落主库」补上 **D2 前/后**限定，§0.1「会话 env 三件套」注明实际为**四项**（含 attestation）。
 4. **措辞与实现对齐**：`iso-probe.sh` 的四个会话 env 数组补 `AI_MEMORY_REQUIRE_AGENT_ATTESTATION=0`，使 V4 的「与模板用户行相同的服务端 env」成立（对 `source` 解析与既有断言无影响，容器级本就为 `0`）。
 5. **新增静态护栏**：`scripts/attestation-paths-check.sh`（`make attestation-paths`，只读 / 无 Docker / 无网络，退出码 0/10/20）—— 断言 A 四路径模板同值、B `deployment.md` 用户行与 `mcp-design.md` §5.2 的 `-e` 子句**逐字一致**、C 门户 launch 模板含该 env、D 现行文档无已证伪口径回流；`mcp-test.md` 登记为 **TC-ATT-02** 并纳入 §2 回归触发条件。
 
@@ -120,7 +150,7 @@
 
 **探针**：[`../scripts/iso-probe.sh`](../scripts/iso-probe.sh) 的 V1 现在要求漏设 `AI_MEMORY_DB` 时 `doctor` 非零；只规范化同一次响应中的 `source`，要求绝对路径且不等于 `/data/ai-memory.db`，失败原因属于存储路径；主库记忆计数在 P1a 与 P2 前后均必须可读且不变。P3 复用完整用户环境，方案②对照的伪造写入与归属可见性改为硬断言。
 
-**文档同步**：更新 `sprint_plan.md` 风险 / D2 / V1 / V2 及 Sprint 3 #2–#3 状态；更新 `mcp-design.md`、`mcp-test.md`、`web-portal/web-test.md`、ADR-008/009 的现行归属与验收表述；历史变更日志中的旧编号保留，并将已取消的方案②写路径泄露探针明确标注为取消。
+**文档同步**：更新 `sprint-plan.md` 风险 / D2 / V1 / V2 及 Sprint 3 #2–#3 状态；更新 `mcp-design.md`、`mcp-test.md`、`web-portal/web-test.md`、ADR-008/009 的现行归属与验收表述；历史变更日志中的旧编号保留，并将已取消的方案②写路径泄露探针明确标注为取消。
 
 **验证**：`bash memory.agent-mate.ai/scripts/local-up.sh` 成功重建本地服务；`bash memory.agent-mate.ai/scripts/iso-probe.sh` 退出码 **0**。V1 实测 `rc=2`、`source=ai-memory.db` 规范化为 `/ai-memory.db`、共享主库计数不变；V2–V4、P4、P5 与方案②硬断言全部通过。静态夹具覆盖三种顶层 `db` 键形式且通过；脚本语法与 `git diff --check` 通过。
 
@@ -143,13 +173,13 @@
 
 **验证**：`bash memory.agent-mate.ai/scripts/mcp-smoke.sh` → 退出码 **0**（握手 / 8 工具断言 / 写入 / 跨进程语义召回 + 关键词检索 / **attestation 正负对照**全绿）。
 
-**回写**：[`sprint_plan.md`](sprint_plan.md) Sprint 3 #1 → **已完成**（含验收口径更正与「变更记录」行）；[`product-backlog.md`](product-backlog.md) #15 说明按实测更正，并注明「漏设即 fail-loud」在 v0.10.0 服务端**不可得**、只能落在门户 spawn 前置断言（随 Sprint 4 #7）；上游事实沉淀见 [`knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md`](knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md)。
+**回写**：[`sprint-plan.md`](sprint-plan.md) Sprint 3 #1 → **已完成**（含验收口径更正与「变更记录」行）；[`product-backlog.md`](product-backlog.md) #15 说明按实测更正，并注明「漏设即 fail-loud」在 v0.10.0 服务端**不可得**、只能落在门户 spawn 前置断言（随 Sprint 4 #7）；上游事实沉淀见 [`knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md`](knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md)。
 
 **ADR：无新增** —— 本轮是实测更正 + 护栏加固，属 [`ADR-010`](adr/ADR-010-specs-single-source-and-doc-structure.md) 文档纪律的执行层，不产生新的架构 / 流程决议。
 
 ### Sprint 2 #11 收口：引用治理 + 能力文档体例定稿
 
-**做了什么**：把 `sprint_plan.md` / `product-backlog.md` 中指向已合并旧 spec 的 85 处引用全部改指合并后文档与对应章节，删除 `link-check.allow` 的两份整文件豁免，并同步因能力文档体例变更而失准的转述。
+**做了什么**：把 `sprint-plan.md` / `product-backlog.md` 中指向已合并旧 spec 的 85 处引用全部改指合并后文档与对应章节，删除 `link-check.allow` 的两份整文件豁免，并同步因能力文档体例变更而失准的转述。
 
 **引用改写（旧名 → 新落点）**：`multiuser_isolation.md` → `mcp/mcp-design.md`（§5 配方族 / §6.2 V1–V4 / §6.4 未决前提 / §7 五个坑）；`mcp_tool_inventory.md` → `mcp/mcp-design.md` §8；`upstream_coupling_surface.md` → `mcp/mcp-design.md` §9；`admin_portal_design.md` → `web-portal/web-design.md` / `web-portal/web-stories.md` / `web-portal/web-test.md`（按设计 / 验收条件 / 测试清单分流）；`asset_isolation_plan.md` → `architecture.md` §5；`deployment_strategy.md` §0 → `architecture.md` §2；`dev-plan.md` §3 / §3.3 / §3.4 / §4 / §5 → `deployment.md` §3 / §7.3 / §7.2 / §8 / §9；`deploy/deployment-plan.md` → `deployment.md`。
 
@@ -161,7 +191,7 @@
 
 **验证**：`make doc-links` → 30 文件 / 491 链接，**0 悬空**，允许清单豁免 **2** 个文件（原 4 个）；两份文件行数与表格列数逐行比对未变。落盘回顾文档后复跑：31 文件 / 498 链接，仍 **0 悬空**。
 
-**Sprint 2 收官**：`sprint_plan.md` 的 Sprint 2 加「**状态：已结束**（全部条目完成）」，其 `Retrospective` 由阶段性回顾改为**定稿**（补 3 条本轮实证：档位文档体例 = 只列增量 + 连续编号；能力说明必须与探针实测逐项对齐；被引文档改版会让引用方转述静默过时）。回顾落盘 [`knowledge/docs/spec-doc-conventions.md`](knowledge/docs/spec-doc-conventions.md)（`knowledge/README.md` 索引同步）—— **ADR：无新增**（本轮的体例与引用纪律是 [`ADR-010`](adr/ADR-010-specs-single-source-and-doc-structure.md) 的执行层细化，不产生新的架构/流程决议，避免 ADR 碎片化）。
+**Sprint 2 收官**：`sprint-plan.md` 的 Sprint 2 加「**状态：已结束**（全部条目完成）」，其 `Retrospective` 由阶段性回顾改为**定稿**（补 3 条本轮实证：档位文档体例 = 只列增量 + 连续编号；能力说明必须与探针实测逐项对齐；被引文档改版会让引用方转述静默过时）。回顾落盘 [`knowledge/docs/spec-doc-conventions.md`](knowledge/docs/spec-doc-conventions.md)（`knowledge/README.md` 索引同步）—— **ADR：无新增**（本轮的体例与引用纪律是 [`ADR-010`](adr/ADR-010-specs-single-source-and-doc-structure.md) 的执行层细化，不产生新的架构/流程决议，避免 ADR 碎片化）。
 
 ### Sprint 2 #10 定稿核查 + 两处文档体例改造（#11 扩展）
 
@@ -176,7 +206,7 @@
 | LLM 选择 | `tier = smart` + `qwen-plus` + `qwen3.7-text-embedding`（`dim = 1024`）+ 显式 `base_url` | [`architecture.md`](architecture.md) §2.1 #3/#4 · [`adr/ADR-007`](adr/ADR-007-qwen-private-maas-endpoint-and-measured-embedding-dim.md) · [`deployment.md`](deployment.md) §5.3 |
 | 备份选择 | OSS 私有桶（香港 + SSE）+ 每日外迁 + sha256 校验 + RPO ≤ 24h / RTO ≤ 2h | `product-backlog.md` #9 · [`deployment.md`](deployment.md) §8 |
 
-清单已落入公开文档 [`mcp/mcp-capabilities.md`](mcp/mcp-capabilities.md)；`product-backlog.md` #19 → **Done**。**唯一剩余**：生产环境上线后用 `initialize` 回包核对实际暴露工具数 —— 已并入 `sprint_plan.md` **Sprint 5 #8 上线验收**，不再挂在执行条目里造成假性阻塞。
+清单已落入公开文档 [`mcp/mcp-capabilities.md`](mcp/mcp-capabilities.md)；`product-backlog.md` #19 → **Done**。**唯一剩余**：生产环境上线后用 `initialize` 回包核对实际暴露工具数 —— 已并入 `sprint-plan.md` **Sprint 5 #8 上线验收**，不再挂在执行条目里造成假性阻塞。
 
 **二、[`mcp/mcp-capabilities.md`](mcp/mcp-capabilities.md) 结构重构（用户视角）**
 
@@ -188,7 +218,7 @@
 
 工具数与成员**以运行时实测为准**，非手工整理：档位计数用 [`../scripts/profile-probe.sh`](../scripts/profile-probe.sh)（7 档全绿），成员清单用逐档 `tools/list`，功能说明用 `memory_capabilities` 的 verbose drilldown（8 族，101/101 取到完整 `docs`）—— 裸 `tools/list` 的 `description` 是被截断的短描述，不可用于对外说明。
 
-**三、[`sprint_plan.md`](sprint_plan.md) 体例改造**
+**三、[`sprint-plan.md`](sprint-plan.md) 体例改造**
 
 - **阻断级风险单表化**：原「风险 / 必须落地的防线 / 验证方法」三张表合并为**一张 11 列表**（编号 / 级别 / 类型 / 标题 / 说明 / 影响 / 解决方案 / 验证方法 / 关联文档 / 状态 / 更新日期）；**R1–R3 + D1–D5 + V1–V4 全部成行并保留编号**，风险行的「解决方案」指向 D 行、「验证方法」指向 V 行，维持跨条目引用锚点。
 - **级别换算**（原用「严重 / 高」，新体系为 致命 / 阻塞 / 严重 / 中 / 低）：
@@ -257,7 +287,7 @@
 
 **未做（显式移交）**：把 `--profile` 写进 SSH 模板与门户模板 = **Sprint 3 #2**（Backlog #12 AC「按 Sprint 2 的定档决议，把 `--profile` 写入门户模板与 SSH 模板」），本轮按「只完成 #9、范围最小化」口径不动模板；`product-backlog.md` #12 / #19 的描述列留待落地时一并回写（本轮未授权改 backlog）。
 
-**回写**：[`mcp/mcp-design.md`](mcp/mcp-design.md) §8.1（实测引文）+ §8.3（由「待决策」改为决议表 #1–#4）+ 变更记录 · [`sprint_plan.md`](sprint_plan.md) #9 完成态 + 变更记录 · [`knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md`](knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md)（档位实测表与教训）。
+**回写**：[`mcp/mcp-design.md`](mcp/mcp-design.md) §8.1（实测引文）+ §8.3（由「待决策」改为决议表 #1–#4）+ 变更记录 · [`sprint-plan.md`](sprint-plan.md) #9 完成态 + 变更记录 · [`knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md`](knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md)（档位实测表与教训）。
 
 ### 多语言探针结论 + 门户 key 收尾（Sprint 2 #8 / #6）
 
@@ -278,7 +308,7 @@
 - **复现**：`bash memory.agent-mate.ai/scripts/i18n-probe.sh`（隔离库 `/data/users/i18n-probe/`，不碰主库与 iso 库；三阶段分进程；退出码 0/10/20/30/40/50；`I18N_PROBE_STRICT=1` 把语言边界当断言防上游漂移）。首跑 `1789958920-48352` / 默认复跑 `1789959024-49737` / STRICT 复跑 `1789959038-49972` 全绿（含 CONFLICT 幂等分支）。交叉验证：Cursor `ai-memory-local` 客户端直调结论一致（标记 `i18n-cross-20260921`）。
 - **工程口径**：中文检索一律走 `memory_recall`；关键词通路只用于 ASCII 标记与中文整段引用。
 - **#6 key 验证**：`qwen-verify.sh --key` → `embed_model=qwen3.7-text-embedding-flash`、`dim=1024`（同工作空间、同模型）；另以 `-e DASHSCOPE_API_KEY` 覆盖注入隔离会话复核 —— 写入成功 + 跨进程召回 `mode=hybrid`（embedder 未降级）、stderr 无鉴权失败。
-- **回写**：[`product-backlog.md`](product-backlog.md) #10（ToDo → Done；改动授权来源 = 该行验收条件「给出明确结论并回写本行描述」）· [`sprint_plan.md`](sprint_plan.md) #6/#8 + 变更记录 · [`mcp/mcp-test.md`](mcp/mcp-test.md) §1 L1.6 + §4-E（TC-I18N-01..06）+ §5 · [`mcp/mcp-design.md`](mcp/mcp-design.md) §2 能力边界 + §9 契约点 J4 + §10 · [`knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md`](knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md) 多语言专表 + 教训 #10 升级 · [`architecture.md`](architecture.md) §4.1 + §7。
+- **回写**：[`product-backlog.md`](product-backlog.md) #10（ToDo → Done；改动授权来源 = 该行验收条件「给出明确结论并回写本行描述」）· [`sprint-plan.md`](sprint-plan.md) #6/#8 + 变更记录 · [`mcp/mcp-test.md`](mcp/mcp-test.md) §1 L1.6 + §4-E（TC-I18N-01..06）+ §5 · [`mcp/mcp-design.md`](mcp/mcp-design.md) §2 能力边界 + §9 契约点 J4 + §10 · [`knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md`](knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md) 多语言专表 + 教训 #10 升级 · [`architecture.md`](architecture.md) §4.1 + §7。
 
 ### 文档风格收口：自有全仓文档去 emoji / 图标
 
@@ -301,7 +331,7 @@
 
 **验证**：`make doc-links` 26 文件 / 236 链接无悬空；全仓自有 md 复查后仅剩上述 1 处例外。
 
-**排期**：计入 Sprint 2 —— `sprint_plan.md` 新增 #13（需求覆盖审计 + 回溯引用）与 #14（本次风格收口），均标记完成。
+**排期**：计入 Sprint 2 —— `sprint-plan.md` 新增 #13（需求覆盖审计 + 回溯引用）与 #14（本次风格收口），均标记完成。
 
 ### 3. 回顾归档：ADR-011 与批处理操作教训（2026-09-21）
 
@@ -383,7 +413,7 @@
 
 **整合时订正的历史不一致**（同一事实多处叙述留下的矛盾，借整合统一）：健康探测不用 `curl`（镜像内无 curl/wget，改判 serve 日志 + `doctor`）· 备份外迁频率统一为**每日** · 占位符统一 `<VPS4_IP>` · 档位工具数统一为**实际注册数**（core 8 / graph 20 / admin 22 / power 57 / full 101）· schema 并写 80（制品层）与 81（参考层）· 删除 `dev-plan` 中误提的 gitleaks。
 
-**零改动文件**：`sprint_plan.md`、`product-backlog.md`（用户指定）；前者仅**追加** Sprint 2 #12 与一行变更记录（含旧→新文件名映射）。5 份 ADR（004/005/006/008/009）**仅**同步路径与指向，决议文字一字未改，文末追加一行同步说明。
+**零改动文件**：`sprint-plan.md`、`product-backlog.md`（用户指定）；前者仅**追加** Sprint 2 #12 与一行变更记录（含旧→新文件名映射）。5 份 ADR（004/005/006/008/009）**仅**同步路径与指向，决议文字一字未改，文末追加一行同步说明。
 
 **验证**：`make doc-links` 24 文件 / 201 链接无悬空（豁免 4 文件）；`make secret-check` 干净；`make preflight-test` 5/5；`iso-probe.sh` exit 0（A/B/C 三组全绿）。
 
@@ -398,7 +428,7 @@
 
 | # | 遗留 | 处置 |
 | --- | --- | --- |
-| 1 | ~~`product-backlog.md` / `sprint_plan.md` 内部仍指向已合并的旧文件名~~ —— **已于 2026-09-21 清空** | 85 处引用全部改指合并后文档与对应章节（历史叙述行降级为纯文本），`link-check.allow` 两份整文件豁免同步删除（豁免 4 → 2）；此后护栏覆盖全部自有 spec，见「Sprint 2 #11 收口」小节 |
+| 1 | ~~`product-backlog.md` / `sprint-plan.md` 内部仍指向已合并的旧文件名~~ —— **已于 2026-09-21 清空** | 85 处引用全部改指合并后文档与对应章节（历史叙述行降级为纯文本），`link-check.allow` 两份整文件豁免同步删除（豁免 4 → 2）；此后护栏覆盖全部自有 spec，见「Sprint 2 #11 收口」小节 |
 | 2 | 两份运维模板 `hk_vps_4_settings.md` / `vps4_new_deployment_instruction.md` 内部链接同样悬空 | 同上；文件待移除，关键信息已摘编进 `architecture.md` / `deployment.md` |
 | 3 | `secrets.local.hk_vps_4.md` 文件名含旧目录名 | `secrets.local*` 通配仍覆盖，不影响忽略；是否改名为 `secrets.local.md` 待定 |
 | 4 | 实际 1,748 行 vs 计划 1,590 行 | 因上游契约面 A–K 决定**全量保留**（升级预检的逐项判据，压缩会削弱护栏） |

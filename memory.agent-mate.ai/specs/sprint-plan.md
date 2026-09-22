@@ -1,4 +1,4 @@
-# sprint_plan — memory.agent-mate.ai 产品化
+# sprint-plan — memory.agent-mate.ai 产品化
 
 > **用途**：本仓的短周期执行清单 —— 做什么、卡在哪、验收是什么。
 > **排期与状态的唯一真相源**：本文件。`product-backlog.md` 的 `Sprint` 列是本文件排期的**投影**（只回填编号，不改该表的 `描述` / `验收条件` / `状态` 语义）。
@@ -129,7 +129,7 @@ Sprint Goal: 本地启动 + 探针明确方案
 - **只有生产环境才成立的验证**（如 `initialize` 回包核对）单独登记到上线验收，不要挂在执行条目里当「未完成」，否则会长期假性阻塞。
 - 对外文档（用户可阅读的部分）示例一律占位符化，不出现真实地址 / 端口 / 密钥。
 - 变更体例或内容后，除更新被引文档，同时 **grep 引用方的转述句**（分组数 / 例子数 / 章节号），把「描述同步」当成变更的一部分。
-- `link-check.allow` 的**整文件豁免只是过渡态**：每次条目收口都检查能否缩小（本轮把 `sprint_plan.md` / `product-backlog.md` 移出豁免，4 → 2）。
+- `link-check.allow` 的**整文件豁免只是过渡态**：每次条目收口都检查能否缩小（本轮把 `sprint-plan.md` / `product-backlog.md` 移出豁免，4 → 2）。
 
 ---
 
@@ -158,25 +158,20 @@ Sprint Goal: MCP 本地安全边界与运维行为定档
 ### Retrospective
 
 **本轮做得好**
-- RID 解决方案已用稳定锚点串联 Product Backlog、Sprint Backlog 与 design/test 依据；`make doc-links` 验证 33 个 Markdown 文件、627 个相对链接，0 悬空。
+- RID 解决方案已用稳定锚点串联 Product Backlog、Sprint Backlog 与 design/test 依据；RID 表、Sprint ToDo 表与 Product Backlog 的状态同批改齐，不再出现「同文件自相矛盾」。
+- 研究类条目的交付物落成「脚本 + 退出码契约」：#4 与 #5 的结论分别落在可复跑探针与 [`../scripts/maintain-user-dbs.sh`](../scripts/maintain-user-dbs.sh)（cron 入口），而不是文档里的一段内联命令。
+- 「删文档 / 改名后留悬空引用」变成了可检出缺陷：`make doc-links` 是本次收口的判定依据，而不是靠人工 grep 记得住。
 
 **本轮学到**
-- 单一真源约束的是事实与状态不重复，不排斥双向导航；只链接文件顶部或只写 Sprint 名称，仍不足以构成可核对的 traceability。
-- Retrospective 的最低持久化落点应是实际交付 Sprint；ADR 与 knowledge 是按持久价值追加的产物，不能替代 Sprint 回顾。
-
-**下轮改进**
-- 新增 RID 解决方案时，同批建立 Product 条目锚点、Sprint 执行锚点和 design/test 链接，并在覆盖矩阵逐项核对。
-
-**#5 每用户库维护定档补记（2026-09-21）**
-
-本轮学到（同一 Sprint 内的补充，独立于上条）：
+- 单一真源约束的是事实与状态不重复，不排斥双向导航；只链接文件顶部或只写 Sprint 名称，不足以构成可核对的 traceability。
 - **「配置生效」不等于「行为生效」**：`[limits]`（#4）与维护覆盖面（#5）都只能靠**可观测产物**断言，不能靠日志措辞 —— #4 的向量触顶日志 target 不被默认过滤器覆盖，曾因此假失败。
 - **「谁负责哪一段」必须读源码，不能照抄方案文档**：#5 实测推翻了 `mcp-design.md` §5.3「`gc` 对 TTL/WAL 覆盖面未验」的悬置 —— `gc` 属 CLI 写命令，post-run `wal_checkpoint(TRUNCATE)` **已覆盖 WAL**；但 **TTL 驱逐并非 `gc` 独有**，`store`/`list`/`recall`/`import` 与 MCP `memory_recall` 都会经 `db::gc_if_needed` 惰性清扫 ⇒ **`gc` 计数 ≠ 过期总量**，维护作业不能靠业务查询代劳。
 - **与活进程共享资源的断言默认是竞态**：WAL 归零断言首版未等写入方静默，因 `memory_store` 之后的 deferred-audit 追加而残留 107152 字节；改为「连续 5 次采样无变化」后才确定性归零。
 - **副作用会推翻绝对计数断言**：非干跑 `curator` 会写入**自报告记忆** ⇒ 多库维护断言必须用相对口径（计数不下降 + 存活 id 可读 + 无跨库串号）。
-- **研究类条目的交付物是「脚本 + 退出码契约」**：#5 的结论落在 [`../scripts/gc-probe.sh`](../scripts/gc-probe.sh)（7 项断言）与 [`../scripts/maintain-user-dbs.sh`](../scripts/maintain-user-dbs.sh)（cron 入口），而不是文档里的一段内联命令。
+- Retrospective 的最低持久化落点应是**实际交付该工作的 Sprint**；ADR 与 `specs/knowledge/` 是按持久价值追加的产物，不能替代 Sprint 回顾。
 
-下轮改进：
+**下轮改进**
+- 新增 RID 解决方案时，同批建立 Product 条目锚点、Sprint 执行锚点和 design/test 链接，并在覆盖矩阵逐项核对。
 - 断言凡涉及「与另一个活进程共享的资源」，先做**静默/静止等待**再断言终态，避免把调度抖动当成功能缺陷。
 - 新增任何「批处理入口」时，**同一次改动**就要把它的路径约束（显式 `--db`）加进 `make attestation-paths` 的断言面；#5 已按此把护栏扩到五路径，后续沿用。
 
@@ -190,24 +185,33 @@ Sprint Goal: 门户开发并与 MCP 集成
 
 | # | 事项 | 类别 | 模块 | 验收条件 | 关联文档 | 说明 | 状态 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 0 | web-portal 设计 | 任务 | Web App | 用户批准验收 | web-stories.md, web-design.md, web-test.md, mockups folder | — | ToDo |
-| 1 | admin portal — **登录与访问控制** | 功能 | Web App | 仅持有效 Cloudflare Access 身份者可访问管理域名；在 MCP 域名上请求管理 API 被**拒绝** | `product-backlog.md` #2 · [`web-portal/web-design.md`](./web-portal/web-design.md) §6 | — | ToDo |
+| 0 | web-portal 设计 | 任务 | Web App | 用户批准验收 | [`web-portal/web-stories.md`](./web-portal/web-stories.md) · [`web-portal/web-design.md`](./web-portal/web-design.md) · [`web-portal/web-test.md`](./web-portal/web-test.md) · `mockups/` | 首个增量已落盘：故事与 AC（13 个故事 / 71 条 Given-When-Then）、AC ↔ 用例映射、跨文档故事号引用收口；待用户整体批准。 | ToDo |
+| 1 | admin portal — **登录与访问控制** | 功能 | Web App | 仅持有效 Cloudflare Access 身份者可访问管理域名；在 MCP 域名上请求管理 API 被**拒绝** | `product-backlog.md` #2 · [`web-portal/web-stories.md`](./web-portal/web-stories.md) S10 · [`web-portal/web-design.md`](./web-portal/web-design.md) §6 | — | ToDo |
 | 2 | admin portal — **key 生命周期** | 功能 | Web App | 签发 / 列出元信息 / 修改 / 轮换 / 删除五个操作均可用；明文仅在创建响应中出现一次；吊销后新建会话被拒、既有会话被终止 | `product-backlog.md` #3 · [`web-portal/web-stories.md`](./web-portal/web-stories.md) S2 | — | ToDo |
-| 3 | admin portal — **记忆身份与数据隔离（门户侧）** | 功能 | Web App | 每用户独立身份与独立库，建用户即就绪；跨用户检索命中不到；库文件属主为 `aimem` | `product-backlog.md` #4 · [`web-portal/web-stories.md`](./web-portal/web-stories.md) S4 | — | ToDo |
+| 3 | admin portal — **记忆身份与数据隔离（门户侧）** | 功能 | Web App | 每用户独立身份与独立库，建用户即就绪；跨用户检索命中不到；库文件属主为 `aimem` | `product-backlog.md` #4 · [`web-portal/web-stories.md`](./web-portal/web-stories.md) S1 / S4 | — | ToDo |
 | <a id="s4-audit-view"></a>4 | admin portal — **审计视图** | 功能 | Web App | 建用户 / 签发 / 轮换 / 吊销 / 每次会话开始（含解析出的库路径）均可查询；日志中不出现令牌明文 | `product-backlog.md` #5 · [`web-portal/web-stories.md`](./web-portal/web-stories.md) S5 · [`web-portal/web-test.md`](./web-portal/web-test.md) §2 | — | ToDo |
-| 5 | admin portal — **容量、配额与限流（门户侧）** | 功能 | Web App | 上游已支持项（配额 / 页大小）以配置纳管而非自建；门户自建的**会话级**并发上限、空闲超时、单会话最长时长在超限时**明确拒绝**；FS 级磁盘配额方案定稿 | `product-backlog.md` #6 · `src/config.rs:3703-3760` | — | ToDo |
-| 6 | **Integration Instructions 页面** | 功能 | Web App | 新用户按页面指引 ≤ 3 步完成客户端接入并成功调用一次工具；至少支持中 / 英双语切换 | `product-backlog.md` #7 · [`web-portal/web-stories.md`](./web-portal/web-stories.md) S3 · [`web-portal/web-design.md`](./web-portal/web-design.md) §2 | — | ToDo |
-| <a id="s4-mcp-session-bridge"></a>7 | **门户 ↔ MCP 会话桥**（HTTP MCP ↔ 子进程 stdio） | 功能 | Web App | 客户端以 `memo_` 令牌经 `<MCP_HOST>/mcp` 建立会话并完成一次写入 + 召回；**一会话一子进程、禁止跨用户复用/池化**（D3）；会话结束子进程被回收 | `product-backlog.md` #14 · [`web-portal/web-design.md`](./web-portal/web-design.md) §3 | — | ToDo |
-| 8 | 定制 — **公网入口与认证边界**落地 | 功能 | 部署 | 两个域名分流正确（管理面 CF Access / MCP 面令牌）；跨面调用被拒；新增公网入口的决议已同步到 `architecture.md` §2 | `product-backlog.md` #16 · [`web-portal/web-design.md`](./web-portal/web-design.md) §6 · [`web-portal/web-stories.md`](./web-portal/web-stories.md) S9 | — | ToDo |
-| 9 | 定制 — **升级治理：门户镜像随上游重建** | 功能 | 治理 | 门户镜像的构建从 [`../upstream.lock`](../upstream.lock) 注入 tag；升级清单含「重建门户镜像」一步并被演练过，避免门户与部署制品版本漂移 | `product-backlog.md` #18 · [`web-portal/web-design.md`](./web-portal/web-design.md) §11 | — | ToDo |
+| 5 | admin portal — **容量、配额与限流（门户侧）** | 功能 | Web App | 上游已支持项（配额 / 页大小）以配置纳管而非自建；门户自建的**会话级**并发上限、空闲超时、单会话最长时长在超限时**明确拒绝**；FS 级磁盘配额方案定稿 | `product-backlog.md` #6 · [`web-portal/web-stories.md`](./web-portal/web-stories.md) S7 · `src/config.rs:3703-3760` | — | ToDo |
+| 6 | **Integration Instructions 页面** | 功能 | Web App | 新用户按页面指引 ≤ 3 步完成客户端接入并成功调用一次工具；至少支持中 / 英双语切换 | `product-backlog.md` #7 · [`web-portal/web-stories.md`](./web-portal/web-stories.md) S6 · [`web-portal/web-design.md`](./web-portal/web-design.md) §2 | — | ToDo |
+| <a id="s4-mcp-session-bridge"></a>7 | **门户 ↔ MCP 会话桥**（HTTP MCP ↔ 子进程 stdio） | 功能 | Web App | 客户端以 `memo_` 令牌经 `<MCP_HOST>/mcp` 建立会话并完成一次写入 + 召回；**一会话一子进程、禁止跨用户复用/池化**（D3）；会话结束子进程被回收 | `product-backlog.md` #14 · [`web-portal/web-stories.md`](./web-portal/web-stories.md) S3 / S4 / S13 · [`web-portal/web-design.md`](./web-portal/web-design.md) §3 | — | ToDo |
+| 8 | 定制 — **公网入口与认证边界**落地 | 功能 | 部署 | 两个域名分流正确（管理面 CF Access / MCP 面令牌）；跨面调用被拒；新增公网入口的决议已同步到 `architecture.md` §2 | `product-backlog.md` #16 · [`web-portal/web-design.md`](./web-portal/web-design.md) §6 · [`web-portal/web-stories.md`](./web-portal/web-stories.md) S10 / S13 | — | ToDo |
+| 9 | 定制 — **升级治理：门户镜像随上游重建** | 功能 | 治理 | 门户镜像的构建从 [`../upstream.lock`](../upstream.lock) 注入 tag；升级清单含「重建门户镜像」一步并被演练过，避免门户与部署制品版本漂移 | `product-backlog.md` #18 · [`web-portal/web-stories.md`](./web-portal/web-stories.md) S11 / S12 · [`web-portal/web-design.md`](./web-portal/web-design.md) §11 | — | ToDo |
 
 ### Retrospective
 
+**本轮做得好**
+- `web-portal/web-stories.md` 按 ATDD 重写（13 个故事 / 71 条 Given-When-Then AC）后**没有停在「本文件自洽」**：同批把外部引用面（`product-backlog.md` / `sprint-plan.md` / 证据页）一次扫到零残留，并让故事索引成为跨文档故事号的**唯一对照表**（含 `AC` 与 `测试用例` 两列）。
+- 落盘顺序是「**先在 `web-test.md` 登记用例号，再回填索引**」，避免写出指向尚不存在用例号的索引。
+- 用只读评审把「单向引用」逐条挖出（S1 / S8 / S9 / S12 / S13 的 Sprint 落点未回链）并在**同轮**修完，而不是留到下轮。
+
 **本轮学到**
-- 待填（本 Sprint 结束时补）。
+- **编号空间会撞名**：故事号 S1–S13 与既有的「静默失败点 S1–S4」（`deployment.md` §7.2 / `web-design.md` §5）和 `i18n-probe.sh` 的测试标签 `S1–S12` 同形；`grep` 清扫会同时命中三者，既可能误改也可能因噪声漏判 —— 本轮 5 个条目的错指正是这样被掩盖的。见 [`knowledge/docs/spec-doc-conventions.md`](./knowledge/docs/spec-doc-conventions.md) 第 10 条。
+- **「双向可查」不会自动成立**：索引里声明 `Sprint 5 #7` 这类落点，被指的那一行不会自己长出回链；声明双向等于承诺同批回填（同上第 11 条）。
+- **同一事实两处写法会立刻分叉**：S12 的用例集合在故事索引与「已知限制」表各写一遍，第一次就漏了 `TC-P-L1-09`。
 
 **下轮改进**
-- 待填。
+- 新增或重写一份 spec 的编号体系时，同批产出「编号 → 引用方」对照表并逐处回填；只改权威文档不算完成。
+- 造编号前先全仓扫同形编号，并在变更记录的**边界**段登记「同名不同义清单」（本轮已登记：`deployment.md` §7.2 S1–S3 · `web-design.md` §5 S4 · `web-test.md` / `sprint-plan.md` 中沿用该编号的行 · `i18n-probe.sh` 标签 S1–S12）。
+- 故事号的 Backlog / Sprint 归属以**引用方的实际回链**为准，不凭语义相近推断（本轮据此把 S3 的 Backlog 归属由 `#3 / #14` 校正为 `#14 / #28`）。
 
 ---
 
@@ -224,9 +228,9 @@ Sprint Goal: 生产上线与备份闭环
 | 3 | **编写 `memory.agent-mate.ai/backup/` 备份脚本** | 任务 | 部署 | `backup-and-push.sh`（快照 → sha256 → ossutil 上传 → **回读比对** → 失败非零退出）与 `restore-drill.sh`（拉最新 → 校验 → restore → `doctor` 通过）可重复执行；`make backup` / `make restore-drill` 可用；**遍历 `/data/users/*`** | `product-backlog.md` #9 · `deployment.md` §8 | — | ToDo |
 | 4 | **部署执行（ai-memory）** | 任务 | 部署 | `deployment.md` §3 八步落地 + §7.3 冒烟全绿 | `deployment.md` §3 · [`../deploy/README.md`](../deploy/README.md) | — | ToDo |
 | 5 | **admin portal 部署 + 多用户隔离落地** | 功能 | 部署 | 走通「签发 key → 建立会话 → 隔离生效」；通过 [`mcp/mcp-design.md`](./mcp/mcp-design.md) §6.2 与 [`web-portal/web-test.md`](./web-portal/web-test.md) §3；**且必须先通过 Sprint 3 的隔离本地负向回归（含 V1）** | `product-backlog.md` #4 / #26 · 本文件 Sprint 3 #3 | — | ToDo |
-| <a id="s5-access-surfaces"></a>6 | 定制 — **接入面**落地（HTTP MCP + SSH stdio） | 功能 | 部署 | 两条路径都能完成 MCP 握手并成功读写；**停掉门户后 SSH 路径仍可用**（降级不失效） | `product-backlog.md` #14 · [`web-portal/web-stories.md`](./web-portal/web-stories.md) S3 · [`web-portal/web-design.md`](./web-portal/web-design.md) §2 | — | ToDo |
-| 7 | 定制 — **备份与恢复**落地（含门户自身库）+ 首次外迁 + 恢复演练 | 功能 | 部署 | 每用户库逐一快照 + manifest；**门户自身库**（与用户记忆库分离存放）纳入同一外迁流程；按 RPO ≤ 24h / RTO ≤ 2h / 日备 30 代 + 月备 12 代 落地；恢复演练可重复执行且通过 | `product-backlog.md` #9 · [`mcp/mcp-design.md`](./mcp/mcp-design.md) §5.4 | — | ToDo |
-| <a id="s5-production-acceptance"></a>8 | **上线验收** | 任务 | 部署 | 三份验收清单全部通过：`deployment.md` §7.3 冒烟 + [`mcp/mcp-design.md`](./mcp/mcp-design.md) §6.2 + [`web-portal/web-test.md`](./web-portal/web-test.md) §3；**另用 `initialize` 回包核对对外模板实际暴露的工具数**（用户 `core` = 8 / 管理员 `admin` = 22）—— 承接 **Sprint 2 #10** 的唯一剩余项；同时作为 **D5 / V1** 的执行点 | `product-backlog.md` #26 | — | ToDo |
+| <a id="s5-access-surfaces"></a>6 | 定制 — **接入面**落地（HTTP MCP + SSH stdio） | 功能 | 部署 | 两条路径都能完成 MCP 握手并成功读写；**停掉门户后 SSH 路径仍可用**（降级不失效） | `product-backlog.md` #14 · [`web-portal/web-stories.md`](./web-portal/web-stories.md) S3 / S8 · [`web-portal/web-design.md`](./web-portal/web-design.md) §2 | — | ToDo |
+| 7 | 定制 — **备份与恢复**落地（含门户自身库）+ 首次外迁 + 恢复演练 | 功能 | 部署 | 每用户库逐一快照 + manifest；**门户自身库**（与用户记忆库分离存放）纳入同一外迁流程；按 RPO ≤ 24h / RTO ≤ 2h / 日备 30 代 + 月备 12 代 落地；恢复演练可重复执行且通过 | `product-backlog.md` #9 · [`web-portal/web-stories.md`](./web-portal/web-stories.md) S9 · [`mcp/mcp-design.md`](./mcp/mcp-design.md) §5.4 | — | ToDo |
+| <a id="s5-production-acceptance"></a>8 | **上线验收** | 任务 | 部署 | 三份验收清单全部通过：`deployment.md` §7.3 冒烟 + [`mcp/mcp-design.md`](./mcp/mcp-design.md) §6.2 + [`web-portal/web-test.md`](./web-portal/web-test.md) §3；**另用 `initialize` 回包核对对外模板实际暴露的工具数**（用户 `core` = 8 / 管理员 `admin` = 22）—— 承接 **Sprint 2 #10** 的唯一剩余项；同时作为 **D5 / V1** 的执行点 | `product-backlog.md` #26 · [`web-portal/web-stories.md`](./web-portal/web-stories.md) S7 | — | ToDo |
 
 > **执行本 Sprint 时须核对的静默失败点**：`deployment.md` §7.2 的三个（embedder 降级、curator fail-open `tagged=0`、config 挂载路径错误导致 tier 退回 semantic）+ 本文件 RID Registry 的 **R1**。**上线前 D5 必须关闭**：Sprint 3 的负向验证未通过则不得上线。
 
@@ -250,7 +254,7 @@ Sprint Goal: 升级治理闭环
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | 上游升级**邮件**提醒 | 功能 | 治理 | 检测到「适合升级」的上游版本时发出邮件（现状只有 GitHub issue，不满足需求） | `product-backlog.md` #21 · `deployment.md` §9.1 | — | ToDo |
 | 2 | **历次版本升级跟踪与记录**（过程资产） | 功能 | 治理 | 每次升级留痕：版本 / 日期 / 判据结论 / 详细步骤 / 验证结果 / 回滚点 | `product-backlog.md` #22 · `deployment.md` §9 | — | ToDo |
-| 3 | **最低耦合、尽量自动化的升级方案** | 功能 | 治理 | 一次升级可在「改 [`../upstream.lock`](../upstream.lock) → 跑预检 → 重建/重启」内完成，无需手工比对版本号；门户镜像重建纳入同一条链路 | `product-backlog.md` #23 · `adr/ADR-004-version-contract-single-source-of-truth.md` | — | ToDo |
+| 3 | **最低耦合、尽量自动化的升级方案** | 功能 | 治理 | 一次升级可在「改 [`../upstream.lock`](../upstream.lock) → 跑预检 → 重建/重启」内完成，无需手工比对版本号；门户镜像重建纳入同一条链路 | `product-backlog.md` #23 · [`web-portal/web-stories.md`](./web-portal/web-stories.md) S12 · `adr/ADR-004-version-contract-single-source-of-truth.md` | — | ToDo |
 | 4 | **制定部署/升级方案与脚本** | 任务 | 治理 | 相关脚本落地且可重复执行 | `product-backlog.md` #24 · `deployment.md` §9 | — | ToDo |
 | 5 | **升级方案端到端验证并文档化** | 任务 | 治理 | 完整演练一次升级（预检 → 部署 → 验收 → **回滚演练**）并留痕。**注意**：回滚**必须**用快照覆盖 —— 上游不拒绝「比自身更新的库」（旧二进制会静默读写不认识的 schema） | `product-backlog.md` #25 · `knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md` | — | ToDo |
 
@@ -290,4 +294,7 @@ Sprint Goal: 升级治理闭环
 | 2026-09-21 | **Sprint 2 #10 定稿核查 + 两处文档体例改造（#11 扩展）**：① **#10 判定已完成** —— 四项最终决议（档位 `core`（8）/ `admin`（22）、i18n 部分支持、LLM `qwen-plus` + `dim 1024`、备份 OSS 私有桶 + 每日外迁）**均已定稿且有落点**，清单已落入 [`mcp/mcp-capabilities.md`](./mcp/mcp-capabilities.md)；`product-backlog.md` #19 → Done；唯一剩余「生产环境 `initialize` 回包核对」并入 **Sprint 5 #8 上线验收** ② 「阻断级风险」三表（风险 / 防线 / 验证）合并为**单表 11 列**（编号 / 级别 / 类型 / 标题 / 说明 / 影响 / 解决方案 / 验证方法 / 关联文档 / 状态 / 更新日期），R1–R3 + D1–D5 + V1–V4 **全部成行并保留编号**（维持 Sprint 2 #5、Sprint 3 #5/#6、Sprint 5 #5/#8 的引用锚点）；级别由原「严重 / 高」换算为 **致命 / 阻塞 / 严重 / 中**，口径写在表下 ③ **Sprint 1–6 各新增 `Retrospective` 章节**（Sprint 1 / 2 写实际内容，3–6 留占位待填）④ **#11 事项扩展**为含上述 ②③ 与能力文档重构，状态置「进行中」 |
 | 2026-09-21 | **Sprint 3 #1 完成（agent attestation 现存路径收口）**：① **口径核对** —— 现存路径全部一致：compose 两处（`ai-memory` / `curator`）、[`deployment.md`](./deployment.md) §4.3 用户行、[`web-portal/web-design.md`](./web-portal/web-design.md) §3.3 门户模板；补 [`mcp/mcp-design.md`](./mcp/mcp-design.md) §5.2 模板的 `-e AI_MEMORY_REQUIRE_AGENT_ATTESTATION=0`（与 `deployment.md` 用户行**逐字一致**），并在 §5.1 注明单人行**依赖容器级**变量（与管理员行口径一致）② **实测更正两处失准表述** —— `mcp-design.md` §9 B3 原写「不设 → 写入 `403 ATTESTATION_FAILED`」，实测 v0.10.0 为 **surface-scoped**：MCP / CLI 缺省**宽松**（写入成功、不报错）、HTTP direct-write 缺省要求签名、`=1` 为全局严格（拒无签名写入）；v0.11 起缺省才翻转为全 surface required。`mcp-test.md` §4-D **TC-ATT-01** 的判据由「写入返回 `attest_level=claimed`」改为**正负对照**（`=0` 成功 / `=1` 被拒）③ **`attest_level=claimed` 不可观测** —— 该措辞出自上游文档与 daemon 启动告警（仅绑非回环且宽松时打印）；v0.10.0 的 MCP 响应 / `memory_get` / `export` / `memories` 表均无此字段（库内带 `attest_level` 的只有 `memory_links` / `governance_rules` / `signed_events` 等表，且为空或 `unsigned`）④ **护栏落地** —— [`../scripts/mcp-smoke.sh`](../scripts/mcp-smoke.sh) 新增**会话 C**（attestation 正负对照，失败退出码 50）；实跑全绿、退出码 0 ⑤ 结论回写 [`knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md`](./knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md) 与 [`change-log.md`](./change-log.md)，`product-backlog.md` #15 说明按实测更正 |
 | 2026-09-21 | **SDD/Scrum 体例收口**：新增 [`sdd-scrum-practices.md`](./sdd-scrum-practices.md) 与 [`ADR-013`](./adr/ADR-013-sdd-scrum-process-doc-boundaries.md)；RID Registry 只保留 R/I/D，解决方案下沉 Product Backlog，V1–V4 归入验收条件；新增 8 条覆盖对照；Sprint 1–6 ToDo 表新增「说明」列，状态列统一为四态枚举 |
+| 2026-09-21 | **门户故事号引用订正与补全**：Sprint 4 #6 由 `S3` 改为 `S6`（接入说明页与 i18n）· #8 由 `S9` 改为 `S10 / S13`（面隔离 + 攻击面）；#1 补 `S10` · #5 补 `S7` · #7 补 `S3 / S4` · #9 补 `S11 / S12`。原因：`web-stories.md` 按 ATDD 重写并新增 S10–S13 后，旧号指向的语义已变（转述静默过时）。各条目的「事项 / 验收条件 / 状态」未改 |
+| 2026-09-21 | **本文件改名**：`sprint_plan.md` → `sprint-plan.md`，按仓内既有改名口径全量同步引用（16 个文件，含 4 份 ADR 与 3 个脚本）；旧名残留 0 处，只在改名记录里保留旧→新映射 |
+| 2026-09-21 | **Sprint 回顾体例与归属校正**：① Sprint 3 回顾由「主块 + 两个补记」合并为**单一聚合**结构（做得好 / 学到 / 下轮改进）；② 门户故事引用收口的回顾按「写入实际交付该工作的 Sprint」由 Sprint 3 迁至 **Sprint 4**；③ Sprint 4 #0「web-portal 设计」的关联文档由纯文本清单改为可点击链接，并补「首个增量已落盘、待整体批准」的说明（状态仍 `ToDo`）。体例见 [`sdd-scrum-practices.md`](./sdd-scrum-practices.md) §2.3 |
 | 2026-09-21 | **Sprint 2 #11 收口并关闭（引用治理 + 能力文档体例定稿）**：① **引用治理** —— 本文件与 `product-backlog.md` 中指向已合并旧 spec 的 **85 处**引用全部改指合并后文档（`mcp/mcp-design.md` §5 / §6.2 / §6.4 / §7 / §8 / §9 · `architecture.md` §2 / §5 / §6 · `deployment.md` §3 / §7.2 / §7.3 / §8 / §9 · `web-portal/web-design.md` §2 / §3 / §6 / §11 · `web-portal/web-stories.md` S1–S9 · `web-portal/web-test.md` §2 / §3），历史叙述行只把链接降级为纯文本；`link-check.allow` 的两份整文件豁免随之删除，`make doc-links` = 30 文件 / 491 链接 / **0 悬空**（豁免 4 → 2；落盘回顾文档后复跑 31 文件 / 498 链接仍 0 悬空）② **能力文档体例定稿** —— 6 张档位表、每张只列本档新增、编号全档连续 1–101、示例入表；同步 `change-log.md` / `web-portal/web-stories.md` AC6.4 / `mcp/mcp-design.md` §8 三处转述 ③ **Sprint 2 状态置「已结束」**，本 Sprint「Retrospective」由阶段性回顾改为定稿 |

@@ -150,7 +150,7 @@ E2 的 4 行 Dockerfile + 两个会话的 payload 就是「β′ 版 mcp-smoke�
 ## Links
 
 - 决议：[`adr/ADR-012`](../../adr/ADR-012-portal-launch-mechanism-no-docker-socket.md) · 升级准入：[`adr/ADR-005`](../../adr/ADR-005-upgrade-admission-gate-layering.md)
-- 设计：[`web-portal/web-design.md`](../../web-portal/web-design.md) §3（D1）· §9 附录（α）· 故事 [`web-stories.md`](../../web-portal/web-stories.md) S1/S8
+- 设计：[`web-portal/web-design.md`](../../web-portal/web-design.md) §3（D1）· §9 附录（α）· 故事 [`web-stories.md`](../../web-portal/web-stories.md) S1 / S8 / S11 / S12 / S13
 - 隔离冻结机制：[`mcp/mcp-design.md`](../../mcp/mcp-design.md) §0.1 · 目录与 sudoers：[`deployment.md`](../../deployment.md) §4.4/§4.5
 - 上游事实：[`knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md`](../upstream-ai-memory/upstream-facts-and-gotchas.md)
 - 代理机制依据：`github.com/Tecnativa/docker-socket-proxy`（README：开关按方法/前缀、无按容器过滤、安全建议）

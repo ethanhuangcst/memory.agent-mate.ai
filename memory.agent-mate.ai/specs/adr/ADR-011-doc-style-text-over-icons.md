@@ -38,7 +38,7 @@ Accepted
 ## Consequences
 
 - 本次落地：自有 spec + plans 共 **14 个文件、180 处**替换；`make doc-links` / `make secret-check` / `make preflight-test` 全绿。
-- 后续收益：状态可被 `grep` 审计（例如 `grep -c "未开始" sprint_plan.md`），覆盖审计与进度统计不再依赖肉眼看图标。
+- 后续收益：状态可被 `grep` 审计（例如 `grep -c "未开始" sprint-plan.md`），覆盖审计与进度统计不再依赖肉眼看图标。
 - 遗留：**1 处显式例外**（ADR-005 脚本输出原文），见 Decision 4；若要消除，须同批改 `scripts/upstream-preflight.sh`（离线自测只断言退出码与关键字，改输出安全）。
 - 防复发：本 ADR 即规则；风格清理类批处理的操作注意（边界 / 原文引用 / 次生排版瑕疵）记入 `knowledge/git-tooling/gotchas.md` 第 5 条。
 
