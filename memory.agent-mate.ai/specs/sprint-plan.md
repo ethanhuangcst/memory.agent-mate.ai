@@ -5,7 +5,7 @@
 > **真相源**：[`architecture.md`](./architecture.md) §2（决议单点）· [`deployment.md`](./deployment.md)（部署与升级计划）· [`../upstream.lock`](../upstream.lock)（版本坐标）
 > **编号口径**：文中 `#N` 指**所在 Sprint** 的条目编号（例：「Sprint 2 #1」= Sprint 2 的第 1 条）。**引用其它文档的条目时优先写条目名，不要写编号** —— 编号会随重排失效。
 > **体例**：RID Registry、Sprint Backlog 与 Product Backlog 的列定义、状态语义和引用边界见 [`sdd-scrum-practices.md`](./sdd-scrum-practices.md)。
-> **as_of**：2026-09-21
+> **as_of**：2026-09-22
 
 ---
 
@@ -195,6 +195,10 @@ Sprint Goal: MCP 本地安全边界与运维行为定档
 
 Sprint Goal: 完成 web-portal 本地开发（设计包定稿 + 3 批可交付批次）
 
+> **当前状态（2026-09-22）**：`#1` 设计包 ①–⑤ **已落盘**（story-mapping / 技术设计 / 界面 / 测试 / 部署），**仅剩「非英文输入实测矩阵」未产出**（它是 Sprint 5 `#4 PSP-M3` 的输入）；`#5` UI 迭代与设计系统收口 **Done**、`#6` specs 一致性审计与界面收口 **Done**（原型 `134/134` 断言全绿，`doc-links` / `secret-check` / `attestation-paths` / `preflight-test` 四条门禁全绿）；`#2`–`#4` 三批 PSP **未开始**。界面经**三轮用户反馈 + 一轮跨文档审计**收口（决议 `D10`–`D14`，页面集 7 → **6**，逐页映射见 [`web-portal/web-design.md`](./web-portal/web-design.md) §14）。
+>
+> **待用户定夺（卡点，不阻塞本 Sprint）**：① **logo 语义重复** —— 新 logo 是横向锁定款（自带 `MEMORY MCP` + `agent-mate.ai`），与相邻的文本品牌名在 hero 与顶栏重复（hero 现读作「MEMORY MCP ｜ AI Memory MCP」）；② **logo 品牌色孤岛** —— 其黄色是站内除危险红外的唯一色相；③ [`web-portal/web-stories.md`](./web-portal/web-stories.md) 故事索引中 **5 条既有用例未被显式引用**（部分因索引使用 `TC-P-L0-02/03` 这类简写，机器核对会漏判）。三项均已登记在 [`web-portal/web-design.md`](./web-portal/web-design.md) §13 / §15 与 [`change-log.md`](./change-log.md)。
+
 ### ToDo
 
 > **批次口径**：本 Sprint 按**功能批次（PSP）**交付，不按任务列条目。判据见 [`sdd-scrum-practices.md`](./sdd-scrum-practices.md) §2.4：每批能独立交付给某类角色使用、有可执行的端到端判据、且不依赖后续批次才能验收。
@@ -202,10 +206,12 @@ Sprint Goal: 完成 web-portal 本地开发（设计包定稿 + 3 批可交付�
 
 | # | 事项 | 类别 | 模块 | 验收条件 | 关联文档 | 说明 | 状态 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | **web-portal 设计包** | 任务 | Web App | 五份交付物定稿：① story-mapping（故事 `S1`–`S13` 与三批 PSP 的归属表）② 技术设计（门户技术栈、HTTP MCP ⇄ stdio 会话桥实现方案、门户数据模型）③ UI 设计（Home / Admin 页面与 `mockups/`）④ 测试方案（[`web-portal/web-test.md`](./web-portal/web-test.md) L0–L3 与 AC 的落地映射）⑤ 部署方案（compose / 挂载 / env / 启动自检）。**另含实测项**：客户端中文 vs 英文提问 × 对外 8 项工具，产出「非英文输入能否命中 MCP 工具」的复现矩阵 | [`web-portal/web-stories.md`](./web-portal/web-stories.md) · [`web-portal/web-design.md`](./web-portal/web-design.md) · [`web-portal/web-test.md`](./web-portal/web-test.md) · [`product-backlog.md`](./product-backlog.md) | 故事与 AC 的首个增量已落盘并经用户确认；本设计包把切片、技术、界面、测试与部署一并定稿。 | ToDo |
+| 1 | **web-portal 设计包** | 任务 | Web App | 五份交付物定稿：① story-mapping（故事 `S1`–`S14` 与三批 PSP 的归属表）② 技术设计（门户技术栈、HTTP MCP ⇄ stdio 会话桥实现方案、门户数据模型）③ UI 设计（6 页原型与 `mockups/`，设计系统与逐页映射见 [`web-portal/web-design.md`](./web-portal/web-design.md) §13–§15）④ 测试方案（[`web-portal/web-test.md`](./web-portal/web-test.md) L0–L3 与 AC 的落地映射）⑤ 部署方案（compose / 挂载 / env / 启动自检）。**另含实测项**：客户端中文 vs 英文提问 × 对外 8 项工具，产出「非英文输入能否命中 MCP 工具」的复现矩阵 | [`web-portal/web-stories.md`](./web-portal/web-stories.md) · [`web-portal/web-design.md`](./web-portal/web-design.md) · [`web-portal/web-test.md`](./web-portal/web-test.md) · [`product-backlog.md`](./product-backlog.md) | ①–⑤ **已落盘**（含 `S14` 与三轮 UI 迭代；界面收口见 [`web-portal/web-design.md`](./web-portal/web-design.md) §13–§15）；**未完成：非英文输入实测矩阵**（Sprint 5 `#4 PSP-M3` 的输入）。 | ToDo |
 | 2 | **PSP-W1「账号与凭证」** | 功能 | Web App | **交付判据**：本地可完成「管理员建用户 → 签发令牌 → 列出元信息 → 轮换 → 吊销即时失效」闭环，且非管理员无法创建用户或令牌。覆盖 `S1` · `S2` · `S10`。**边界**：判据不含「用令牌建立会话」——那是 PSP-W2（接入批次）的产物，本批不得依赖它才能验收 | `product-backlog.md` #27 / #3 / #2 · [`web-portal/web-stories.md`](./web-portal/web-stories.md) S1 / S2 / S10 | 交付给：**管理员**。 | ToDo |
 | <a id="s4-mcp-session-bridge"></a>3 | **PSP-W2「端到端接入」** | 功能 | Web App | **交付判据**：用户持令牌经本地 `/mcp` 完成一次写入 + 召回；A/B 跨用户互不可见；会话结束子进程被回收；超会话级上限时明确拒绝。覆盖 `S3`（含多 key 同库 `AC3.5` / `AC3.7`）· `S4`（含 spawn 前置断言与一会话一子进程）· `S7 AC7.3` · `S13 AC13.1` | `product-backlog.md` #14 / #4 / #28 · [`web-portal/web-stories.md`](./web-portal/web-stories.md) S3 / S4 · [`web-portal/web-design.md`](./web-portal/web-design.md) §3 | 交付给：**用户**；本批次是**首个对外可用**的增量。 | ToDo |
-| <a id="s4-audit-view"></a>4 | **PSP-W3「可运维、可发布」** | 功能 | Web App | **交付判据**：审计五类事件可查且会话行含解析出的库路径；新用户按说明页 ≤ 3 步接入；启动自检四项 fail-closed；门户库不在 `/data` 且容器无 docker socket。覆盖 `S5` · `S6` · `S7 AC7.1/7.6` · `S9` · `S11` · `S12` · `S13 AC13.2/13.3` | `product-backlog.md` #5 / #7 / #6 / #16 · [`web-portal/web-stories.md`](./web-portal/web-stories.md) S5 / S6 / S7 / S9 / S11 / S12 / S13 · [`web-portal/web-test.md`](./web-portal/web-test.md) §2 | 交付给：**运维与新用户**。 | ToDo |
+| <a id="s4-audit-view"></a>4 | **PSP-W3「可运维、可发布」** | 功能 | Web App | **交付判据**：审计五类事件可查且会话行含解析出的库路径；新用户按说明页 ≤ 3 步接入；启动自检四项 fail-closed；门户库不在 `/data` 且容器无 docker socket。覆盖 `S5` · `S6` · `S7 AC7.1/7.6` · `S9` · `S11` · `S12` · `S13 AC13.2/13.3` · `S14` | `product-backlog.md` #5 / #7 / #6 / #16 · [`web-portal/web-stories.md`](./web-portal/web-stories.md) S5 / S6 / S7 / S9 / S11 / S12 / S13 · [`web-portal/web-test.md`](./web-portal/web-test.md) §2 | 交付给：**运维与新用户**。 | ToDo |
+| 5 | **UI 迭代与设计系统收口** | 任务 | Web App | **交付判据**：原型 6 页可评审且经一次性验收脚本 **134 项断言全绿** —— 单色令牌（除危险红与错误浅底外无彩色）、首页三步纵向与 Contact Admin 悬浮窗（微信码 + 邮箱）、能力表三列同屏不裁切、路径与时间戳不被逐字符折断、同一行控件等高同字号、冻结顶栏与页脚（滚动后仍贴边）、分页组件、可逆停用、四语言词表键集合一致、`admin_portal/assets/` 与原型 sha256 一致。承载 `S14`（`AC14.1`–`AC14.12`）· `S6 AC6.7`–`AC6.11` · `S10 AC10.6`–`AC10.10` · `S1 AC1.8` | [`web-portal/web-design.md`](./web-portal/web-design.md) §13–§15 · [`web-portal/web-stories.md`](./web-portal/web-stories.md) S14 · [`web-portal/mockups/`](./web-portal/mockups/) | 交付给：**运维与评审**（设计包的可评审面）。三轮用户反馈驱动（色系 / 版式 / 外框）已闭环；验收证据：`134/134` + 四语言 `220 键 ×4` + 交付副本逐文件 sha256 一致。**原型与 `.verify/` 不入制品**。 | Done |
+| 6 | **specs 一致性审计与界面收口** | 任务 | 文档 / Web App | **交付判据**：`web-portal/*.md` ↔ `mockups/` ↔ 其他 specs 彼此一致且**可机器核对** —— 页面集与命名、语言数、认证模型、`AC`↔`TC` 映射均无冲突；AC 编号连续（`AC1.1`–`AC14.12`，缺口仅为已迁出者）；索引引用的 `TC-P-*` **无悬空**；四条门禁全绿 | [`web-portal/web-design.md`](./web-portal/web-design.md) §14 / §15 · [`web-portal/web-stories.md`](./web-portal/web-stories.md) · [`web-portal/web-test.md`](./web-portal/web-test.md) · [`deployment.md`](./deployment.md) §12.4 · [`product-backlog.md`](./product-backlog.md) #7 · [`architecture.md`](./architecture.md) §1.1 | 交付给：**运维、评审与实现期**（把「原型 ↔ 实现」变成可机械核对的对照表）。审计出并修掉 **7 处不一致 + 1 处悬空链接**；最实质的是 [`deployment.md`](./deployment.md) **缺根凭证要求**（`AC10.8` 原本无法验收）⇒ 新增 §12.4 与 §13 验收项。 | Done |
 
 ### Retrospective
 
@@ -232,6 +238,23 @@ Sprint Goal: 完成 web-portal 本地开发（设计包定稿 + 3 批可交付�
 - **立体例判据前先拿已落盘的实例回代**：新判据写完后，逐条检查现有条目是否违反（本轮据此把 `PSP-M2` 改名、给 `PSP-W1` 的判据去掉后一批才交付的动作）。
 - **「零残留」「已扫齐」类声明要写明扫描面**（文档 / 脚本 / 制品 / 配置）并真扫到；重排类改动一律在变更记录顶部给「**编号基准**」说明。
 
+**UI 迭代轮补充（2026-09-22 同日）**
+
+**本轮做得好**
+- 把「UI 难看 / 布局不合理 / 太密」这类主观反馈**先转成可复现的数字**再动手：自建度量脚本（裁切 · 列宽 · 控件高度 · 折行 · 布局几何）与计算样式探针，于是「EN 8 个工具缺示例」被定位为**渲染被裁切**（表 1180px > 容器 952px）而非数据缺失，「控件高度不一致」被定位为三种高度并存（`47 / 36 / 19px`，其中 `select` 根本没有规则）。
+- 判定「复制按钮没用参考稿样式」时**不靠读 CSS**：把参考稿真渲染出来、裁同一组件并排比对，才查出真因是上一轮把 `.codeblock` 的 8px 圆角误压平（两处 CSS 逐字相同，只读代码必然误判）。
+- 每轮修完**把新断言写回验收脚本**：新增的 4 条断言当场抓出我自己修得不彻底的两处（表格仍溢出、居中导致窄屏撑破）。
+
+**本轮学到**
+- **「类名在原型里用了、CSS 里没有规则」是本轮最多缺陷的共同形态**：`.dialog-actions` / `.dialog-target` / `.btn-danger` / `.section` / `select` 五处皆如此，分别表现为「贴死 / 无区别 / 破坏性按钮与主按钮同形 / 标题贴上文 / 下拉框原生 19px」。造组件后必须回扫「类名 ↔ 规则」对账。
+- **布局类断言用 `is_visible()` 会给出假绿** —— 溢出容器内的元素仍算「可见」，所以「第三列被推出视口」能长期漏检 ⇒ 必须断言 `scrollWidth <= clientWidth` **且**元素右缘在视口内。
+- **网格项上的 `margin-inline: auto` 会取消 stretch**：元素转为 `fit-content` 定宽 —— 居中反而被用户感知为「内容变窄」，且窄屏下 min-content 会撑破视口（实测 390px 视口下 `.content` 变 696px）。
+- **`rem` 基准是 17px 而非 16px**：按 16px 估算会系统性偏小（本轮在验收阈值上踩过一次，已写入 `web-design.md` §13.1 的易错点）。
+
+**下轮改进**
+- 新增 CSS 组件时，除规则本身外必须登记**「缺失时的表现」**（本轮 §13.9 已按此体例补记）；布局类断言统一采用「容器不溢出 + 元素在视口内」双条件。
+- 交付前把「一次性验收脚本」与「本地参考素材」显式列入**不入库清单**，避免公开仓误带他方品牌资产。
+
 ---
 
 ## Sprint 5
@@ -245,7 +268,7 @@ Sprint Goal: 完成 MCP 本地收尾，并与 web-portal 本地联调通过（�
 
 | # | 事项 | 类别 | 模块 | 验收条件 | 关联文档 | 说明 | 状态 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | **MCP 侧设计包** | 任务 | MCP | 四份交付物定稿：① MCP 侧 story-mapping（剩余条目与三批 PSP 的归属表，正文落 [`mcp/mcp-stories.md`](./mcp/mcp-stories.md)）② 技术设计 ③ 测试方案 ④ 部署方案 | [`mcp/mcp-stories.md`](./mcp/mcp-stories.md) · [`mcp/mcp-design.md`](./mcp/mcp-design.md) · [`mcp/mcp-test.md`](./mcp/mcp-test.md) | 用户已定「MCP 侧本地收尾 + 联调」口径。 | ToDo |
+| 1 | **MCP 侧设计包** | 任务 | MCP | 四份交付物定稿：① MCP 侧 story-mapping（剩余条目与三批 PSP 的归属表，正文落 [`mcp/mcp-stories.md`](./mcp/mcp-stories.md)）② 技术设计 ③ 测试方案 ④ 部署方案 | [`mcp/mcp-stories.md`](./mcp/mcp-stories.md) · [`mcp/mcp-design.md`](./mcp/mcp-design.md) · [`mcp/mcp-test.md`](./mcp/mcp-test.md) | 用户已定「MCP 侧本地收尾 + 联调」口径。**实际进度（2026-09-22 核对，非推测）**：① 已落盘 —— [`mcp/mcp-stories.md`](./mcp/mcp-stories.md) 含故事索引与 `MS6 → PSP-M3` 归属（其变更记录载明 2026-09-22 由占位转正文）；②③④ 三份正文已在位（[`mcp/mcp-design.md`](./mcp/mcp-design.md) 11 节 / [`mcp/mcp-test.md`](./mcp/mcp-test.md) 6 节 / [`deployment.md`](./deployment.md)）。**是否「定稿」待用户确认**（与 Sprint 4 `#1` 同判据）。 | ToDo |
 | 2 | **PSP-M1「接入面与口径定档」** | 功能 | MCP | **交付判据**：上游自身 HTTP 面（`serve` 的 9077）对外不可达且部署制品无端口映射；定制口径门禁可执行（工作树只读干净、升级预检通过、例外有登记）；[`deployment.md`](./deployment.md) 与部署制品逐字段一致 | `product-backlog.md` #30 / #31 · [`deployment.md`](./deployment.md) §3 / §5 / §7 | 交付给：**运维**。 | ToDo |
 | 3 | **PSP-M2「本地全链路联通」** | 功能 | MCP | **交付判据**：本地跑通「门户 → HTTP MCP → 子进程 stdio → 用户库」全链路（建立会话、写入、召回、跨用户隔离生效、会话结束子进程回收），且拒绝路径（无令牌 / 越权库路径）按预期失败 | `product-backlog.md` #14 · [`web-portal/web-design.md`](./web-portal/web-design.md) §3 · [`mcp/mcp-design.md`](./mcp/mcp-design.md) §5 | 交付给：**Sprint 6 本地集成验收**（作为其输入）；不等同该验收本身。 | ToDo |
 | 4 | **PSP-M3「工具可达性」** | 研究 | MCP | **交付判据**：承接 #1 的实测矩阵，给出「非英文输入能否命中 MCP 工具」的结论与落地 —— 结论指向客户端指引则回填门户接入说明页（`S6`）；指向协议层改写则先立 ADR（修订「门户对上游语义知识 = 0」与「MCP 服务不做 i18n」两条决议）再实现 | [`web-portal/web-stories.md`](./web-portal/web-stories.md) S6 · [`mcp/mcp-design.md`](./mcp/mcp-design.md) §8 | 交付给：**非英文用户**；结论决定是否需要新 ADR。 | ToDo |
@@ -354,3 +377,4 @@ Sprint Goal: 升级治理闭环
 | 2026-09-21 | **Sprint 2 #11 收口并关闭（引用治理 + 能力文档体例定稿）**：① **引用治理** —— 本文件与 `product-backlog.md` 中指向已合并旧 spec 的 **85 处**引用全部改指合并后文档（`mcp/mcp-design.md` §5 / §6.2 / §6.4 / §7 / §8 / §9 · `architecture.md` §2 / §5 / §6 · `deployment.md` §3 / §7.2 / §7.3 / §8 / §9 · `web-portal/web-design.md` §2 / §3 / §6 / §11 · `web-portal/web-stories.md` S1–S9 · `web-portal/web-test.md` §2 / §3），历史叙述行只把链接降级为纯文本；`link-check.allow` 的两份整文件豁免随之删除，`make doc-links` = 30 文件 / 491 链接 / **0 悬空**（豁免 4 → 2；落盘回顾文档后复跑 31 文件 / 498 链接仍 0 悬空）② **能力文档体例定稿** —— 6 张档位表、每张只列本档新增、编号全档连续 1–101、示例入表；同步 `change-log.md` / `web-portal/web-stories.md` AC6.4 / `mcp/mcp-design.md` §8 三处转述 ③ **Sprint 2 状态置「已结束」**，本 Sprint「Retrospective」由阶段性回顾改为定稿 |
 | 2026-09-22 | **Replan：Sprint 4–7 重排（总数 8 → 7）**：① Sprint 4 改为「完成 web-portal 本地开发」，ToDo 收敛为 `#1` 设计包 + `#2` `PSP-W1「账号与凭证」` / `#3` `PSP-W2「端到端接入」` / `#4` `PSP-W3「可运维、可发布」`（旧 `#0`–`#9` 按功能拆入，编号重排）② Sprint 5 改为「完成 MCP 本地收尾并与 web-portal 本地联调通过」，ToDo 为 `#1` MCP 侧设计包 + `#2` `PSP-M1「接入面与口径定档」` / `#3` `PSP-M2「本地联调」` / `#4` `PSP-M3「工具可达性」` ③ 原 Sprint 6 与 7 **合并**为「本地集成验收、生产上线与备份闭环」（外部前置作为「阻塞」行显式跟踪，并新增本地集成验收、上线准备包、用户规模上限定值）④ 升级治理下移为 Sprint 7。RID Registry 与覆盖对照表的 Sprint 落点同批改指（6 个对外锚点 id 全部保留）；Sprint 3 已由用户于同日提前收口，本次未涉及其条目。体例见 [`sdd-scrum-practices.md`](./sdd-scrum-practices.md) §2.4 |
 | 2026-09-22 | **Replan 登记为 Sprint 3 #8（`Done`）**：作为独立过程治理项（同 #7）追溯；Sprint 3 收口说明同步为「#1–#8 全部 `Done`」。回顾落点仍为 Sprint 4 `Retrospective`（见 `sdd-scrum-practices.md` §2.3「写入实际交付该工作的 Sprint」） |
+| 2026-09-22 | **specs 一致性审计轮（Sprint 4 `#6`，`Done`）+ 界面上线前收口**：① **跨文档审计** `web-portal/*.md` ↔ `mockups/` ↔ 其他 specs，修掉 **7 处不一致 + 1 处悬空链接** —— 最实质的是 [`deployment.md`](./deployment.md) **缺根凭证要求**（[`web-portal/web-design.md`](./web-portal/web-design.md) §6.1 单方面声明「须落 `deployment.md`」而部署文档没有 ⇒ `AC10.8` 无法验收），故新增 **§12.4 管理面认证（Cloudflare Access）的运维要求**（Access 应用与多邮箱冗余 / 登录方式 / 会话时长档位与「不得把目标当既有能力」/ 增删管理员步骤 / 根凭证离线保存与三层恢复链 / MCP 面必须绕过）与 §13 验收项；另修 §13 的 `logo.png` 例外说明（已随新 logo 失效）、§6.1「门户侧唯一新增」仍写一页只读管理员页（与 `D12` 矛盾）、`product-backlog` #7 仍写「中/英双语」（应为四语言）、故事索引 `TC` 列的串位与漏项（**补 `TC-P-L2-13`**（logo 分档）、`TC-P-L2-11` 挂 `S2`、`S14` 行补齐 8 项、`S6` 行收窄）、`S1`–`S13` → **`S1`–`S14`**。② **机器核对（客观项）**：AC 编号 `AC1.1`–`AC14.12` 连续（缺口仅为已迁出的 `AC3.1/3.2/3.6`、`AC4.1/4.2`）；索引引用的 `TC-P-*` **零悬空**。③ **界面上线前收口**：用户提供的**透明底品牌徽标**同步三处（sha256 一致，原「白底 + 投影」已知项关闭），并修掉它引起的**窄屏顶栏溢出 26px**（新款 aspect `1.246 → 1.93`，`≤720px` 时加 `max-width` 锁回原 footprint）；登记两个**待用户定夺**项（logo 语义重复、品牌色孤岛）。④ 四条门禁与原型验收全绿（`134/134`）；本文件 `as_of` 更新为 2026-09-22 |

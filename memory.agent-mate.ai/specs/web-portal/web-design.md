@@ -26,7 +26,11 @@
 | D10 | **UI 色系：纯单色灰阶，无品牌色**：主按钮墨黑实底（`--ink`）、活动态与聚焦环一律墨色、唯一有色为危险红（`--danger`）。**推翻** 2026-09-22 早前的「保留 logo 橙作唯一强调色」 | **已定稿**（2026-09-22 用户确认，属**需求变更**；理由与 `logo.png` 例外说明见 §13 开头） |
 | D11 | **管理面认证维持 D8，门户不自建账号**：登录方式 = **Google（主）+ 邮箱一次性验证码（兜底）**；管理员「多把钥匙」= 在 Cloudflare Access 策略中配置**多个邮箱**；门户新增**只读**管理员页（说明 + 后台深链）。**撤销**「门户内邀请 admin / 重设密码 / 门户自建账号」三项需求 | **已定稿**（2026-09-22 用户确认；失效链与选型理由见 §6.1） |
 
-> **11 条全部锁定**（D9 / D10 / D11 于 2026-09-22 新增）。D1 曾是唯一可翻转项（涉及权限模型），已于 2026-09-21 由用户确认定稿（[`../../adr/ADR-012`](../adr/ADR-012-portal-launch-mechanism-no-docker-socket.md)）；D9 曾是 §10 #2 的长期未决项，已于 2026-09-22 关闭。
+| D12 | **页面集定为 6 页**：撤销原「07 只读管理员页」，其内容**并入 06「Admin MCP 配置」**；§12.3 路由表**无** `/admin/admins`；用户页**不含**管理员增删入口（管理员变更在 Cloudflare 侧） | **已定稿**（2026-09-22 用户确认；逐页映射见 §14） |
+| D13 | **用户停用是可逆软操作**：停用 = 一次性吊销该用户**全部令牌** + 拒绝新会话，**库文件保留**；恢复 = 签发新令牌。**删除数据库属服务端独立决定，门户内不提供** | **已定稿**（2026-09-22 用户提出「缺注销用户功能」后定档；对应 `AC2.4` 语义扩展） |
+| D14 | **外框冻结 + 代码块圆角例外**：`.app-header` 与 `.site-footer` 用 `sticky` 构成**固定外框**（不透明底 + 结构线）；设计系统「零圆角」有**唯一显式例外** —— `.codeblock` 保留参考稿的 `8px` 圆角 | **已定稿**（2026-09-22 用户要求「header / footer should be fixed」；实现细则见 §13.9 / §13.10） |
+
+> **14 条全部锁定**（D9 / D10 / D11 于 2026-09-22 新增；**D12 / D13 / D14 于同日 UI 迭代轮新增**）。D1 曾是唯一可翻转项（涉及权限模型），已于 2026-09-21 由用户确认定稿（[`../../adr/ADR-012`](../adr/ADR-012-portal-launch-mechanism-no-docker-socket.md)）；D9 曾是 §10 #2 的长期未决项，已于 2026-09-22 关闭。
 
 ---
 
@@ -212,7 +216,7 @@ COPY --from=ghcr.io/alphaonedev/ai-memory:<tag> \
 | **根凭证（必须离线保存）** | **Cloudflare 账号 + 其 2FA 恢复码**。这是本方案的**根凭证**——邮箱失效时经它改策略即可恢复访问。**本条为本次新增缺口**，须同时落 `deployment.md`。 |
 | **失效链（三层，均不依赖门户）** | ① 换邮箱 → 在 CF 后台加新删旧（`O(1)`，无需转移流程）；② 邮箱彻底失效 → 登录 **Cloudflare 账号**改策略恢复；③ 再不行 → **服务器 SSH**，且 **SSH 保底路径（D2 / 故事 `S8`）完全不经过门户**，主人仍可读写自己的记忆。 |
 | **明确不做** | 门户内**邀请 admin** · **重设密码** · **门户自建账号（邮箱 + 密码 + 会话）** · 任何形式的密码存储。**这三项为 2026-09-22 用户确认撤销的需求**（真需求「多邮箱冗余 + 不怕忘密码」已由 CF 策略天然满足；自建账号反而**引入**密码遗忘风险，且其「多邮箱」只能靠邀请功能实现，与撤销前提自相矛盾）。 |
-| **门户侧唯一新增** | 一页**只读**「管理员」页：登录方式说明 · 多把钥匙自检清单 · 跳 Cloudflare 后台深链 · 会话时长说明 · 根凭证离线保存提醒 · SSH 保底路径提示。**零新增凭证、零 CF API 调用、零新代码**（页面内**不含**邀请 / 删除 / 重设控件）。 |
+| **门户侧唯一新增** | **内容并入 06「Admin MCP 配置」**（原「07 只读管理员页」已撤销，见 **D12** / §14）：登录方式说明 · 多把钥匙自检清单 · 会话时长说明 · **Cloudflare 侧增删管理员的确切步骤** · 跳 Cloudflare 后台深链 · SSH 保底路径提示。**零新增凭证、零 CF API 调用、零新代码**（页面内**不含**邀请 / 删除 / 重设控件）。根凭证的离线保存要求落 [`../deployment.md`](../deployment.md) §12.1（对应 `AC10.8`）。 |
 
 > **为何不选「门户代理 CF 成员管理」或「门户自建账号」**：前者的全部收益（门户内管理名单）与「一年只用一两次、去后台点两下」相比性价比不成立，且要新增一个 CF API Token；后者是**唯一引入新外部依赖（邮件服务）**且实现量最大的方案，并会把密码遗忘风险与公网组件的防爆破 / 会话 / 限流责任一并收进门户。
 
@@ -344,7 +348,7 @@ admin_portal/
 │   ├── config.ts               # env 读取与校验；加载 launch 模板（真源 ../mcp/mcp-design.md §5.6.4）
 │   ├── selfcheck.ts            # 四项 fail-closed 自检
 │   ├── web/                    # portal-web
-│   │   ├── routes/             # index(首页 = 接入说明) · admin.users · admin.detail · admin.audit · admin.capacity · admin.guide
+│   │   ├── routes/             # index(首页 = 接入说明) · admin.users · admin.detail · admin.audit · admin.capacity · admin.mcp
 │   │   ├── views/              # Nunjucks 模板：**结构 = specs/web-portal/mockups/*.html（同名映射，见 §14）**
 │   │   ├── i18n/               # en.json · zh-CN.json · zh-HK.json · zh-TW.json（键集合相同；协议名不翻译）
 │   │   └── db/                 # schema.sql · migrate.ts · repo/*
@@ -365,7 +369,7 @@ admin_portal/
 | 面 | Host | 路径 | 模块 | 认证 | 可见性 |
 |---|---|---|---|---|---|
 | 公开 | `<ADMIN_HOST>` | `/`（**首页即接入说明**：8 项能力 + 三步接入 + HTTP 客户端配置 + 3 条 FAQ；四语言） | `portal-web` | 无 | 公开 |
-| 管理面 | `<ADMIN_HOST>` | `/admin/users` · `/admin/users/:handle` · `/admin/audit` · `/admin/capacity` · **`/admin/guide`（管理员接入指南）** | `portal-web` | Cloudflare Access 身份 + 门户会话 | 仅管理员 |
+| 管理面 | `<ADMIN_HOST>` | `/admin/users` · `/admin/users/:handle` · `/admin/audit` · `/admin/capacity` · **`/admin/mcp`（Admin MCP 配置）** | `portal-web` | Cloudflare Access 身份 + 门户会话 | 仅管理员 |
 | 管理面 API | `<ADMIN_HOST>` | `/admin/api/*`（建用户 · 签发 · 轮换 · 吊销 · 列表 · 审计查询） | `portal-web` | 同上 | 仅管理员 |
 | **MCP 面** | `<MCP_HOST>` | `/mcp`（Streamable HTTP：`POST` / `GET`） | `mcp-bridge` | `Authorization: Bearer memo_…` | 持令牌的 MCP 客户端 |
 
@@ -376,7 +380,7 @@ admin_portal/
 
 **旧路径兼容**：`/instructions` 作为历史路径 **301 → `/`**（首页已与接入说明合并，避免旧链接失效）。
 
-**公开页不含机密**：`/` 只渲染静态文案与占位符示例（`{MCP_HOST}` / `{handle}`），**不读取**任何用户库、**不列出**用户或令牌；`/admin/guide` 的管理员配置示例同样**只用占位符**（不含真实主机名、IP 与凭据）。
+**公开页不含机密**：`/` 只渲染静态文案与占位符示例（`{MCP_HOST}` / `{handle}`），**不读取**任何用户库、**不列出**用户或令牌；`/admin/mcp` 的管理员配置示例同样**只用占位符**（不含真实主机名、IP 与凭据）。
 
 ### 12.4 模板与 i18n 约定
 
@@ -461,9 +465,12 @@ admin_portal/
 ## 13. UI 设计系统（geeky + neat 的性冷淡风 · 纯单色）
 
 > **需求变更（2026-09-22，用户确认）**：本节**推翻**同日上午的「保留 logo 橙作唯一强调色」——用户明确要求「**UI 色系不要用橙色，沿用示例项目的色系**」。因此**全站无品牌色变量**：主按钮改为**墨黑实底**，活动态与聚焦环一律**墨色**；**唯一有色是危险红**（仅错误与破坏性动作）。
-> **来源与边界**：**令牌体系照搬** [`./mockups-from-other-product/`](./mockups-from-other-product/)（**另一产品**的可执行稿）的**实测色板**——其 `mockup.css` 的十六进制色值经 `grep -oE '#[0-9a-f]{6}' | sort | uniq -c` 实测，**唯一有色即 `#8b1a1a`**（危险红）。直接沿用实测值可避免二次诠释偏差，并让「实现与原型一致」有唯一数值基准。
+> **来源与边界**：**令牌体系照搬**另一产品的可执行稿（**仅本地临时参考、不入库**；该素材**已不在工作树中**，见 §15「不入库 / 不入制品」）的**实测色板**——其 `mockup.css` 的十六进制色值经 `grep -oE '#[0-9a-f]{6}' | sort | uniq -c` 实测，**唯一有色即 `#8b1a1a`**（危险红）。直接沿用实测值可避免二次诠释偏差，并让「实现与原型一致」有唯一数值基准。
 > **只取手法与令牌，不取其内容**：该素材的**产品文案、品牌徽标与三张异产品 logo**（`agent-logo.png` / `play-logo.png` / `food-logo.png`）**不得**进入本项目原型与实现。
-> **`logo.png` 的例外说明**：本项目 logo 图像资产**自身是橙色**——它属**品牌资产**，**不参与 UI 色系**（实现「无橙色」核对时须排除该图像像素）；用户后续会更换 logo。
+> **`logo.png` 说明（2026-09-22 定版）**：logo **自带品牌色** —— 灰底圆角徽标上「**MCP**」为**黄色**（`MEMORY` 为白、`agent-mate.ai` 为浅灰）。它属**品牌资产**，**不参与 UI 色系体系**：
+> ① 实现「无彩色」核对**只扫元素的计算样式**（`portal.css` 令牌与内联样式），**图像像素不在扫描面内** —— 这是既有校对方式，不是临时豁免；
+> ② **但须清醒**：该黄色是站内**除危险红之外的唯一色相**，属「品牌色孤岛」—— 页面其余部分仍是纯单色。是否有意为之由用户决定（若要收口，可要求品牌侧出**单色版** logo，或反过来把该黄提升为正式强调色并在 §13.1 立令牌）。
+> **2026-09-22 已换为透明底版本**（1004×520，实测四角 alpha = 0），原「白底 + 投影」的已知项**关闭**。
 > **不采用其认证页渐变**：参考稿的 `.auth-shell` 单色渐变只服务于其**自建登录页**；本项目管理面认证由 Cloudflare Access 承担（见 §6），**不存在自建认证页**，故**不引入**该渐变。
 > **强制程度**：§13 的令牌即 §12.2 `assets/portal.css` 的 `:root` 值；**实现必须引用令牌，不得在模板里新造色值** —— 这是「原型 ↔ 实现一致」可被**机械核对**的前提。
 
@@ -479,6 +486,7 @@ admin_portal/
   --danger: #8b1a1a;        --danger-wash: #faf6f6;
   --radius: 0;
   --control-h: 2.75rem;     --control-px: 1.25rem;   --control-border: 1.5px;
+  --control-fs: 0.875rem;   /* 表单控件字号：input / select / button 共用 */
   --btn-font-size: 0.8125rem;  --btn-tracking: 0.08em;  --btn-page-min: 10.5rem;
   --font-ui: "Outfit", "Noto Sans SC", "Noto Sans TC", system-ui, sans-serif;
   --font-cn: "Noto Sans SC", "Noto Sans TC", "Outfit", system-ui, sans-serif;
@@ -489,9 +497,11 @@ admin_portal/
 }
 ```
 
+> **根字号基准（易错点，务必按此折算）**：`html { font-size: 17px }` —— 本项目 **`rem` 以 17px 为基，不是 16px**。故 `--control-h: 2.75rem` = **44px**、`--btn-font-size: 0.8125rem` ≈ **13.8px**、`--control-fs: 0.875rem` ≈ **14.9px**、内容列上限 `72rem` = **1224px**、`.how-to` 标签列 `7.5rem` = **127.5px**。按 16px 估算会系统性偏小（曾在验收阈值上踩过这一坑）。
+
 | 维度 | 规则 | 依据令牌 |
 |---|---|---|
-| **圆角** | **全局 `0`** —— 容器、控件、面板、对话框一律零圆角（仅胶囊状态点保留全圆 `999px`） | `--radius: 0` |
+| **圆角** | **全局 `0`** —— 容器、控件、面板、对话框一律零圆角（仅胶囊状态点保留全圆 `999px`）。**唯一例外：代码块 `.codeblock` 保留参考稿的 `8px` 圆角**（其右侧 `COPY` 灰条因此带圆角右缘；把代码块一并压平会与参考稿不一致 —— 2026-09-22 曾误压平并回滚） | `--radius: 0` |
 | **地面** | 页面底 `--bg`、抬升面 `--bg-elevated`、填充底 `--fill`；**控件与表格用描边区分，而不用背景色块** | `--bg` / `--bg-elevated` / `--fill` |
 | **文字** | `--ink`（标题与主文）· `--ink-2`（次强调）· `--mute`（次要说明）· `--mute-soft`（元数据） | 灰阶三档 |
 | **描边** | 结构分隔 `1px --line`；**控件描边 `1.5px --line-strong`**（比结构线更重 ⇒ gadget 质感） | `--line` / `--line-strong` / `--control-border` |
@@ -499,7 +509,7 @@ admin_portal/
 | **灰阶语义映射** | 无彩色可用的语义位一律回落灰阶：`.callout-info` → `--line-strong` 左边框；`.callout-warn` → `--ink-2` 左边框；用量条 `is-warn` → `--danger`（该风格下「接近上限」只能用危险色表达） | 无 `--ok` / `--warn` / `--info` 令牌 |
 | **按钮** | 小字号 + **大写**（`text-transform: uppercase`）+ **`0.08em` 字距**；主按钮 = **墨黑实底白字**（`--ink`，hover `--ink-2`），次按钮 = `--line-strong` 描边，文字按钮 = 下划线式 | `--btn-font-size` / `--btn-tracking` |
 | **数据** | 库路径、令牌前缀、计数、时间戳**一律 `--font-mono`**；数值列右对齐 | geeky 的可读性核心 |
-| **栏宽** | 说明页 `--guide-max`（窄栏，长文可读）；管理面内容 `--max` + 左侧导航 | `--guide-max` / `--max` |
+| **栏宽** | 说明页 `--guide-max`（56rem，窄栏长文可读，**居中**）；管理面内容列 `min(100%, 72rem)`（1224px）并**紧贴左侧栏、不居中**，正文段落另限宽 `46rem` 防行宽过长。`--max: 760px` **已不再约束管理面内容列**（仅作阅读栏基准保留） | `--guide-max` / `72rem` / `46rem` |
 | **结构线分段** | 区块之间用 `1px --line` 的**上边框**分段（而非留白分节），如说明页 `h2 { border-top: 1px solid var(--line) }` | 参考稿 `.guide-body h2` |
 | **投影** | **几乎不用** —— 仅对话框遮罩 `rgba(10,10,10,.28)`；面板与对话框**不加阴影** | 参考稿 `.dialog-backdrop` |
 | **字体加载** | `portal.css` 首行 `@import` Google Fonts（`Outfit` / `Noto Sans SC` / `Noto Sans TC` 各 400;500;600，`JetBrains Mono` 400;500）；**无 `@font-face`** | `mockup.css:1` |
@@ -587,11 +597,109 @@ admin_portal/
 | **Contact Admin 悬浮窗**（hover / focus 弹层 + 二维码 + 邮箱） | 其品牌徽标与三张异产品 logo |
 | **危险红 `#8b1a1a`**作唯一彩色（含 `--danger-wash` 错误底） | **一切其它彩色**（品牌橙、状态绿 / 橙 / 蓝、渐变装饰） |
 
+### 13.9 组件规范（本轮新增 / 补齐）
+
+> 本节组件均由 `mockups/assets/portal.css` 的显式规则给出；**实现引用同名类，不另造**。新增组件的动因多为「原型里用了类名但 CSS 无对应规则」，故同时登记**缺失时的表现**，便于复现与验收。
+
+| 组件 | 结构 | 关键规则 | 缺失时曾出现的表现 |
+|---|---|---|---|
+| **分页** `.pager` | `.pager-count`（左）+ `.pager-controls`（右：上一页 / 当前页 / 下一页） | 上边框 `1px --line` + `margin-top: 1.5rem`；`flex` 两端对齐；`.pager-page.is-current` 用墨色下划线；首末页对应按钮 `disabled`（`--placeholder` 色） | ——（本轮新增，替代原先的「搜索框」） |
+| **说明型区块** `.how-to` | `dl` 两列 grid | `grid-template-columns: 7.5rem minmax(0, 1fr)`、`gap: 0.5rem 1rem`；标签列须容纳最长标签（EN「Where to change」约 105px）；窄屏 `≤720px` 转单列（标签在上） | 标签列若取 168px，说明列起排 188px，中文长句被挤到第二行（用户两次反馈「太靠右 / 断行」） |
+| **危险按钮** `.btn-danger` | 与 `.btn` 同构 | **危险红实底白字**；hover 用 `opacity: .85`（**不引入调色板外的色值**，否则破坏单色扫描）。`.btn-text.is-danger` 为行内危险文字按钮 | 该规则此前**完全缺失** ⇒ Revoke 确认框里的破坏性按钮被渲染成**普通墨色主按钮**，与「危险」语义不符 |
+| **对话框补充** | `.dialog-target` / `.dialog-actions` / `.dialog-path` | `.dialog-target`：`1px --line` 描边 + `--fill` 底 + `1.35rem` 上距；`.dialog-actions`：右对齐 + 上方 `1px --line` 分隔 + `1.6rem` 上距；`.dialog-path`：**左侧 2px 引线**呈现只读派生值 | `.dialog-actions` 与 `.dialog-target` 此前**均无规则** ⇒ 路径预览与按钮贴死、键值块与正文挤在一起 |
+| **`.dialog-path` 的形态纪律** | —— | 只读派生值**不得**用「描边 + 填充」形态呈现 —— 那与可编辑 `.input-box` **完全同形**，会被误认为可输入 | 曾用灰底描边方框，视觉上与输入框无法区分 |
+| **文字按钮** `.btn-text` | `button` / `a` | 字号回到 `--btn-font-size`（约 13.8px）、不下划线以外装饰 | 曾继承正文 `17px`，成为页内最大字号 |
+
+### 13.10 外框与滚动（固定顶栏与页脚 · 内容列）
+
+**固定外框**（2026-09-22 用户要求）：
+
+```css
+.app-header   { position: sticky; top: 0;    z-index: 40; }  /* 顶栏贴视口顶 */
+.site-footer  { position: sticky; bottom: 0; z-index: 30; }  /* 页脚贴视口底 */
+```
+
+- 两者**必须是不透明底**（`.app-header` / `.site-footer` 均 `--bg-elevated` + 结构线），否则滚动时内容会透出。
+- 效果：顶栏贴上、页脚贴底、**中间内容滚动**；验收断言为「滚动 900px 后顶栏 `top == 0` 且页脚 `bottom == 视口高`」。
+- **未固定**：左侧栏（`.sidebar`）。其导航会随内容滚走 —— 若要固定需引入 `--header-h` 令牌绑定顶栏高度（当时评估为可选增强，未做）。
+
+**页脚结构**：`.site-footer` 为 `flex` + `justify-content: flex-end` + `align-items: baseline` + `gap: .4rem 1.25rem`；**入口链接在左、版权在右、同一行、整组右对齐**（01 页的 `a` 与 `p` 顺序须与索引页一致）。
+
+**内容列宽度**：
+
+```css
+.content { max-width: min(100%, 72rem);  margin-inline: 0; }   /* 1224px @17px，左对齐 */
+.page-head-lead, .lead-note, .callout p { max-width: 46rem; }  /* 正文限宽，防行宽过长 */
+```
+
+> **禁止用 `margin-inline: auto` 居中内容列**：网格项一旦设 `auto` 外边距即**取消默认 stretch**、转为按 `fit-content` 定宽 —— 内容列被从侧栏右侧推到 `x=406`（用户反馈「宽度变窄」），且窄屏下其 min-content 会撑破视口（实测 390px 视口下 `.content` 变成 696px）。`max-width: 100%` 亦不可省。
+
+---
+
+## 14. 逐页 UI 设计（原型 ↔ 模板 ↔ 路由）
+
+> **用途**：把「实现与原型一致」变成**可机械核对**的对照表 —— 实现期逐页对照落地，评审期逐页比对。§12.2 的 `views/` 命名与本表一一对应。
+
+| 页 | 原型文件 | Nunjucks 模板 | 路由 | 区块（自上而下） | 主要组件 / 令牌 |
+|---|---|---|---|---|---|
+| 接入说明（公开首页） | `mockups/01-instructions.html` | `views/instructions.njk` | `/` | hero（logo ×2 + H1 + 关键词条）→ 三步纵向（取令牌 · 配置客户端 · 验证一次调用）→ Supported AI agents（7 项）→ Tools（8 行 3 列）→ 页脚 | `.guide-hero` · `.steps`/`.step` · `.contact-admin` 悬浮窗 · `.codeblock--file`（8px 圆角）· `.agent-roster` · `.guide-caps-table`（`table-layout: fixed`，首列 `12.5rem`、第三列 `28%`）· `.shell-locale` 浮动语言组 |
+| 用户列表 | `mockups/02-users.html` | `views/admin-users.njk` | `/admin/users` | 页头（眉题 + 标题 + 导语 + 「创建用户」）→ 表格（handle / 库路径 / 令牌数 / 创建 / 状态）→ 分页 → 建用户对话框 | `.page-head-row` · `.table-wrap` + `.path`（不折行）· `.pager` · `#dialog-new-user`（含 `.dialog-path` 只读派生路径） |
+| 用户详情 | `mockups/03-user-detail.html` | `views/admin-user-detail.njk` | `/admin/users/:handle` | 页头（handle + 库路径 + 状态 + 返回）→ 身份只读块 → Tokens（表 + 签发 / 轮换 / 吊销）→ Diagnostics（只读）→ **停用该用户**（危险区） | `.readonly` + `.kv` · `.row-actions` · `.btn-danger` · `#dialog-deactivate` · 区块节奏 `.section`（`3rem`） |
+| 审计 | `mockups/04-audit.html` | `views/admin-audit.njk` | `/admin/audit` | 页头（+ 导出）→ 筛选条（事件类型 / 时间范围 / 用户 / Filter / 命中数）→ 表格（时间 / 事件 / handle / 结果 / 解析路径）→ 分页 → 空态 → 边界说明 callout | `.filter-bar`（控件等高）· `.status` · `.pager` · `[data-audit-empty]` · `.callout-info` |
+| 容量与配额 | `mockups/05-capacity.html` | `views/admin-capacity.njk` | `/admin/capacity` | 页头 → 只读声明 callout → `.how-to` 参数调整说明 → 指标卡（2）→ 上游配额表（7 行）→ 边界 callout | `.metric` + `.bar` · `.how-to` · `.table-wrap` · `.callout-info` |
+| Admin MCP 配置 | `mockups/06-admin-mcp.html` | `views/admin-mcp.njk` | `/admin/mcp` | 页头 → Tier → Local stdio → SSH stdio → How you sign in → Keep more than one key → Session（含 Cloudflare `.how-to`）→ If you lose access（后台深链 + 管理员增删 `.how-to`） | `.readonly` · `.codeblock` · `.how-to` · `.btn-page` 深链（`one.dash.cloudflare.com`） |
+| 原型索引 | `mockups/index.html` | ——（**仅原型**，不生成模板） | —— | 6 页清单 + 变体态入口 | `.gallery` · `.screen-list` |
+
+> **页面集为 6 页**（+ 原型索引）：原「07 只读管理员页」**已于本轮撤销**，其内容并入 06「Admin MCP 配置」—— 故 §12.3 路由表**无** `/admin/admins`，用户页也**不含**「管理管理员」入口（对应 `S1 AC1.8`、`S10 AC10.9`）。
+
+**变体态（原型用 URL query 驱动；实现期对应真实状态）**
+
+| 变体 | 原型 | 对应实现状态 |
+|---|---|---|
+| 用户页空态 | `02-users.html?empty=1` | 零用户 |
+| 建用户对话框 | `02-users.html?confirm=new-user` | 打开对话框 |
+| 非法 handle 内联错误 | `02-users.html?invalid=1` | 前端校验失败 |
+| 列表内联错误条 | `02-users.html?error=1` | 后端拒绝 |
+| 令牌签发确认 | `03-user-detail.html?confirm=issue` | 签发对话框 |
+| 令牌轮换确认 | `03-user-detail.html?confirm=rotate` | 轮换对话框 |
+| 令牌吊销确认 | `03-user-detail.html?confirm=revoke` | 吊销对话框（危险按钮） |
+| 停用用户确认 | `03-user-detail.html?confirm=deactivate` | 停用二次确认 |
+| 联系管理员悬浮窗展示态 | `01-instructions.html?hover=contact` | 悬停 / 聚焦态（评审用） |
+| 审计空态 | `04-audit.html?nomatch=1` | 筛选无命中 |
+| 四语言切片 | 任意页 `?lang=TW` | 语言切换 |
+
+---
+
+## 15. UI 资产清单与同步方式
+
+> **单一真源**：所有 UI 资产以 `specs/web-portal/mockups/assets/` 为**唯一真源**；`admin_portal/assets/` 是其**逐字副本**（实现期由构建 / 部署步骤复制，**不手工改两处**）。
+> **同步方式**：`cp -R specs/web-portal/mockups/assets/. admin_portal/assets/`，随后以 sha256 **逐文件核对一致**（原型验收脚本已含该项核对，2026-09-22 实测 7/7 一致）。
+
+| 资产 | 源路径 | 目标路径 | 说明 |
+|---|---|---|---|
+| 设计系统样式 | `mockups/assets/portal.css` | `admin_portal/assets/portal.css` | 全部令牌与组件规则；**唯一真源**，实现期不得另建样式表 |
+| 四语言词表 | `mockups/assets/i18n.js` | `admin_portal/assets/i18n.js` | 四份词表（键集合一致，实测各 220 键）；实现期按 §12.2 拆为 `src/web/i18n/{en,zh-CN,zh-HK,zh-TW}.json`，**键名与结构不变** |
+| 交互脚本 | `mockups/assets/mockup.js` | `admin_portal/assets/mockup.js` | 语言切换 · `[data-i18n]` 渲染 · 复制回显 · URL query 变体态 · 对话框开合。**原型专用**：实现期由真实路由与前端行为替代 |
+| 品牌标识 | `mockups/assets/logo.png` | `admin_portal/assets/logo.png` | 与仓库根 `memory.agent-mate.ai/logo.png` 同源（**三处 sha256 一致**）；**透明底品牌徽标 1004×520**（灰底 + 黄色「MCP」；品牌资产，**不参与 UI 色系核对**，见 §13 开头的说明）。公开页 hero 高 `112px`、管理面顶栏 `72px`（`≤720px` 时 `40px`）；按 `height` + `width:auto` + `object-fit: contain` 渲染，**不拉伸变形** |
+| 管理员微信二维码 | `mockups/assets/wechat.png` | `admin_portal/assets/wechat.png` | 站主本人二维码（第 1 步 Contact Admin 悬浮窗）；**属站主个人资产，非异产品品牌资产** |
+| 调用示例截图 | `mockups/assets/chat-example.png` | `admin_portal/assets/chat-example.png` | 第 3 步「验证一次调用」示例；已核查**不含令牌明文 / 主机名 / IP**（仅一条 Memory id 与站主本人项目要点，站主已授权公开） |
+| AI 客户端图标 | `mockups/assets/guide/{cursor,claude,codex,codebuddy,trae,copilot,kiro}.png` | 同名 | 7 项 Supported AI agents 的图标；**许可提示见下** |
+| 原型页面与索引 | `mockups/*.html` | ——（不上线） | 评审用；**不得**随制品发布 |
+
+**不入库 / 不入制品**
+
+| 路径 | 原因 |
+|---|---|
+| `mockups/.verify/` | 原型验收脚本（`verify.py` / `measure.py` / `probe.py` / `crops.py`）与截图。**已显式排除在提交之外**，且**不入制品**；截图按需重生成。保留在本地是为了**实现期复跑同一组断言**（本文档写定时共 134 项断言全绿） |
+| `mockups-from-other-product/`（**2026-09-22 已从工作树移除**） | **另一产品**的参考稿，含其产品文案、品牌徽标与三张异产品 logo ⇒ **本地临时参考、不入库**（本仓为公开仓，不转载他方品牌资产）。其**唯一**被本项目复制的资产是 `wechat.png`（站主本人二维码，**来源登记**见 [`../../admin_portal/README.md`](../../admin_portal/README.md)） |
+
+> **AI 客户端图标的许可提示（发布前须确认）**：7 张图标分别为各自厂商的品牌标识（Cursor / Anthropic Claude / OpenAI Codex / CodeBuddy / TRAE / GitHub Copilot / AWS Kiro）。本页仅作「已实测可用」的**事实性列举**；公开站使用他方品牌标识前须确认其使用条款，必要时**改为纯文字列举**（去掉图标即可，不影响结构）。
+
 ---
 
 ## 16. 变更记录
 
-> 编号 12–15 预留给 Sprint 4 #1 的门户设计章节（门户技术设计 · UI 设计原则 · 逐页 UI 设计 · UI 资产清单）。
+> 编号 12–15 **已全部落盘**（§12 门户技术设计 · §13 UI 设计系统 · §14 逐页 UI 设计 · §15 UI 资产清单）。
 
 | 日期 | 变更 |
 |---|---|
@@ -602,3 +710,4 @@ admin_portal/
 | 2026-09-22 | **文档边界修正（Sprint 4 #1）**：原 §1（三条上游硬事实）· §2（接入路径与会话流程）· §3 的 α/β′ 对照与 §3.1（β′ 制品契约）· §3.3（`launch` 模板与四条强制不变量）· §3.4 的上游依据 · §9（耦合面 C1–C8 + α 附录）**迁至** [`../mcp/mcp-design.md`](../mcp/mcp-design.md) **§5.6** 与 **§9 M**；本节改为「门户侧动作 + 回链」，`§9 附录` 保留稳定锚点作 α 回链（锚点冻结）。门户侧**保留**：§3.2（门户镜像构建）· §4（用户/密钥/库模型）· §5（静默失败点 S4）· §6（接入面与 CF Access 边界）· §7（容量、配额与限流）· §8（威胁模型 T1–T10）。文档头新增「**文档边界**」声明。判定标准：**随上游版本漂移、需探针守护**的跨进程契约归 MCP 侧；门户业务功能留本文件。连带：`scripts/attestation-paths-check.sh` 断言 C 改指 `mcp-design.md`（`launch` 模板真源随之迁移） |
 | 2026-09-22 | **新增 §12「门户技术设计」+ 技术栈定档（关闭 §10 #2）**：① §0 决议登记新增 **D9 门户技术栈**（Node.js 22 LTS + TypeScript · Fastify · **Nunjucks 服务端模板** · 原生 CSS + `:root` 令牌 · 官方 MCP SDK 双 transport · 门户库 SQLite），并记明**被拒备选**（React SPA / Next.js / Python）与理由；② §10 #2 由「未定」转**已定**；③ §12 落 **10 个子节**：技术栈定档 · 模块划分与进程模型（`portal-web` / `mcp-bridge`）· 目录结构与文件命名（`admin_portal/`，模板与原型**同名映射**）· 路由表与**按 Host 分面 fail-closed** · 模板与 i18n 纪律（禁硬编码文案；CSS-only 交互，不引打包器）· 会话桥实现方案（**不手写帧解析**，禁 cluster/多 worker）· 门户数据模型落地（迁移 / 索引 / 敏感字段纪律）· 自建并发限流与超时 · 日志与脱敏（`shared/redact.ts` 单一脱敏源）· 关键配置项（只登记键名，不写真实值）与**组件依赖待办表**；④ 编号 12–15 预留给本 Sprint 的门户设计章节，原「变更记录」由 §12 顺延为 **§16**（无外部按号引用） |
 | 2026-09-22 | **UI 二次迭代（Sprint 4 #1 追加）：色系改纯单色（D10）+ 管理面认证实施细则（D11）**：① §0 新增 **D10**——全站**无品牌色变量**，主按钮墨黑实底、活动态与聚焦环一律墨色、唯一有色为危险红；**推翻**同日上午的「保留 logo 橙」并计入**需求变更**（`logo.png` 图像自身橙色属品牌资产，不参与 UI 色系核对）；② §0 新增 **D11** + 新增 **§6.1「管理面认证实施细则」**——身份由 Cloudflare Access 认定、登录方式 Google 主 + 邮箱 OTP 兜底、多把钥匙=策略内多邮箱、**会话时长目标 3 个月但平台上限疑为 1 个月（实施期实测，不得断言）**、**根凭证=CF 账号 2FA 恢复码须离线保存（新增缺口）**、三层失效链、明确**撤销**「门户内邀请 admin / 重设密码 / 门户自建账号」；③ §13 整体改为**纯单色令牌**（移除 `--accent` / `--accent-deep` 与 `--ok` / `--warn` / `--info`，新增 `--bg-soft` / `--placeholder` / `--danger-wash`），并新增**三步接入纵向版式**、**说明页截图**、**Contact Admin 悬浮窗**三条组件规范与灰阶语义映射表；④ 同步 `portal.css`（残留彩色令牌 0 处） |
+| 2026-09-22 | **UI 迭代轮收口（§13.9 / §13.10 / §14 / §15 落盘）**：① **§0 新增 D12 / D13 / D14**（页面集 6 页与 07 撤销 · 用户停用为可逆软操作 · 外框冻结与代码块圆角例外）；② **§12.3 路由表修正**：`/admin/guide（管理员接入指南）` → **`/admin/mcp（Admin MCP 配置）`**（含「公开页不含机密」同处引用），§12.2 目录树的 `routes/admin.guide` → `admin.mcp`；③ **§13.1 补 `--control-fs` 令牌**、登记 **代码块 8px 圆角例外**（曾误压平并回滚）、新增**根字号基准 17px**（`rem` 折算易错点）、更新**栏宽口径**（内容列 `min(100%, 72rem)` 左对齐 + 正文 `46rem` 限宽，`--max` 不再约束）；④ **新增 §13.9 组件规范**（分页 / 说明型区块 / 危险按钮 / 对话框补充 / `.dialog-path` 形态纪律 —— 并登记各自**缺失时的表现**，因此前多处类名在 CSS 中无规则）；⑤ **新增 §13.10 外框与滚动**（顶栏与页脚 `sticky` + 不透明底 + **禁止用 `margin-inline: auto` 居中内容列**的原因与被撑破视口的实测）；⑥ **新增 §14 逐页 UI 设计**（6 页 × 原型 ↔ 模板 ↔ 路由 ↔ 区块 ↔ 组件，含 11 种变体态）与 **§15 UI 资产清单**（单一真源、同步方式与哈希核对、**不入库清单**、AI 客户端图标的许可提示）—— 二者闭合 §12.2 的前向引用；⑦ 移除 `.content` 中已被覆盖的死规则 `max-width: calc(var(--max) + 4rem)` |

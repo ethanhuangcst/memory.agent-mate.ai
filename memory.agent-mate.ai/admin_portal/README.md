@@ -17,7 +17,7 @@
 
 ## 素材来源与授权（必须遵守）
 
-- **`wechat.png`**：由 `specs/web-portal/mockups-from-other-product/assets/EthanWeChat.png` **复制**而来 —— 它是**站主本人的微信二维码**，**不是**参考素材所属产品的品牌资产，可自由使用。
+- **`wechat.png`**：由 `specs/web-portal/mockups-from-other-product/assets/EthanWeChat.png` **复制**而来 —— 它是**站主本人的微信二维码**，**不是**参考素材所属产品的品牌资产，可自由使用。（注：该参考素材目录**现已不在工作树中**，此条保留为**来源登记**；复制来的资产本身仍在 `mockups/assets/wechat.png`。）
 - **`chat-example.png`**：用户提供的聊天截图（源 `specs/web-portal/chat-example.png`）。已逐字核查：**不含令牌（无 `memo_` 前缀）、不含主机名、不含 IP、不含凭据**；含一条 Memory id 与站主本人项目要点，**已获用户授权公开使用**。
 - **禁止**从 `mockups-from-other-product/` 复制该产品的**品牌徽标与三张异产品 logo**（`agent-logo.png` / `play-logo.png` / `food-logo.png`）。该目录**只作风格参考**，其产品文案与信息架构亦不得进入本项目原型与实现。
 

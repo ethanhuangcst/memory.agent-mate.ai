@@ -26,12 +26,12 @@ memory.agent-mate.ai = 上游 `ai-memory-mcp` 的**私有化部署 + 定制**（
 
 | 面 | 主体 | 凭据 | 公网 | 设计文档 |
 |---|---|---|---|---|
-| 管理面（门户 UI / API） | 管理员 | Cloudflare Access（浏览器 SSO）+ 门户会话 | 仅 `<ADMIN_HOST>` | [`web-portal/web-design.md`](./web-portal/web-design.md) §5 |
+| 管理面（门户 UI / API） | 管理员 | **Cloudflare Access（浏览器 SSO）** —— 登录方式为 **Google（主）+ 邮箱一次性验证码（兜底）**，策略内**多邮箱互为备份**；门户**不自建账号、不存密码**，故**无密码可重设** | 仅 `<ADMIN_HOST>` | [`web-portal/web-design.md`](./web-portal/web-design.md) §6 / §6.1 |
 | MCP 面（`<MCP_HOST>/mcp`） | 用户及其客户端 | `memo_` 令牌（`Authorization: Bearer`） | 仅 `<MCP_HOST>` | 同上 |
 | SSH 面（stdio，保底） | 主人 / 运维 | SSH 密钥 + forced command | 无公网入口 | [`mcp/mcp-design.md`](./mcp/mcp-design.md) §5 |
 | 上游 HTTP 面（`serve` 9077） | **不对外** | 绑 `127.0.0.1`，不映射主机端口，不设 `api_key` | 否 | [`deployment.md`](./deployment.md) §3 |
 
-> **ai-memory 本体始终无公网入口**；新增的公网入口只属于门户面（`web-portal/web-design.md` §5）。
+> **ai-memory 本体始终无公网入口**；新增的公网入口只属于门户面（`web-portal/web-design.md` §6）。
 
 ---
 

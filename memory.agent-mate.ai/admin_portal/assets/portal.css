@@ -904,7 +904,8 @@ textarea:focus {
 }
 
 .content {
-  max-width: calc(var(--max) + 4rem);
+  /* 宽度统一由文件末尾的修复批次给出（`min(100%, 72rem)` 且左对齐）；
+     此处曾写 `calc(var(--max) + 4rem)`，已被覆盖，属死规则，故移除。 */
   padding: 2.25rem 2rem 4rem;
 }
 
@@ -2499,9 +2500,12 @@ select.input-box:focus { border-color: var(--ink); background-color: var(--bg-el
 .guide-hero-title .logo { margin-left: -15px; }
 .app-header .logo .logo-header-mark { height: 72px; width: auto; max-width: 12rem; }
 
-/* 窄屏：顶栏 72px 的 logo 会挤压品牌名 ⇒ 降一档，避免横向溢出 */
+/* 窄屏：顶栏 72px 的 logo 会挤压品牌名 ⇒ 降一档，避免横向溢出。
+   注：新 logo 为**横向锁定款**（1004×520，aspect 1.93；旧款 1.246）——
+   40px 高时宽 77px（旧款仅 50px），会把顶栏挤到横向溢出 26px（实测 3 页复现）
+   ⇒ 加 `max-width` 锁回原 footprint（`object-fit: contain` 保证不拉伸变形）。 */
 @media (max-width: 720px) {
-  .app-header .logo .logo-header-mark { height: 40px; }
+  .app-header .logo .logo-header-mark { height: 40px; max-width: 50px; }
   .guide-hero-title .logo { margin-left: 0; }
 }
 

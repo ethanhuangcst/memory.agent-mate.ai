@@ -429,6 +429,20 @@ bash scripts/pin-update.sh <ref> [--force]          # 更新锁文件（--force 
 | 单节点故障不可接受 | 高可用方案 + 备份恢复演练常态化 |
 | 用户量大 | 引入缓存层与连接复用（**会话级进程不可池化，见 [`mcp/mcp-design.md`](./mcp/mcp-design.md) D3**） |
 
+### 12.4 管理面认证（Cloudflare Access）的运维要求
+
+> 设计口径见 [`web-portal/web-design.md`](./web-portal/web-design.md) §6 / §6.1（决议 `D8` / `D11`）：管理面身份由 **Cloudflare Access** 认定，门户**不自建账号、不存密码**。
+
+| 项 | 要求 |
+|---|---|
+| **Access 应用与策略** | 为 `<ADMIN_HOST>` 建 Access 应用 + 一条 **Allow 策略**，策略内列**已批准邮箱**。**建议列 ≥ 2 个邮箱**，任一个失效仍可进入（`AC10.6`） |
+| **登录方式** | **Google（主）+ 邮箱一次性验证码（兜底）**，两种钥匙互不依赖；主登录为 Google 时，重新验证多为其既有登录态静默完成 |
+| **会话时长** | 目标 **3 个月**；**控制台可选档位上限疑为 1 个月**，更长需经 API / Terraform 的 `session_duration` 实测。**实施期先设控制台最大档并实测；不得把目标值写成既有能力**（`AC10.7`） |
+| **增删管理员** | Zero Trust 后台：Access → Applications → 该应用 → Policies → Allow → 增删邮箱。**移除后对方在下次请求即失效**，无会话需要吊销（`AC10.10`） |
+| **根凭证（必须离线保存）** | **Cloudflare 账号及其第二因素（2FA）恢复码**。邮箱失效时的恢复链：① 在 CF 后台改策略、加新邮箱 → ② 邮箱与 Google 都不可用时登 Cloudflare 账号 → ③ 再不行走**服务器 SSH**（SSH 保底路径**完全不经过门户**，主人仍可读写自己的记忆）。**恢复码须离线保存**（`AC10.8`） |
+| **门户侧** | 管理面只在 06「Admin MCP 配置」内**说明**上述做法，**不提供**邀请 / 删除 / 重设密码控件；**零新增凭证、零 CF API 调用**（`AC10.9`） |
+| **MCP 面** | `<MCP_HOST>` **必须绕过** Cloudflare Access —— 命令行客户端无法完成浏览器 SSO，被拦会表现为「连不上」（[`web-portal/web-design.md`](./web-portal/web-design.md) §6） |
+
 ---
 
 ## 13. 部署验收清单
@@ -438,6 +452,7 @@ bash scripts/pin-update.sh <ref> [--force]          # 更新锁文件（--force 
 - [ ] `iso-probe.sh` exit 0（多用户隔离）
 - [ ] 备份脚本已落地并成功执行过一次，外迁校验 `sha256sum` 一致
 - [ ] 恢复演练已做过一次
+- [ ] 管理面 Cloudflare Access 已配置：Allow 策略含 **≥ 2 个邮箱**、登录方式为 **Google + 邮箱一次性验证码**，且 **Cloudflare 账号的 2FA 恢复码已离线保存**（`AC10.6`–`AC10.8`）
 - [ ] `make secret-check` / `make doc-links` 通过
 - [ ] 部署完成后补文档记录（日期 / 版本 / 配置文件 / 冒烟结果 / 备份位置 / 已知问题）
 
@@ -447,6 +462,7 @@ bash scripts/pin-update.sh <ref> [--force]          # 更新锁文件（--force 
 
 | 日期 | 变更 |
 |---|---|
+| 2026-09-22 | **新增 §12.4 管理面认证（Cloudflare Access）的运维要求**：把 [`web-portal/web-design.md`](./web-portal/web-design.md) §6.1（`D8` / `D11`）的实施细则落到部署侧 —— Access 应用与 Allow 策略、**策略内 ≥ 2 个邮箱的冗余**、登录方式（Google 主 + 邮箱一次性验证码兜底）、**会话时长档位**（目标 3 个月 / 控制台上限疑为 1 个月 / 实施期实测，**不得把目标当既有能力**）、增删管理员的步骤、**根凭证（Cloudflare 账号 2FA 恢复码）须离线保存**与三层恢复链、门户侧不提供增删与重设控件、MCP 面必须绕过 Access。§13 补对应验收项。**背景**：该要求此前只写在 `web-design.md` §6.1（并声明「须落 `deployment.md`」），部署文档缺失 ⇒ `AC10.8` 无法验收，属本次一致性审计的实质缺口 |
 | 2026-09-22 | **与部署制品逐字段收敛（Sprint 3 #6）**：§5.1 compose 契约表改正两处实质失准 —— ①「配置来源」由「环境变量，不挂 config 文件」改为真实的 `./config.toml → /data/.config/ai-memory/config.toml:ro`（两服务各一处、只读）；② curator 命令由不存在的 `--sqlite-path / --auto-tag / --poll-interval / --skip-setup-wizard` 改为真实的 `--daemon --interval-secs 3600 --max-ops 50`。补登 `config 挂载` · 网络（`external: true` 的 `portainer_network`）· 两服务环境变量（`HOME` · `AI_MEMORY_DB` · `AI_MEMORY_REQUIRE_AGENT_ATTESTATION="0"`）· curator 容器名 `ai-memory-mcp-curator` · serve 命令。§5.3 关键字段表按 `config.toml.tmpl` 逐键重写（删去上游**不存在**的 `max_tokens` / `temperature` / `[storage.sqlite].pool_size` / `[memory].max_age_days` / `[context_optimizer].max_results`；`[embeddings]` 的 `provider=fastembed` / `model=qwen/Qwen3-Embedding-0.6B` 更正为 `backend=qwen` / `model=qwen3.7-text-embedding`）；「两个静态常量」更正为仅 `[embeddings].dim`（上游无 `[storage].embedding_dim`，那是运行时结构体字段）。§1 事实文件清单由「三个」改为**入仓 5 个 + 派生 4 个**；§2/§5.4 的 `.env` 键与 `.env.prod.example` 对齐（`IMAGE_TAG` + `DASHSCOPE_API_KEY`，去掉未使用的 `GLM_API_KEY` / `QWEN_API_KEY`）；§2/§3/§4.1 部署目录由 `/opt/ai-memory/data/` 更正为 `/opt/ai-memory/` 并注明运行时数据在**命名卷**。另把 `.env.prod.example` 的服务器路径 `/opt/ai-memory-mcp/` 统一为 `/opt/ai-memory/` |
 | 2026-09-21 | **每库维护定档（Sprint 3 #5）**：§5.3 新增「每库维护（宿主机 cron）」小节 —— 维护入口 [`../scripts/maintain-user-dbs.sh`](../scripts/maintain-user-dbs.sh) / `make maintain-user-dbs`、两条硬约束（显式 `--db`、显式 `AI_MEMORY_REQUIRE_AGENT_ATTESTATION=0`）与失败语义；生产定时器安装留 Sprint 5。覆盖率证据见 [`mcp/mcp-test.md`](./mcp/mcp-test.md) §4-C TC-GC |
 | 2026-09-21 | **补 `[limits]` 容量与配额（Sprint 3 #4）**：§5.3 新增七键表（显式等于 v0.10.0 编译默认）与优先级 / 逐行盖章 / HTTP 面专属说明；模板 [`../deploy/config.toml.tmpl`](../deploy/config.toml.tmpl) 同步落盘；行为证据见 [`mcp/mcp-test.md`](./mcp/mcp-test.md) §4-D TC-LIMIT |

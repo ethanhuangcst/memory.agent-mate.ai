@@ -2,7 +2,7 @@
 
 > **定位**：**门户自身（web app）**用户故事与验收条件（AC）的唯一 spec —— 只写「门户业务要什么、怎样算完成」。设计见 [`web-design.md`](./web-design.md)，测试计划与用例见 [`web-test.md`](./web-test.md)，排期与执行状态见 [`../sprint-plan.md`](../sprint-plan.md)。
 > **文档边界（2026-09-22 起）**：**跨进程 / 上游契约**的故事与 AC 归 [`../mcp/mcp-stories.md`](../mcp/mcp-stories.md)（`MS{n}` / `AC-M{n}.{m}`）；**MCP 侧隔离、档位与能力边界**见 [`../mcp/mcp-design.md`](../mcp/mcp-design.md) §0–§9。原 `S3` / `S4` 的 5 条契约类 AC 已迁出，编号**不重排**、在本文件保留「迁出登记表」。
-> **状态**：v2.1（Sprint 4 #1 边界修正） · as_of 2026-09-22 · 当前门户**代码为零**，本 spec 先于实现落盘
+> **状态**：v2.2（UI 设计系统 / 四语言 / 认证模型定档） · as_of 2026-09-22 · 当前门户**代码为零**，本 spec 先于实现落盘
 > **上游基准**：`v0.10.0`（版本坐标唯一真源 [`../../upstream.lock`](../../upstream.lock)）
 > **角色**：**管理员**（邀请制，经 Cloudflare Access 进入管理面）· **用户**（持 `memo_` 令牌的 MCP 客户端使用者）· **新用户**（尚未接入，读说明页）· **主人**（SSH 保底路径）· **运维**（门户与镜像）
 > **边界**：不写实现方案、不写部署动作、不写密钥与真实 IP；实现与部署分别见 [`web-design.md`](./web-design.md) 与 [`../deployment.md`](../deployment.md) §12.2
@@ -24,19 +24,20 @@
 
 | # | 故事 | 角色 | AC | Product Backlog | Sprint | 设计 | 测试用例 |
 |---|---|---|---|---|---|---|---|
-| <a id="s1"></a>S1 | 创建用户（邀请制） | 管理员 | AC1.1–AC1.7 | [`product-backlog.md`](../product-backlog.md) #27 | Sprint 4 PSP-W1「账号与凭证」 | [`web-design.md`](./web-design.md) §4.2 | TC-P-L0-01 · TC-P-L1-01 · TC-P-L3-02 |
-| <a id="s2"></a>S2 | 令牌生命周期 | 管理员 | AC2.1–AC2.9 | [`product-backlog.md`](../product-backlog.md) #3 | Sprint 4 PSP-W1「账号与凭证」 | [`web-design.md`](./web-design.md) §4.1 | TC-P-L0-04 · TC-P-L1-02 · TC-P-L3-04 |
+| <a id="s1"></a>S1 | 创建用户（邀请制） | 管理员 | AC1.1–AC1.8 | [`product-backlog.md`](../product-backlog.md) #27 | Sprint 4 PSP-W1「账号与凭证」 | [`web-design.md`](./web-design.md) §4.2 | TC-P-L0-01 · TC-P-L1-01 · TC-P-L3-02 |
+| <a id="s2"></a>S2 | 令牌生命周期 | 管理员 | AC2.1–AC2.9 | [`product-backlog.md`](../product-backlog.md) #3 | Sprint 4 PSP-W1「账号与凭证」 | [`web-design.md`](./web-design.md) §4.1 | TC-P-L0-04 · TC-P-L1-02 · TC-P-L2-11 · TC-P-L3-04 |
 | <a id="s3"></a>S3 | 令牌接入的门户侧执行（MCP 侧契约已迁） | 用户 | `AC3.3`–`AC3.5` · `AC3.7`（`AC3.1` / `AC3.2` / `AC3.6` → [`../mcp/mcp-stories.md`](../mcp/mcp-stories.md) `MS1` / `MS6`） | [`product-backlog.md`](../product-backlog.md) #14 / #28 | Sprint 4 PSP-W2「端到端接入」 | [`web-design.md`](./web-design.md) §2 / §4.1 | TC-P-L1-04 · TC-P-L1-06 · TC-P-L2-03 |
 | <a id="s4"></a>S4 | 门户侧的隔离执行与审计（MCP 侧契约已迁） | 用户 | `AC4.3`–`AC4.7`（`AC4.1` / `AC4.2` → [`../mcp/mcp-stories.md`](../mcp/mcp-stories.md) `MS2`） | [`product-backlog.md`](../product-backlog.md) #4 / #11 | [Sprint 4 PSP-W2「端到端接入」](../sprint-plan.md#s4-mcp-session-bridge) | [`web-design.md`](./web-design.md) §1 / §5 | TC-P-L0-02/03 · TC-P-L1-05/07 · TC-P-L3-01/05/09 |
 | <a id="s5"></a>S5 | 审计可追溯 | 管理员 | AC5.1–AC5.3 | [`product-backlog.md`](../product-backlog.md) #5 | [Sprint 4 PSP-W3「可运维、可发布」](../sprint-plan.md#s4-audit-view) | [`web-design.md`](./web-design.md) §4.4 | TC-P-L0-05 |
-| <a id="s6"></a>S6 | 接入说明页与 i18n | 新用户 | AC6.1–AC6.6 | [`product-backlog.md`](../product-backlog.md) #7 | Sprint 4 PSP-W3「可运维、可发布」 | [`web-design.md`](./web-design.md) §2 | TC-P-L2-04 · TC-P-L2-05 |
+| <a id="s6"></a>S6 | 接入说明页与 i18n | 新用户 | AC6.1–AC6.11 | [`product-backlog.md`](../product-backlog.md) #7 | Sprint 4 PSP-W3「可运维、可发布」 | [`web-design.md`](./web-design.md) §2 / §13 / §14 | TC-P-L2-04 · TC-P-L2-05 · TC-P-L2-07 |
 | <a id="s7"></a>S7 | 容量、配额与限流 | 管理员 | AC7.1–AC7.6 | [`product-backlog.md`](../product-backlog.md) #6 / #17 / #29 | Sprint 4 PSP-W2 / PSP-W3 · Sprint 6 #10 / #11 | [`web-design.md`](./web-design.md) §7 · [`../mcp/mcp-design.md`](../mcp/mcp-design.md) §5.4 | TC-P-L3-06 · TC-P-L3-07 |
 | <a id="s8"></a>S8 | 主人保底路径不受影响 | 主人 | AC8.1–AC8.4 | [`product-backlog.md`](../product-backlog.md) #14 | [Sprint 6「接入面」](../sprint-plan.md#s5-access-surfaces) | [`web-design.md`](./web-design.md) §2 | TC-P-L1-08 |
 | <a id="s9"></a>S9 | 门户自身数据的边界 | 运维 | AC9.1–AC9.4 | [`product-backlog.md`](../product-backlog.md) #9 / #26 | Sprint 6 #9 | [`web-design.md`](./web-design.md) §4.4 / §11 | TC-P-L1-10 · TC-P-L3-08 |
-| <a id="s10"></a>S10 | 管理面访问控制与面隔离 | 管理员 | AC10.1–AC10.5 | [`product-backlog.md`](../product-backlog.md) #2 / #16 | Sprint 4 PSP-W1「账号与凭证」 | [`web-design.md`](./web-design.md) §6 | TC-P-L3-03 |
+| <a id="s10"></a>S10 | 管理面访问控制与面隔离 | 管理员 | AC10.1–AC10.10 | [`product-backlog.md`](../product-backlog.md) #2 / #16 | Sprint 4 PSP-W1「账号与凭证」 | [`web-design.md`](./web-design.md) §6 / §6.1 | TC-P-L3-03 · TC-P-L2-09 |
 | <a id="s11"></a>S11 | 门户启动自检（fail-closed） | 运维 | AC11.1–AC11.5 | [`product-backlog.md`](../product-backlog.md) #18 | Sprint 4 PSP-W3「可运维、可发布」 | [`web-design.md`](./web-design.md) §3.4 | TC-P-L0-06 · TC-P-L0-07 · TC-P-L0-08 · TC-P-L0-09 |
 | <a id="s12"></a>S12 | 门户制品契约与升级治理 | 运维 | AC12.1–AC12.5 | [`product-backlog.md`](../product-backlog.md) #18 | Sprint 4 PSP-W3「可运维、可发布」· Sprint 7 #3 / #6 | [`web-design.md`](./web-design.md) §3.1 / §3.2 / §9 | TC-P-L1-09 · TC-P-L1-11 · TC-P-L1-12 |
 | <a id="s13"></a>S13 | 门户容器最小攻击面 | 运维 | AC13.1–AC13.3 | [`product-backlog.md`](../product-backlog.md) #16 · [`../adr/ADR-012`](../adr/ADR-012-portal-launch-mechanism-no-docker-socket.md) | Sprint 4 PSP-W2 / PSP-W3 | [`web-design.md`](./web-design.md) §3 / §8 T1 | TC-P-L1-08 · TC-P-L1-13 |
+| <a id="s14"></a>S14 | 门户 UI 设计系统与版式一致性 | 运维 | AC14.1–AC14.12 | [`product-backlog.md`](../product-backlog.md) #7 | Sprint 4 PSP-W3「可运维、可发布」 | [`web-design.md`](./web-design.md) §13 / §14 | TC-P-L0-10 · TC-P-L0-11 · TC-P-L2-06 · TC-P-L2-08 · TC-P-L2-09 · TC-P-L2-10 · TC-P-L2-12 · TC-P-L2-13 |
 
 ---
 
@@ -109,6 +110,14 @@ Scenario: 用户目录创建失败时不产生半成品用户
   Then 创建失败并给出可读的错误
   And 门户中不存在名为 alice 的可用用户
   And 审计中不出现该用户的创建成功记录
+
+@AC1.8 @authz
+Scenario: 用户页不提供管理员增删入口
+  Given 管理员已进入用户页
+  When 查看页面上的操作入口
+  Then 页面只提供「创建用户」
+  And 页面不提供邀请管理员、删除管理员或重设密码的控件
+  And 页面指向管理员变更的实际位置（Cloudflare Access 策略）
 ```
 
 ---
@@ -361,9 +370,10 @@ Scenario: 新用户按页面指引完成接入
 
 @AC6.3 @edge
 Scenario: 语言切换生效且范围受限
-  Given 门户已提供中文与英文两种语言
+  Given 门户已提供英文与三种中文变体（简体 / 香港繁体 / 台湾繁体）
   When 用户切换语言
   Then 门户 UI 与接入说明页随之切换
+  And 当前语言在刷新页面后保持
   And MCP 服务本身的响应与语言无关
 
 @AC6.4 @edge
@@ -387,6 +397,40 @@ Scenario: 页面内容与能力内容源口径不一致时阻断发布
   When 执行一次页面发布检查
   Then 发布被阻断并指出不一致项
   And 不发布与内容源口径不一致的页面
+
+@AC6.7 @happy
+Scenario: 三步接入为纵向排布
+  Given 新用户打开接入说明页
+  When 页面加载完成
+  Then 三步按序号自上而下纵向排列
+  And 每一步独占一行且带序号
+
+@AC6.8 @happy
+Scenario: 第 1 步可就地联系管理员
+  Given 新用户还没有令牌
+  When 在第 1 步的 Contact Admin 上悬停或用键盘聚焦
+  Then 弹出浮层显示管理员微信二维码与联系邮箱
+  And 浮层可由键盘到达与收起
+
+@AC6.9 @edge
+Scenario: 第 3 步给出一次真实调用示例
+  Given 接入说明页展示第 3 步「验证一次调用」
+  When 查看该步附带的示例
+  Then 示例为一次真实调用的界面截图
+  And 截图不含令牌明文、真实主机名与 IP
+
+@AC6.10 @negative
+Scenario: 页面不重复三步已覆盖的内容
+  Given 接入说明页已包含三步接入
+  When 检查页面章节与页内锚点
+  Then 不存在与三步重复的独立「取令牌」或「客户端配置」章节
+  And 页内锚点无断链
+
+@AC6.11 @edge
+Scenario: 品牌名统一
+  Given 门户以 memory.agent-mate.ai 对外提供服务
+  When 检查页面标题与顶栏品牌
+  Then 两者均为 memory.agent-mate.ai - AI Memory MCP
 ```
 
 ---
@@ -565,6 +609,41 @@ Scenario: 已认证管理员正常使用管理面
   When 管理员访问管理域名
   Then 管理面正常加载
   And 管理操作在其权限范围内可用
+
+@AC10.6 @edge
+Scenario: 多把钥匙互为备份
+  Given Cloudflare Access 策略中列有两个以上登录入口
+  When 其中任一个失效
+  Then 仍可用另一个独立完成管理面认证
+  And 该认证不依赖门户自身的账号体系
+
+@AC10.7 @edge
+Scenario: 会话时长按平台档位生效
+  Given 管理面会话时长已在 Access 应用上设定
+  When 会话超过该时长
+  Then 再次访问要求重新认证
+  And 文档记录控制台可选档位与实测结论（不得把目标值写成既有能力）
+
+@AC10.8 @edge
+Scenario: 根凭证的离线保存要求已落文档
+  Given 管理面的根凭证是 Cloudflare 账号及其第二因素
+  When 检查部署文档
+  Then 文档要求离线保存第二因素恢复码
+  And 文档给出邮箱失效时的恢复链（改策略 → Cloudflare 账号 → 服务器 SSH）
+
+@AC10.9 @negative
+Scenario: 门户内不存在管理员增删与密码重设控件
+  Given 管理员已进入管理面
+  When 检查页面上的操作控件
+  Then 不存在邀请管理员、删除管理员或重设密码的控件
+  And 门户不存储任何门户密码
+
+@AC10.10 @happy
+Scenario: 管理面给出在 Cloudflare 侧增删管理员的确切步骤
+  Given 管理员需要增删一名管理员
+  When 查看管理面说明
+  Then 页面给出 Access → Applications → Policies 的具体路径
+  And 说明移除后访问在下次请求即失效、无需吊销会话
 ```
 
 ---
@@ -704,6 +783,100 @@ Scenario: 门户容器按最小依赖与资源限额运行
 
 ---
 
+<a id="s14-story"></a>
+## S14 门户 UI 设计系统与版式一致性
+
+**故事**：作为**运维**，我希望门户所有页面共用一套可机械核对的设计系统，以便改版不靠观感、评审有唯一基准。
+
+**范围边界**：只约束门户自身 UI（公开说明页与管理面）；不约束 MCP 服务响应、不约束上游。令牌数值与组件规范见 [`web-design.md`](./web-design.md) §13 / §14。
+
+```gherkin
+@AC14.1 @happy
+Scenario: 全站单色
+  Given 门户所有页面已应用设计令牌
+  When 扫描所有元素的计算色值
+  Then 除危险红及其浅底外不存在任何彩色
+  And 主按钮为墨色实底而非品牌色
+
+@AC14.2 @edge
+Scenario: 代码块保留圆角例外
+  Given 设计系统约定面板与控件零圆角
+  When 检查代码块容器
+  Then 代码容器保留 8px 圆角（含右侧复制条）
+  And 其余面板与控件为直角
+
+@AC14.3 @edge
+Scenario: 表单控件尺度一致
+  Given 页面同一行内存在输入框、下拉框与按钮
+  When 测量它们的渲染高度与字号
+  Then 三者高度一致
+  And 三者字号一致
+
+@AC14.4 @negative
+Scenario: 表格不被容器裁切
+  Given 页面在 1440px 宽视口下渲染
+  When 检查能力表的容器与列
+  Then 表格无横向溢出
+  And 所有列（含示例列）在视口内可见
+
+@AC14.5 @negative
+Scenario: 数据不在词中断开
+  Given 表格单元内含路径、时间戳或标识符
+  When 在窄屏下渲染
+  Then 这些值不逐字符折断
+  And 溢出由容器横向滚动承接
+
+@AC14.6 @happy
+Scenario: 管理面顶栏固定
+  Given 管理面页面内容长于一屏
+  When 向下滚动
+  Then 顶栏仍贴在视口顶部
+  And 内容从顶栏下缘开始滚动
+
+@AC14.7 @happy
+Scenario: 页脚固定
+  Given 页面内容长于一屏
+  When 向下滚动
+  Then 页脚仍贴在视口底部
+
+@AC14.8 @edge
+Scenario: 页脚结构与对齐
+  Given 页脚含入口链接与版权
+  When 检查两者位置
+  Then 入口链接在版权左侧且同一行
+  And 整组在页脚内右对齐
+
+@AC14.9 @edge
+Scenario: 内容列宽度与正文行宽
+  Given 管理面页面在宽视口下渲染
+  When 测量内容列与正文段落
+  Then 内容列紧贴左侧栏并使用可用宽度
+  And 正文段落有最大行宽，长行不横跨整页
+
+@AC14.10 @happy
+Scenario: 分页组件可用
+  Given 用户列表与审计页含多行记录
+  When 查看列表底部
+  Then 显示「Showing a–b of c」计数
+  And 提供上一页 / 下一页与当前页，首末页对应按钮禁用
+
+@AC14.11 @edge
+Scenario: 四语言词表键集合一致
+  Given 门户提供四份语言词表
+  When 逐份比对键集合
+  Then 四份键集合完全一致（无缺失、无多余）
+  And 缺键时回落英文，再回落键名本身
+
+@AC14.12 @edge
+Scenario: logo 尺寸按位置分档
+  Given 公开页 hero 与管理面顶栏各有一处 logo
+  When 测量两处渲染尺寸
+  Then 两处按既定档位渲染且不拉伸变形
+  And 窄屏下顶栏 logo 降档，页面无横向溢出
+```
+
+---
+
 ## 范围外（明确不做）
 
 自助注册 · 对外收费/计费 · 非 MCP 接入面（REST / Web SDK / OpenAI 兼容）· 上游能力之外的二次开发 · 服务器 OS 账号同步（单账号 + N 密钥已足够）· 用 macaroon 能力令牌做隔离（additive-only，只放宽不收紧）· 门户挂载 docker socket（[`../adr/ADR-012`](../adr/ADR-012-portal-launch-mechanism-no-docker-socket.md)）。
@@ -721,6 +894,7 @@ Scenario: 门户容器按最小依赖与资源限额运行
 | 7 | ~~每用户库后台维护的执行方~~ **已定档（Sprint 3 #5）** | **主机 cron** 逐库调度，唯一入口 `scripts/maintain-user-dbs.sh`；命令口径、覆盖面实测与失败语义见 [`../mcp/mcp-design.md`](../mcp/mcp-design.md) §5.3，故事 [`../mcp/mcp-stories.md`](../mcp/mcp-stories.md) `MS8`。生产定时器与告警留 Sprint 6 |
 | 8 | 是否启用静态加密（`AI_MEMORY_ENCRYPT_AT_REST`） | 未定；注意它只防「快照离开主机后被读」，不防门户被攻破 —— [`web-design.md`](./web-design.md) §10 #6 / §8 T10 |
 | 9 | 门户镜像重建是否自动化 | 建议纳入版本锁变更触发的流水线 —— [`web-design.md`](./web-design.md) §10 #7 |
+| 10 | 管理面**没有密码重设**入口（`D11` 撤销） | 已知限制，本轮接受：身份由 Cloudflare Access 认定，登录走 Google（主）与邮箱一次性验证码（兜底），故**没有密码可重设**；失效链为「改策略 → Cloudflare 账号 → 服务器 SSH」，根凭证（Cloudflare 账号第二因素恢复码）**须离线保存**（`AC10.8`）。撤销理由见 [`web-design.md`](./web-design.md) §0 **D11** 与 §6.1 |
 
 ## 变更记录
 
@@ -734,3 +908,4 @@ Scenario: 门户容器按最小依赖与资源限额运行
 | 2026-09-21 | **引用收口（故事索引 + 已知限制）**：故事索引新增 `AC` 列（`AC{n}.{m}` 区间）并把 `S11` / `S12` / `S13` 的「待登记用例」替换为具体用例号（`TC-P-L0-06`–`TC-P-L0-09`；`TC-P-L1-09` / `TC-P-L1-11` / `TC-P-L1-12`；`TC-P-L1-08` / `TC-P-L1-13`），形成 AC ↔ TC 双向映射；「已知限制与开放问题」第 3 条由「尚无对应用例」改为**已登记**，并注明 `AC12.4`（升级演练）为 §1 人工项。同日 [`product-backlog.md`](../product-backlog.md) / [`sprint-plan.md`](../sprint-plan.md) / [`change-log.md`](../change-log.md) 同步订正指向本文件旧故事号的 5 处错指 |
 | 2026-09-22 | **故事索引的 Sprint 落点随 Replan 改指**（锚点 id `s4-*` / `s5-*` 全部保留，跨文档链接未断）：S1 / S2 / S10 → `Sprint 4 PSP-W1「账号与凭证」`；S3 / S4 / S13 → `Sprint 4 PSP-W2「端到端接入」`；S5 / S6 / S11 → `Sprint 4 PSP-W3「可运维、可发布」`；S7 → `Sprint 4 PSP-W2 / PSP-W3 · Sprint 6 #10 / #11`；S8 → `Sprint 6「接入面」`；S9 → `Sprint 6 #9`；S12 → `Sprint 4 PSP-W3 · Sprint 7 #3 / #6` |
 | 2026-09-22 | **文档边界修正（v2.1，Sprint 4 #1）**：本文件收窄为**门户自身（web app）**的故事与 AC。① `S3` 由「用户通过 MCP 端点接入」改为「**令牌接入的门户侧执行**」、`S4` 由「跨用户隔离」改为「**门户侧的隔离执行与审计**」（**锚点 `#s3` / `#s4` / `#s3-story` / `#s4-story` 冻结未改**）；② 5 条属**跨进程 / 上游契约**的 AC 迁出至 [`../mcp/mcp-stories.md`](../mcp/mcp-stories.md)：`AC3.1` → `MS1 AC-M1.1` · `AC3.2` → `MS1 AC-M1.2` · `AC3.6` → `MS6 AC-M6.1` · `AC4.1` → `MS2 AC-M2.1` · `AC4.2` → `MS2 AC-M2.2`（**原编号一律不重排**，两故事内各留「迁出登记」表，既有跨文档引用继续可解析）；③ 故事索引的 `AC` 列与 `设计` 列随之更新（设计指向改为门户侧章节）；④ 「已知限制」第 7 条（每用户库维护执行方）关闭为**已定档：主机 cron**。**留本文件的 AC 原文一字未改** |
+| 2026-09-22 | **UI 需求变更与 AC 追加（v2.2）**：① **语言范围需求变更**：门户由「中英两种」扩为**四语言**（`en` / `zh-CN` / `zh-HK` / `zh-TW`）—— `AC6.3` **编号不变、内文改写**并补「刷新后保持」；② **色系需求变更**：弃用品牌橙、全站改**纯单色**（唯一有色为危险红），**推翻**同日早前的「保留 logo 橙」（决议登记 [`web-design.md`](./web-design.md) §0 **D10**）；③ **撤销**「门户内邀请管理员 / 重设密码 / 门户自建账号」三项需求，管理面维持 Cloudflare Access（**D11**），故新增 `S1 AC1.8`（用户页只提供「创建用户」，不提供管理员增删入口）；④ **S6 追加 `AC6.7`–`AC6.11`**（三步纵向排布 / 第 1 步 Contact Admin 悬浮窗 / 第 3 步真实调用示例截图 / 删除与三步重复的章节 / 品牌名统一）；⑤ **S10 追加 `AC10.6`–`AC10.10`**（多把钥匙冗余 / 会话时长按平台档位生效且不得把目标写成既有能力 / 根凭证离线保存要求落文档 / 门户内无管理员增删与密码控件 / 给出 Cloudflare 侧增删管理员的确切步骤）；⑥ **新增 `S14`「门户 UI 设计系统与版式一致性」**（`AC14.1`–`AC14.12`：全站单色 / 代码块 8px 圆角例外 / 表单控件尺度一致 / 表格不被裁切 / 数据不在词中断开 / 顶栏固定 / 页脚固定 / 页脚结构与对齐 / 内容列宽度与正文行宽 / 分页组件 / 四语言词表键集合一致 / logo 按位置分档）。**既有 AC 编号一字未重排**；页面集由 7 页回到 **6 页** —— 原「07 只读管理员页」**撤销**，其内容并入 06「Admin MCP 配置」（见 [`web-design.md`](./web-design.md) §14） |
