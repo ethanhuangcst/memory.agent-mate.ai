@@ -177,6 +177,9 @@ Sprint Goal: MCP 本地安全边界与运维行为定档
 - **「文档写的」不等于「制品有的」**：`deployment.md` §5.3 曾登记 5 个上游 `src/config.rs` 里**不存在**的键（`max_tokens` / `temperature` / `[storage.sqlite].pool_size` / `[memory].max_age_days` / `[context_optimizer].max_results`），而 `[storage].embedding_dim` 实为**运行时结构体字段**而非配置节 ⇒ 配置文档必须以模板 / 上游 schema 为基准**逐键镜像**，不能凭印象列举。
 - **「数量」类声明要用机械口径**：`deploy/` 工作区可见 9 个条目，但 `git ls-files` 只有 **5 个入仓**、另 4 个是 gitignored 派生文件 ⇒ 原「三个事实文件」既少于 `README.md` 列的四个模板、也少于实际入仓数；数量类表述须以 `git ls-files` / `check-ignore` 取证。
 - **同一事实会分叉出第二套口径**：部署目录在 `deployment.md` 与门户样例里是 `/opt/ai-memory/`，但 `.env.prod.example` 与 Sprint 2 条目写的是 `/opt/ai-memory-mcp/` —— 收口时要**先枚举该事实的全部出现位置**再判定真源，而不是见到一处改一处。
+- **Sprint 收口要同时核两件事**：条目是否全 `Done`，以及 Sprint 级结束标记 / 回顾是否同体例定稿 —— #1–#7 全 `Done` 时标题区仍缺 `**状态：已结束**`（Sprint 1 / 2 均有）。
+
+> **沉淀**：本 Sprint 的可复用结论已落到 [`knowledge/docs/spec-doc-conventions.md`](./knowledge/docs/spec-doc-conventions.md)（证据第 12–14 条 + 6 条 guidance）与 [`knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md`](./knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md)（教训 20 / 21）。**无新增 ADR** —— 全部是既有决议的执行与文档一致性维护，未引入新的架构或流程取舍。
 
 **下轮改进**
 - 新增 RID 解决方案时，同批建立 Product 条目锚点、Sprint 执行锚点和 design/test 链接，并在覆盖矩阵逐项核对。

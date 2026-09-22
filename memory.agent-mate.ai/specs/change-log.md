@@ -29,6 +29,8 @@
 
 **边界**：生产环境落地（定时器 / 备份外迁 / 生产通道复验）仍属 Sprint 5；本次只收敛文档与制品的口径，不改任何架构决策，也不动在途的改名故事与门户故事改动。
 
+**Retrospective 沉淀**：本轮可复用结论并入 Sprint 3 回顾三组（做得好 +1 / 学到 +4 / 下轮改进 +2），并沉淀到 [`knowledge/docs/spec-doc-conventions.md`](knowledge/docs/spec-doc-conventions.md)（**证据第 12–14 条 + 6 条 guidance**：配置文档与制品双向互为镜像、数量与路径类声明须 `git ls-files` 取证、字段对照矩阵优于通读、Sprint 收口要核结束标记）。该知识文档 `as_of` 同步为 2026-09-22、补 `config-doc` 标签与 3 条 Links。
+
 **ADR：无新增** —— 本轮是既有决议的文档一致性维护（含一处状态性表述更新），未引入新的架构或流程取舍。
 
 ## 2026-09-21
