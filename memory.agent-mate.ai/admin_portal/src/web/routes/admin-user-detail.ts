@@ -11,6 +11,8 @@
 import path from 'node:path';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { formatTimestamp, memoryIdentityOf } from '../../shared/format';
+import { parseCookies, serializeCookie } from '../../shared/cookies';
+import { ISSUED_COOKIE, take as takeIssued } from '../issued-stash';
 import { countActiveKeysForUser, listKeysByUser, type KeyRow } from '../db/repo/keys';
 import { findUserByHandle } from '../db/repo/users';
 import {
@@ -99,6 +101,18 @@ export async function renderUserDetail(
       : {},
   });
 
+  // 方案 D 的 GET 侧：取用即销毁（见 issued-stash）⇒ 刷新拿不到第二次。
+  // cookie 无论命中与否都清除，避免它一直挂在浏览器里造成误解。
+  const issuedRef = parseCookies(request.headers.cookie)[ISSUED_COOKIE];
+  const issuedFromStash = issuedRef === undefined ? undefined : takeIssued(issuedRef);
+  const issuedExpired = issuedRef !== undefined && issuedFromStash === undefined;
+  if (issuedRef !== undefined) {
+    reply.header(
+      'set-cookie',
+      serializeCookie(ISSUED_COOKIE, '', { path: detailPath(user.handle), maxAge: 0 }),
+    );
+  }
+
   return sendHtml(reply, deps, 'admin-user-detail.njk', {
     ...shell,
     detailPath: detailPath(user.handle),
@@ -113,7 +127,8 @@ export async function renderUserDetail(
     },
     tokens,
     errorKey: options.errorKey ?? null,
-    issuedToken: options.issuedToken ?? null,
+    issuedToken: issuedFromStash ?? options.issuedToken ?? null,
+    issuedExpired,
     dialog,
     dialogPrefix,
     dialogLabel: '',

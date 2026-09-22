@@ -22,6 +22,13 @@
     </div>
     {% endif %}
 
+    {% if issuedExpired %}
+    {# 方案 D：明文只显示一次。cookie 还在但暂存已取用/过期 ⇒ 明确说明，而不是给一片空白。 #}
+    <section class="callout callout-info" data-issued-expired>
+      <p>{{ t('detail.issued.expired') }}</p>
+    </section>
+    {% endif %}
+
     {% if issuedToken %}
     <section class="section">
       <h2>{{ t('detail.issued.title') }}</h2>

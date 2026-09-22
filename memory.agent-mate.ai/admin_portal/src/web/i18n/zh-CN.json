@@ -258,5 +258,6 @@
   "unauth.diag.channelOn": "本实例已启用自签测试通道，可直接在本页登录。",
   "unauth.diag.channelOff": "自签测试通道未启用 —— 登录须来自 Cloudflare Access。",
   "unauth.diag.tokenFile": "期望的测试 Token 文件：",
-  "users.field.handle": "用户名"
+  "users.field.handle": "用户名",
+  "detail.issued.expired": "明文已不可取回（只显示一次）。若仍需要，请重新签发 Token。"
 }

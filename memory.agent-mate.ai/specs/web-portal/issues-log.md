@@ -111,7 +111,7 @@
 
 | 项 | 状态 | 证据 |
 | --- | --- | --- |
-| **C 真身份路径** | **已完成** | 本机 `Host: memory.agent-mate.ai` → **401**（不再 403）；公网 → **302 → `sparkling-sun-3355.cloudflareaccess.com`**（`kid` = `.env` 的 AUD）；`tunnel-dev.sh --verify` → **OK ⑤**；**用户本人 SSO 登录成功** |
+| **C 真身份路径** | **已完成** | 本机 `Host: memory.agent-mate.ai` → **401**（不再 403）；公网 → **302 → `<team-domain>.cloudflareaccess.com`**（`kid` = `.env` 的 AUD）；`tunnel-dev.sh --verify` → **OK ⑤**；**用户本人 SSO 登录成功** |
 | **A 开发登录入口** | 实施中 | 验收：不预注入 cookie 的 E2E / 生产 404 / 非回环 404-403 |
 | **B 401 自诊断** | 待实施 | 验收：Host 不匹配时页面明确指出「Host 不在允许列表」 |
 | Service Token（在线 E2E） | **凭据已通** | 带 `CF-Access-Client-Id/Secret` 访问公网 `/admin/users` → **HTTP/2 200**（此前为 302）；`make portal-e2e ARGS=--online` 待跑以关掉该遗留项 |
@@ -130,7 +130,7 @@
 
 | 项 | 结果 | 证据 |
 | --- | --- | --- |
-| **C 真身份路径** | **已完成** | 本机 `Host: memory.agent-mate.ai` → **401**（不再 403）；公网 → **302** 至 `sparkling-sun-3355.cloudflareaccess.com`（`kid` = `.env` 的 AUD）；`tunnel-dev.sh --verify` → **OK ⑤**；**用户本人 SSO 登录成功** |
+| **C 真身份路径** | **已完成** | 本机 `Host: memory.agent-mate.ai` → **401**（不再 403）；公网 → **302** 至 `<team-domain>.cloudflareaccess.com`（`kid` = `.env` 的 AUD）；`tunnel-dev.sh --verify` → **OK ⑤**；**用户本人 SSO 登录成功** |
 | **Service Token（自动化前置）** | **已打通** | 带 `CF-Access-Client-Id/Secret` 访问公网 `/admin/users` → **HTTP/2 200**（此前一律 302） |
 | **登录问题根因** | **已确定** | 门户曾以 `.env.local`（回环 Host）启动 ⇒ 真域名在 Host 判定处被判 `unknown-host` → 403，**Access 断言未轮到**。**不是**网络问题，**不是** Cloudflare 配置问题 |
 | **网络（更正后）** | **无问题** | DNS 系统解析与公共解析器一致；HTTPS 全通（404/400/401 均为正常应答）；`cloudflared` 2026.9.1 已装并已授权 |
@@ -179,7 +179,7 @@
 | **1** 停用仍能签发 | 停用后 `?dialog=issue` 链接 **0** 处、`?dialog=restore` **2** 处；恢复动作 **303** | **已修**（服务层拒绝此前已实测：`{"error":"user-disabled"} [HTTP 400]`） |
 | **2** 重名无提示 | 重名 POST 渲染页面含 `data-dialog-error` **1** 处 + 重名文案命中 **2** 次 | **已修**（报错已进弹窗，不再被遮罩盖住） |
 | **3** 长文本溢出 | 服务端 CSS 含 `overflow-wrap: anywhere` ✓；但**用户截图实测：建用户弹窗里的路径仍被切碎**（`.portal-data/users/aidan1/` 之类）；另有 1 处真实 `word-break: break-all`（第 1739 行，两份 CSS 同步） | **未修复**（我此前说的「部分修 / `.path` 已收口」**不成立** —— 修的规则**没覆盖弹窗里的路径**；表格与弹窗是两处元素） |
-| **4** 明文不显示 | 签发响应 **HTTP 200** 且**含 `memo_` 明文**（不再是「不显示」）；但响应仍是 **API 地址、无 303** | **部分修** —— 「刷新即丢 / 地址栏停在 API」仍未治（**方案 D** 未做） |
+| **4** 明文不显示 | **已按方案 D 实现**（见下）—— 新增 `src/web/issued-stash.ts`（单次取用 / TTL 60s / 上限 32）；`admin-api` 的 issue+rotate HTML 分支改为「暂存 + `portal_issued` cookie + **303 回详情页**」（响应体里不再有明文）；`admin-user-detail` 取用即销毁并清除 cookie；模板新增「明文已过期」提示；词表 +1 条（261 键）。护栏测试 4 条（`tests/integration/issued-once.test.ts`）：T1 303 且 Location 为详情页 · T2 **第二次请求拿不到明文** · T3 单次取用/过期/上限 · T4 明文不入库 | **已实现，待浏览器确认**（`typecheck` 0 错误；测试 251 → **261 项全绿**；覆盖率 **OK** 92.78/85.90/97.76/94.26） |
 | **5** 签发报 `not_found` | 详情页绝对链接 **4** 处（`href="/admin/users/<handle>?dialog=…"`） | **已修** |
 | **6** 无法登录 | `GET /admin/dev-login` **200**；`POST` 下发 `CF_Authorization` ✓；未认证 401 页含 `data-dev-diagnostics` ✓ | **已修**（C/A/B 三条，均有人手验收） |
 
@@ -217,6 +217,84 @@
 
 **仍待做**：原型（`mockups`）里的同款文案与弹窗路径需同步（阶段 3）、`web-stories`/`web-design`/`web-test` 的 AC 与用例登记（阶段 2）、覆盖率语句边距 92.75 的补测。
 
+### Issue 8: Long token prefix runs past the dialog border
 
+- In the rotate dialog the token prefix (`memo_pDBN7TtZ`) runs past the right edge of the box.
+- The issue dialog shows the same shape on its token-prefix row ("generated after issuing").
 
+**判定**：可用性缺陷（视觉/布局）。与 **Issue 3（长路径撑破表格）同源** —— 都是「不可断的长串 + 过窄的容器」。
 
+#### 根因（数字全部实测，非推算）
+
+| 环节 | 事实 |
+| --- | --- |
+| 弹窗宽度 | `.dialog { max-width: 22rem }`，且本项目 `html { font-size: 17px }` ⇒ **374px**，内宽 304px |
+| 目标块可用宽 | 再减 `.dialog-target` 左右内边距 ⇒ 283px |
+| 标签列 | `.key-meta { grid-template-columns: 168px minmax(0,1fr) }` + 1.25rem 间距 ⇒ 值列 **94px** |
+| 串的实际宽度 | `memo_XXXXXXXX` = **123px** |
+| 为什么不换行 | `.mono` 并没有 `nowrap`（第一次诊断猜错了）；真因是**下划线不产生断行点**，而 `overflow-wrap` 默认 `normal` ⇒ 无处可断，只能溢出 |
+| 结构错配 | 「键值表转单列」的规则挂在 `@media (max-width: 960px)` 上，按**视口**判断；而弹窗**任何视口下都只有 22rem 宽** ⇒ 该规则永远救不了弹窗 |
+
+**先失败、后修复的护栏证据**（Playwright 实测）：
+
+```
+修复前：.key-meta-value   scrollWidth=123   clientWidth=94
+修复后：值列 123px / 盒子 322px ⇒ scroll == client
+```
+
+#### 修法（两次；第二次取代第一次）
+
+1. **2026-09-22（止血）**：标签列 168px → 7.5rem，值列加 `overflow-wrap: anywhere`；并删除 `.key-meta*` 在文件后段的**重复定义**（列宽与字号都不同 —— 正是 Issue 3 那类「两条规则互相抵消」的隐患）。
+2. **2026-09-23（用户评审：布局不好看 ⇒ 重新设计）**：弹窗宽度 **+50%（22rem → 33rem；实测 374 → 561px）**；目标块由「固定标签列 + 值列」改为**两列规格栏** —— 每个字段「标签在上、值在下」自成一体，两列等宽分占整行。**固定标签列宽从结构上被取消** ⇒ 7.5rem 这类救火数字随之删除。
+
+#### 新增护栏（不让它再靠肉眼发现）
+
+- `tests/e2e/portal_flow.py` 的 `assert_no_overflow()`：**6 个弹窗 × 2 视口（1280/720）+ 详情页键值面板**，量 `scrollWidth`／父容器右边界／整页横向滚动，失败时报出具体数字。
+- 同处新增**弹窗宽度断言**（33rem）：按**根字号换算**而非硬编码像素 —— 第一版写死 528px 造成过一次**假失败**（本项目 1rem = 17px，真值 561px）。
+- 同处新增**目标块几何断言**：两个字段并排（同列即同一字段）、标签在值上方、第二字段越过容器中线（确认宽度真的被用上，而不是又留一片死白）。
+
+#### 顺带修好的既有缺陷（同类：坏了却没人发现）
+
+`scripts/portal-e2e.sh`（官方 E2E 入口）此前**根本无法启动**：启用自签通道时 `PORTAL_TEST_JWT_EMAIL` 是必填（`config.ts` 校验），脚本未传 ⇒ 官方 E2E 长期跑不起来。这也是「这类缺陷只能靠人眼发现」的原因之一 —— 唯一能自动发现布局问题的入口是坏的。
+
+#### 流程条款（第 4 条，承接 Issue 6）
+
+**布局类改动必须附一条可机器判定的几何断言，并在改前先看到它失败。** 我此前两次宣布「CSS 已收口」，两次都被用户肉眼推翻；根因是「读规则」不等于「量结果」—— 规则可以自相矛盾而看起来收口了，只有量出来的宽度不会说谎。
+
+### Issue 6 状态更正（2026-09-23，用户判定）—— **不关闭**
+
+**用户判定**：**不同意关闭 Issue 6** —— 「还缺少 e2e 用户验证」。
+
+因此本条**不作「已修复」登记**，并把此前漏掉的验收边界补齐：
+
+| 已验（机器） | **未验（人手）** |
+| --- | --- |
+| 本机 `Host: memory.agent-mate.ai` → 不再 403；公网 → 302 到 `*.cloudflareaccess.com`；Service Token → 200；开发通道登录可达 | **完整链路的人手走通**：处于 log out 状态 → 点 login → **出现 Cloudflare 登录窗口并登录成功** → **可访问 users page** |
+
+**关闭条件（2026-09-23 新增）**：新增**登出**功能（入口在**左侧菜单栏**，同步 `mockups`）后，由**用户本人**走通上述四步并留**截图**；本条记录里必须含该截图与链路四步。判定依据 = 流程条款 3（凡交付物要求「人做某个动作」，验收必须包含一次真实人手操作并留证据）；方案见 [`web-login-plan.md`](./web-login-plan.md) **§9 登出与会话退出**（`SBI-L7` 即本条的关闭判定）。
+
+**教训（并入 Sprint 4 回顾）**：此前把「服务端能被验证」当成「人能登录」—— 用 curl（请求头）与 Playwright（程序化 cookie）的通过**替代了人手验收**，这正是 Sprint 4 回顾里「验证方式与真实使用方式不一致」的同一条。
+
+### Issue 9: 401 page says "NOT DELIVERED YET" — eyebrow copy reused from the placeholder page
+
+- 未登录访问 `/admin/users` 时，页面顶部显示「**尚未交付**」（英文 `NOT DELIVERED YET`），紧接着才是「需要登录 / Sign in required」。
+- 观感上像「这个功能还没做」，而不是「你还没有身份」—— 我在收到用户截图时也曾据此误判为「占位页」。
+
+**判定**：可用性缺陷（文案）。属「**错误提示应该如何处理**」这一类（用户本轮经验第 3 条）。
+
+#### 证据（实测）
+
+| 事实 | 证据 |
+| --- | --- |
+| 401 页的 eyebrow 复用了**公开面占位页**的键 | `admin_portal/src/web/views/unauthorized.njk` 用 `t('placeholder.eyebrow')`；该键的译文是「尚未交付」/`NOT DELIVERED YET` |
+| 实际渲染 | `curl -H 'Host: 127.0.0.1' /admin/users`（无 cookie）⇒ `<h1>需要登录</h1>` 之前渲染出「尚未交付」；真浏览器截图见 `admin_portal/tests/e2e/artifacts/401-page-zh.png` |
+| 同一页另有真实缺口 | 生产环境下该页只有「接入说明」可点，**没有登录入口**（开发环境才有「以测试管理员身份登录」）⇒ 用户要求的「点 login」在生产是空的 |
+
+#### 修法（并入 [`web-login-plan.md`](./web-login-plan.md) §9 的 `SBI-L6a` / `SBI-L3`）
+
+1. 新增**专用** eyebrow 键（如 `unauth.eyebrow`）并给四语言译文（中文口径：「需要身份」或直接去掉 eyebrow，取评审意见）。
+2. **原型先行**（[`ADR-018`](../adr/ADR-018-mockup-as-clickable-simulation.md)）：`mockups/` 目前**没有 401 页**，需新增该页原型（含**登录入口**）并交用户确认。
+3. 生产环境的 401 页补**登录入口**（指向 `/admin/users`，由 Access 接管并弹出 Cloudflare 登录窗口）。
+4. 承接（[`ADR-019`](../adr/ADR-019-spec-basic-constraints-and-executable-uptake.md)）：为「未认证时的提示口径」补一条断言（渲染中不得出现「尚未交付」），并登记四语言键集合一致性由既有护栏覆盖。
+
+**状态**：待修（随 `SBI-L6a` 一起做；本条的关闭依据同样是**原型确认 + 实现后的人手确认**）。

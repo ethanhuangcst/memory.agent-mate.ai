@@ -6,6 +6,8 @@
 
 断言口径与 `tests/integration/pages.test.ts` 一致，但这里是**真实浏览器**：
 渲染、表单提交、303 跳转、四语言切换都按用户实际操作路径验证。
+
+另含**布局护栏**（`assert_no_overflow`）：把「元素是否溢出容器」变成机器可判定的断言。
 """
 
 from __future__ import annotations
@@ -21,21 +23,127 @@ PREFIX_PATTERN = re.compile(r"memo_[A-Za-z0-9_-]{8}")
 
 ARTIFACTS = Path(__file__).parent / "artifacts"
 
+# 断言口径：这些选择器里的任何元素都不得溢出自己的容器。
+# 为什么必须有这条护栏：CSS 规则可以自相矛盾而「看起来收口了」——肉眼看不出
+# 「82px 的列放不下 112px 的串」，何况下划线不产生断行点，长串只会直接撑出边框。
+# 已经吃过两次教训（Issue 3 长路径、轮换弹窗里 `memo_XXXXXXXX` 撑出边框），
+# 两次都是人眼发现的 ⇒ 改为量出来的宽度说话。
+OVERFLOW_SELECTORS = (
+    ".dialog-title",
+    ".dialog-body",
+    ".dialog-target",
+    ".key-meta",
+    ".key-meta-label",
+    ".key-meta-value",
+    # 详情页键值面板与之同类（长路径/长标识），一并纳入，避免只守住弹窗这一处。
+    ".kv",
+    ".kv dt",
+    ".kv dd",
+    ".field-note",
+    ".error-inline",
+    ".path",
+    ".codeblock-text",
+    "#issued-token",
+    ".btn",
+)
+
+# 弹窗宽度固定（22rem），与视口无关 ⇒ 宽视口下也必须查一遍；
+# 另跑一次窄视口，覆盖媒体查询把键值表转单列后的表现。
+VIEWPORTS = ((1280, 900), (720, 900))
+
 
 def _shot(page: Page, name: str) -> None:
     ARTIFACTS.mkdir(parents=True, exist_ok=True)
     page.screenshot(path=str(ARTIFACTS / f"{name}.png"), full_page=True)
 
 
+def assert_no_overflow(page: Page, where: str) -> None:
+    """元素自身溢出（scrollWidth）或超出父容器右边界 ⇒ 断言失败，并报出具体数字。"""
+    page_overflow = page.evaluate(
+        "() => document.documentElement.scrollWidth - document.documentElement.clientWidth"
+    )
+    assert page_overflow <= 1, f"{where}：页面出现横向滚动，超出 {page_overflow}px"
+
+    offenders = page.evaluate(
+        """
+        (selectors) => {
+          const bad = [];
+          const hasBox = (node) => {
+            if (!node) return false;
+            const r = node.getBoundingClientRect();
+            return r.width !== 0 || r.height !== 0;
+          };
+          for (const sel of selectors) {
+            for (const el of document.querySelectorAll(sel)) {
+              const rect = el.getBoundingClientRect();
+              if (rect.width === 0 && rect.height === 0) continue;   // 隐藏/无盒元素不参与
+              // 向上找**第一个真正有盒的祖先**再比右边界：`display: contents` 的包装元素
+              // 没有任何盒（矩形全为 0），直接拿它比较会把每个子项都判成溢出（假阳性）。
+              let anchor = el.parentElement;
+              while (anchor && !hasBox(anchor)) anchor = anchor.parentElement;
+              const anchorRight = anchor ? anchor.getBoundingClientRect().right : Infinity;
+              if (el.scrollWidth > el.clientWidth + 1 || rect.right > anchorRight + 1) {
+                bad.push({
+                  sel,
+                  text: (el.textContent || '').trim().slice(0, 30),
+                  scrollWidth: el.scrollWidth,
+                  clientWidth: el.clientWidth,
+                  right: Math.round(rect.right),
+                  parentRight: Math.round(anchorRight),
+                });
+              }
+            }
+          }
+          return bad;
+        }
+        """,
+        list(OVERFLOW_SELECTORS),
+    )
+    assert not offenders, f"{where}：元素溢出容器 {offenders}"
+
+
+def _value_metrics(page: Page, selector: str) -> dict[str, int]:
+    """量「文本实际宽度 / 盒子可用宽度」，写进证据（数字比「看起来没溢出」可信）。"""
+    return page.evaluate(
+        """
+        (sel) => {
+          const el = document.querySelector(sel);
+          if (!el) return { box: 0, scroll: 0, text: 0 };
+          const range = document.createRange();
+          range.selectNodeContents(el);
+          return {
+            box: Math.round(el.clientWidth),
+            scroll: Math.round(el.scrollWidth),
+            text: Math.round(range.getBoundingClientRect().width),
+          };
+        }
+        """,
+        selector,
+    )
+
+
+def _assert_all_viewports(page: Page, where: str) -> None:
+    """同一屏（对话框打开状态下）在多个视口各量一次 —— 弹窗宽度与视口无关，所以两者都要查。"""
+    original = page.viewport_size or {"width": 1280, "height": 900}
+    try:
+        for width, height in VIEWPORTS:
+            page.set_viewport_size({"width": width, "height": height})
+            assert_no_overflow(page, f"{where}（视口 {width}）")
+    finally:
+        page.set_viewport_size(original)
+
+
 def run_flow(page: Page, base_url: str, admin_email: str) -> dict[str, str]:
     """跑通「建用户 → 签发 → 列出 → 轮换 → 吊销 → 停用」并返回关键证据。"""
     evidence: dict[str, str] = {}
     handle = f"e2e{int(time.time()) % 100000}"
+    page.set_viewport_size({"width": 1280, "height": 900})
 
     # ---- 1. 用户列表（空态或已有数据都可）----
     page.goto(f"{base_url}/admin/users", wait_until="networkidle")
     expect(page.locator(".app-header")).to_contain_text(admin_email)
     expect(page.locator("nav.nav a")).to_have_count(4)
+    assert_no_overflow(page, "用户列表")
     _shot(page, "01-users-list")
 
     # ---- 2. 建用户（对话框 → 提交 → 303 到详情页）----
@@ -43,6 +151,7 @@ def run_flow(page: Page, base_url: str, admin_email: str) -> dict[str, str]:
     dialog = page.locator("#dialog-new-user")
     expect(dialog).to_be_visible()
     dialog.locator("#new-handle").fill(handle)
+    _assert_all_viewports(page, "新建用户弹窗")
     _shot(page, "02-dialog-new-user")
     dialog.get_by_role("button", name=re.compile("Create user", re.I)).click()
     page.wait_for_load_state("networkidle")
@@ -56,6 +165,7 @@ def run_flow(page: Page, base_url: str, admin_email: str) -> dict[str, str]:
     issue_dialog = page.locator("#dialog-issue")
     expect(issue_dialog).to_be_visible()
     issue_dialog.locator("#issue-label").fill("E2E laptop")
+    _assert_all_viewports(page, "签发令牌弹窗")
     _shot(page, "04-dialog-issue")
     issue_dialog.get_by_role("button", name=re.compile("^Issue$", re.I)).click()
     page.wait_for_load_state("networkidle")
@@ -68,6 +178,7 @@ def run_flow(page: Page, base_url: str, admin_email: str) -> dict[str, str]:
     evidence["prefix"] = prefix
     expect(page.locator("#issued-token")).to_have_text(plaintext)
     expect(page.get_by_text("E2E laptop")).to_be_visible()
+    assert_no_overflow(page, "详情页（明文面板）")
     _shot(page, "05-token-issued-once")
 
     # ---- 4. 刷新后明文不再出现（AC2.1 / AC2.2）----
@@ -83,6 +194,57 @@ def run_flow(page: Page, base_url: str, admin_email: str) -> dict[str, str]:
     rotate_dialog = page.locator("#dialog-rotate")
     expect(rotate_dialog).to_be_visible()
     expect(rotate_dialog).to_contain_text(prefix)
+    # 这一处就是「memo_XXXXXXXX 撑出边框」的现场：值列窄、串又无处可断。
+    metrics = _value_metrics(page, "#dialog-rotate .dialog-target .key-meta:last-of-type .key-meta-value")
+    evidence["rotate_value"] = f"文本 {metrics['text']}px / 盒子 {metrics['box']}px / 内容 {metrics['scroll']}px"
+    # 宽度本身是**设计要求**（2026-09-22：22rem → 33rem，+50%），锚住它免得被后续改动悄悄改回去。
+    # 断言按**根字号换算**，不写死像素 —— 本项目 1rem = 17px（不是默认 16px），
+    # 写死 528px 会得到一次假失败（实测 561px）。容差 ±2px 覆盖边框。
+    dialog_metrics = page.evaluate(
+        """() => {
+          const el = document.querySelector('#dialog-rotate .dialog');
+          const root = parseFloat(getComputedStyle(document.documentElement).fontSize);
+          return { width: el.getBoundingClientRect().width, rem: root };
+        }"""
+    )
+    expected_width = 33 * dialog_metrics["rem"]
+    evidence["dialog_width"] = (
+        f"{round(dialog_metrics['width'])}px（1rem={dialog_metrics['rem']}px，预期 {round(expected_width)}px）"
+    )
+    assert abs(dialog_metrics["width"] - expected_width) <= 2, (
+        f"弹窗宽度应为 33rem（1rem={dialog_metrics['rem']}px ⇒ {round(expected_width)}px），"
+        f"实际 {round(dialog_metrics['width'])}px"
+    )
+    # 目标块版式：两个字段**并排**、标签在值上方、且第二字段真的用上右半边
+    # （2026-09-23 重新设计前的形态是「标签全在左列、值全挤在左半边、右侧死白」，
+    #   这两条断言当时都会失败，所以它们是有效的守护，而不是写真）。几何断言的意义：
+    #   让「好看」里可量化的那部分也有回归防护。
+    field_geo = page.evaluate(
+        """() => {
+          const box = document.querySelector('#dialog-rotate .dialog-target');
+          const boxRect = box.getBoundingClientRect();
+          const rects = (sel) => [...box.querySelectorAll(sel)].map((el) => el.getBoundingClientRect());
+          const labels = rects('.key-meta-label');
+          const values = rects('.key-meta-value');
+          return {
+            boxWidth: boxRect.width,
+            labelTops: labels.map((r) => Math.round(r.top)),
+            labelLefts: labels.map((r) => Math.round(r.left)),
+            valueTops: values.map((r) => Math.round(r.top)),
+          };
+        }"""
+    )
+    assert len(field_geo["labelTops"]) == 2, f"轮换弹窗应有 2 个字段，实际 {len(field_geo['labelTops'])}"
+    assert field_geo["labelTops"][0] == field_geo["labelTops"][1], f"两个标签应在同一行（字段并排）：{field_geo}"
+    assert field_geo["valueTops"][0] == field_geo["valueTops"][1], f"两个值应在同一行：{field_geo}"
+    assert field_geo["valueTops"][0] > field_geo["labelTops"][0], f"标签应在值上方：{field_geo}"
+    spacing = field_geo["labelLefts"][1] - field_geo["labelLefts"][0]
+    assert spacing >= field_geo["boxWidth"] * 0.3, (
+        f"两个字段应分占两列（宽度被用上，而非挤在左半边）：左边界 {field_geo['labelLefts']}，"
+        f"容器宽 {round(field_geo['boxWidth'])}px"
+    )
+    evidence["target_layout"] = f"字段间距 {round(spacing)}px / 容器 {round(field_geo['boxWidth'])}px"
+    _assert_all_viewports(page, "轮换弹窗")
     _shot(page, "07-dialog-rotate")
     rotate_dialog.get_by_role("button", name=re.compile("^Rotate$", re.I)).click()
     page.wait_for_load_state("networkidle")
@@ -99,13 +261,17 @@ def run_flow(page: Page, base_url: str, admin_email: str) -> dict[str, str]:
         wait_until="networkidle",
     )
     assert revoke_dialog_page is not None
-    page.locator("#dialog-revoke").get_by_role("button", name=re.compile("^Revoke$", re.I)).click()
+    revoke_dialog = page.locator("#dialog-revoke")
+    expect(revoke_dialog).to_be_visible()
+    _assert_all_viewports(page, "吊销弹窗")
+    revoke_dialog.get_by_role("button", name=re.compile("^Revoke$", re.I)).click()
     page.wait_for_load_state("networkidle")
     expect(page).to_have_url(re.compile(rf"/admin/users/{handle}$"))
 
     page.goto(f"{base_url}/admin/users/{handle}", wait_until="networkidle")
     assert rotated_plaintext not in page.content(), "吊销后仍出现明文"
     expect(page.locator("table")).to_contain_text(rotated_plaintext[:13])
+    assert_no_overflow(page, "详情页（已吊销）")
     _shot(page, "09-token-revoked")
 
     # ---- 7. 停用用户（可逆软操作 D13）----
@@ -113,11 +279,16 @@ def run_flow(page: Page, base_url: str, admin_email: str) -> dict[str, str]:
     deactivate_dialog = page.locator("#dialog-deactivate")
     expect(deactivate_dialog).to_be_visible()
     expect(deactivate_dialog).to_contain_text(handle)
+    _assert_all_viewports(page, "停用用户弹窗")
     _shot(page, "10-dialog-deactivate")
     deactivate_dialog.get_by_role("button", name=re.compile("^Deactivate$", re.I)).click()
     page.wait_for_load_state("networkidle")
     expect(page.locator(".status.is-off").first).to_be_visible()
     expect(page.locator("a[href*='dialog=deactivate']")).to_have_count(0)
+    # 停用后应改为「恢复访问」入口（D13 可逆侧，独立动作）
+    restore_entry = page.locator("a[href*='dialog=restore']")
+    expect(restore_entry.first).to_be_visible()
+    _assert_all_viewports(page, "停用后的详情页")
     _shot(page, "11-user-deactivated")
 
     # ---- 8. 四语言切换（记得住）----

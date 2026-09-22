@@ -64,7 +64,12 @@ def main() -> int:
             print(f"FAIL: 页面出现 JS 错误：{errors[:3]}", file=sys.stderr)
             return 1
 
-    print(f"OK: 离线端到端通过（handle={evidence.get('handle')} prefix={evidence.get('prefix')}）")
+    # 把实测宽度一起打出来：布局类问题只有数字能自证（「看起来没溢出」不算证据）
+    print(
+        "OK: 离线端到端通过"
+        f"（handle={evidence.get('handle')} prefix={evidence.get('prefix')}"
+        f" 轮换弹窗值列={evidence.get('rotate_value')}）"
+    )
     return 0
 
 

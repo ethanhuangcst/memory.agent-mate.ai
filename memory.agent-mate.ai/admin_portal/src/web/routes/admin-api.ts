@@ -16,6 +16,8 @@ import { deactivateUser, issueKey, revokeKey, rotateKey } from '../services/keys
 import { requestedLocale, type PageDeps } from '../pages';
 import { detailPath, renderUserDetail } from './admin-user-detail';
 import { renderUserList, USERS_PATH } from './admin-users';
+import { serializeCookie } from '../../shared/cookies';
+import { ISSUED_COOKIE, put as stashIssued } from '../issued-stash';
 
 const CreateUserBody = z.object({
   handle: z.string(),
@@ -152,7 +154,21 @@ export async function registerAdminApiRoutes(app: FastifyInstance, deps: PageDep
           .send({ error: result.reason, messageKey: result.messageKey });
       }
       if (html) {
-        return renderUserDetail(deps, request, reply, handle, { issuedToken: result.plaintext });
+        // 方案 D（Issue 4 根治）：明文**不留在本次响应**里，而是短期暂存（60 秒、一次性），
+        // 用 cookie 带一个引用 **303 跳回详情页**渲染 —— 地址栏干净，刷新拿不到第二次。
+        // 明文仍不写日志、不入库；JSON 客户端分支保持不变（自动化不受影响）。
+        const issuedId = stashIssued(result.plaintext);
+        reply.header(
+          'set-cookie',
+          serializeCookie(ISSUED_COOKIE, issuedId, {
+            path: detailPath(handle),
+            httpOnly: true,
+            sameSite: 'Lax',
+            maxAge: 60,
+            secure: request.protocol === 'https',
+          }),
+        );
+        return reply.redirect(detailPath(handle), 303);
       }
       return reply.code(201).send({
         prefix: result.key.key_prefix,
@@ -174,7 +190,21 @@ export async function registerAdminApiRoutes(app: FastifyInstance, deps: PageDep
           .send({ error: result.reason, messageKey: result.messageKey });
       }
       if (html) {
-        return renderUserDetail(deps, request, reply, handle, { issuedToken: result.plaintext });
+        // 方案 D（Issue 4 根治）：明文**不留在本次响应**里，而是短期暂存（60 秒、一次性），
+        // 用 cookie 带一个引用 **303 跳回详情页**渲染 —— 地址栏干净，刷新拿不到第二次。
+        // 明文仍不写日志、不入库；JSON 客户端分支保持不变（自动化不受影响）。
+        const issuedId = stashIssued(result.plaintext);
+        reply.header(
+          'set-cookie',
+          serializeCookie(ISSUED_COOKIE, issuedId, {
+            path: detailPath(handle),
+            httpOnly: true,
+            sameSite: 'Lax',
+            maxAge: 60,
+            secure: request.protocol === 'https',
+          }),
+        );
+        return reply.redirect(detailPath(handle), 303);
       }
       return reply.code(201).send({
         prefix: result.key.key_prefix,

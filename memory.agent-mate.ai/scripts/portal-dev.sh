@@ -8,8 +8,8 @@
 #
 # 两条本机测试路径（都不新增认证旁路；生产启用自签通道仍被启动期拒绝）:
 #   1) 快速路径（无需 Cloudflare）: --env-file .env.local --dev-login
-#      生成/复用开发密钥并注入**既有的**自签 JWT 测试通道，打印可直接粘贴的
-#      浏览器 cookie 与命令行用法。
+#      生成/复用开发密钥并注入**既有的**自签 JWT 测试通道，并打印**可点登录链接**
+#      （/admin/dev-login）与命令行用法 —— 不需要 F12，也不需要粘贴 cookie。
 #   2) 真身份路径（接近生产）: --env-file .env（真实主机名 + 团队域 + Audience），
 #      经 cloudflared 隧道由 Cloudflare Access 完成 SSO（见 tunnel-dev.sh）。
 #
@@ -22,7 +22,7 @@
 # 用法: portal-dev.sh [选项]
 #   --watch           以 tsx watch 启动（改代码自动重启；默认关闭）
 #   --env-file F      指定环境文件（默认 admin_portal/.env，存在则加载）
-#   --dev-login       本机快速登录：注入自签 JWT 测试通道并打印 cookie 粘贴指引。
+#   --dev-login       本机快速登录：注入自签 JWT 测试通道，并打印**可点登录链接**（/admin/dev-login）。
 #                     **仅回环 Host 可用**（非回环直接拒绝）；密钥落 .portal-data/dev/。
 #   --reset-dev-keys  配合 --dev-login：丢弃既有开发密钥重新生成（旧 cookie 立即失效）
 #   -h | --help       本帮助

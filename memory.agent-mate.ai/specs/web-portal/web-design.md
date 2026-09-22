@@ -29,8 +29,9 @@
 | D12 | **页面集定为 6 页**：撤销原「07 只读管理员页」，其内容**并入 06「Admin MCP 配置」**；§12.3 路由表**无** `/admin/admins`；用户页**不含**管理员增删入口（管理员变更在 Cloudflare 侧） | **已定稿**（2026-09-22 用户确认；逐页映射见 §14） |
 | D13 | **用户停用是可逆软操作**：停用 = 一次性吊销该用户**全部令牌** + 拒绝新会话，**库文件保留**；恢复 = 签发新令牌。**删除数据库属服务端独立决定，门户内不提供** | **已定稿**（2026-09-22 用户提出「缺注销用户功能」后定档；对应 `AC2.4` 语义扩展） |
 | D14 | **外框冻结 + 代码块圆角例外**：`.app-header` 与 `.site-footer` 用 `sticky` 构成**固定外框**（不透明底 + 结构线）；设计系统「零圆角」有**唯一显式例外** —— `.codeblock` 保留参考稿的 `8px` 圆角 | **已定稿**（2026-09-22 用户要求「header / footer should be fixed」；实现细则见 §13.9 / §13.10） |
+| D15 | **开发登录用真实邮箱身份 + 生产身份来源白名单**：开发登录入口（`/admin/dev-login`）的声明身份取自显式配置 `PORTAL_TEST_JWT_EMAIL`（**缺则启动期报错**，不得回落到 `admin@example.test` 之类测试值）；**生产**下身份解析来源必须是 Cloudflare（`access-jwt` / `service-token`），出现 `test-jwt` 一律 **401** 并记 `identity_source_rejected` 告警（Service Token 走 access 通道，不受影响） | **已定稿**（2026-09-22 用户选定口径；2026-09-23 落档。实现：`src/config.ts` 必填键 + `src/web/admin-guard.ts` 的 `isIdentitySourceAllowed`；决议见 [`../../adr/ADR-015`](../adr/ADR-015-dev-login-entry-config-gated-registration.md)） |
 
-> **14 条全部锁定**（D9 / D10 / D11 于 2026-09-22 新增；**D12 / D13 / D14 于同日 UI 迭代轮新增**）。D1 曾是唯一可翻转项（涉及权限模型），已于 2026-09-21 由用户确认定稿（[`../../adr/ADR-012`](../adr/ADR-012-portal-launch-mechanism-no-docker-socket.md)）；D9 曾是 §10 #2 的长期未决项，已于 2026-09-22 关闭。
+> **15 条全部锁定（D15 于 2026-09-23 新增）**（D9 / D10 / D11 于 2026-09-22 新增；**D12 / D13 / D14 于同日 UI 迭代轮新增**）。D1 曾是唯一可翻转项（涉及权限模型），已于 2026-09-21 由用户确认定稿（[`../../adr/ADR-012`](../adr/ADR-012-portal-launch-mechanism-no-docker-socket.md)）；D9 曾是 §10 #2 的长期未决项，已于 2026-09-22 关闭。
 
 ---
 

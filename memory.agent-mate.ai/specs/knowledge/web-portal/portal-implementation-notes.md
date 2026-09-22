@@ -12,6 +12,7 @@ related_spec: specs/web-portal/web-design.md
 related:
   - knowledge/web-portal/portal-launch-mechanism.md
   - adr/ADR-014-portal-admin-identity-verified-assertion-only.md
+  - adr/ADR-015-dev-login-entry-config-gated-registration.md
 ---
 
 # 门户实现笔记（PSP-W1 起）
@@ -46,6 +47,7 @@ related:
 ## Links
 
 - [`adr/ADR-014`](../../adr/ADR-014-portal-admin-identity-verified-assertion-only.md) —— 身份只信签名断言、本地走隧道、双层测试凭据
+- [`adr/ADR-015`](../../adr/ADR-015-dev-login-entry-config-gated-registration.md) —— 开发登录入口按**配置限制注册**（生产该路由不存在），横幅给出**可点链接**
 - [`specs/web-portal/web-design.md`](../../web-portal/web-design.md) §12（技术设计）· §13（设计系统令牌）
 - [`specs/web-portal/web-test.md`](../../web-portal/web-test.md) §2（`TC-P-L1-14` 与其下的在线/离线边界登记）
 - [`specs/knowledge/web-portal/portal-launch-mechanism.md`](./portal-launch-mechanism.md) —— 启动机制 β′ 的实测证据

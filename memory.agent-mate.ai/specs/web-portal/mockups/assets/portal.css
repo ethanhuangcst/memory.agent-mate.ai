@@ -1351,25 +1351,37 @@ td.table-check {
   font-size: 0.95rem;
 }
 
+/* 字段（标签 + 值）的**排版**在此定义；**摆放**由 `.dialog-target` 的网格负责
+   （见「对话框键值块」一节）。
+   形状选择「标签在上、值在下」：标签是 mono 大字距的小号字（与全站 eyebrow 同一语言），
+   值紧随其下 —— 每个字段因此自成一体，**不再需要固定的标签列宽**
+   （2026-09-22 那次「值撑出边框」正是「固定标签列 168px + 值列过窄」造成的：
+   值列 94px 放不下约 123px 的 `memo_XXXXXXXX`。改成上下结构后，
+   那个宽度约束从结构上消失，7.5rem 之类用来救火的数字也随之删除）。 */
 .key-meta {
-  flex-direction: column;
-  gap: 0.35rem;
-  margin: 0 0 1.25rem;
   display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin: 0 0 1rem;
+  min-width: 0;
 }
 
 .key-meta-label {
   font-family: var(--font-mono);
+  font-size: 0.72rem;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--mute);
-  font-size: 0.75rem;
   font-weight: 500;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .key-meta-value {
-  font-size: 1.15rem;
+  font-size: 0.9rem;
   font-weight: 500;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 /* Dialog */
@@ -1393,7 +1405,12 @@ td.table-check {
   background: var(--bg-elevated);
   border: 1px solid var(--line);
   width: 100%;
-  max-width: 22rem;
+  /* 22rem → 33rem（+50%，2026-09-22）：原宽度下内宽仅 304px，
+     `.key-meta` 的值列只剩 94px，放不下 `memo_XXXXXXXX`（约 123px）。
+     33rem 下内宽 480px ⇒ 值列约 306px；正文度量约 63 字符/行，仍在可读区间，
+     故字号与内边距保持不变。窄屏由 `width: 100%` + `.dialog-backdrop` 的
+     1.5rem 内边距兜底，不会贴边。 */
+  max-width: 33rem;
   padding: 1.5rem 1.5rem 1.35rem;
 }
 
@@ -2275,9 +2292,8 @@ td.table-check {
 
 /* ---- 明文仅一次：令牌面板 ---- */
 .key-panel { border: var(--control-border) solid var(--line-strong); background: var(--bg-elevated); padding: 1.25rem; }
-.key-meta { display: grid; grid-template-columns: 168px minmax(0, 1fr); gap: 0.4rem 1.25rem; margin-bottom: 1rem; }
-.key-meta-label { font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--mute); }
-.key-meta-value { font-size: 0.9rem; }
+/* .key-meta / .key-meta-label / .key-meta-value 的唯一定义见上文「键值对」处 ——
+   这里原有重复定义（列宽 168px、字号 0.72/0.9rem），已合并：同一属性只在一处决定。 */
 
 /* ---- 首页三步（纵向）---- */
 .steps { display: flex; flex-direction: column; gap: 0; margin: 1.35rem 0 0; padding: 0; list-style: none; border-top: 1px solid var(--line); }
@@ -2491,16 +2507,32 @@ select.input-box:focus { border-color: var(--ink); background-color: var(--bg-el
 .btn-danger:hover { opacity: 0.85; }
 .btn-danger:disabled { opacity: 0.5; }
 
-/* 对话框键值块（`.dialog-target` 此前同样没有规则，与正文贴在一起） */
+/* 对话框键值块 = 「确认你动的是哪一个」的**规格栏**。
+   2026-09-23 重新设计：原先是「固定标签列 + 值列」，在 33rem 宽的弹窗里值全挤在左侧、
+   右侧留一整片死白（评审截图）。改为**两列规格**：每个字段是独立单元（标签在上、值在下），
+   两列等宽分占整行 —— 原本的死白变成两列之间一道明确的栏距，宽度因此有了用途。
+   结构无关：实现侧是一行一个 `<p class="key-meta">`，原型侧是一个 `.key-meta` 装四段；
+   `display: contents` + 固定行位让两种结构落到同一张网格上，渲染完全一致。
+   窄屏不换行（这些值都是短标识符：用户名 / 前缀 / 计数），超长值由 overflow-wrap 兜底。 */
 .dialog-target {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(6rem, 1fr));
+  align-items: start;
+  column-gap: 2rem;
+  row-gap: 0.3rem;
   margin-top: 1.35rem;
-  padding: 0.95rem 1.05rem;
+  padding: 1.05rem 1.25rem 1.15rem;
   border: 1px solid var(--line);
   background: var(--fill);
 }
-.dialog-target .key-meta,
-.dialog-target .field-note { margin-bottom: 0; }
-.dialog-target .field-note { margin-top: 0.15rem; }
+/* 让字段的两个 span 直接成为网格项（`<p>` 自身不参与布局）：
+   第一行放标签、第二行放值 ⇒ **同一列即同一字段**，与源码顺序无关。 */
+.dialog-target .key-meta { display: contents; }
+.dialog-target .key-meta-label { grid-row: 1; }
+.dialog-target .key-meta-value { grid-row: 2; }
+/* 说明文字与路径预览是整行内容，跨满两列 */
+.dialog-target .field-note,
+.dialog-target .dialog-path { grid-column: 1 / -1; margin: 0.15rem 0 0; }
 
 /* ==========================================================================
    UI 优化批次三（2026-09-22，依 issues.md 第三轮）

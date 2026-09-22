@@ -16,6 +16,11 @@
 #   20  运行错误（不在仓内 / 缺 python3 / 缺 node）
 #   30  前置不满足（缺 playwright / 未装依赖 / 服务未起）
 #
+#   注：经 `make portal-e2e` 调用时，make 会把任何非零退出码**折叠为 2**
+#   ⇒「40 明确跳过」与「41 失败」在 make 层面不可区分（2026-09-23 实测）。
+#   机器调用方（CI / 脚本）请**直接调用本脚本**以拿到真实的 0 / 40 / 41 / 30；
+#   make 目标面向人（失败时打印真实文案）。
+#
 # 用法: portal-e2e.sh [选项]
 #   --online              追加在线套件（隧道 + Service Token）
 #   --port N              离线套件使用的本机端口（默认 8788）
@@ -58,6 +63,19 @@ if ! python3 -c 'import playwright' >/dev/null 2>&1; then
 fi
 
 BASE_URL="http://127.0.0.1:${PORT}"
+
+# 端口预检：端口已被占用时**必须 fail-loud**（2026-09-23 实施；此前已登记未做）。
+# 根因：脚本在自己启动门户之前不检查端口。若该端口上已跑着**别人的**实例
+# （典型：开发者手边的 --dev-login 服务），新实例绑定失败，而就绪探测会打到
+# **那个实例**上 ⇒ 测试静默地跑在错误的数据库/配置上，结果「看起来正常」却无意义
+# （或表现为无法解释的断言失败）。这与 Issue 6 同源的教训：失败必须显式，不能同形。
+if command -v lsof >/dev/null 2>&1 && lsof -nP -iTCP:"${PORT}" -sTCP:LISTEN >/dev/null 2>&1; then
+  echo "ERROR: 端口 ${PORT} 已被占用 —— 本套件必须独占端口，否则可能测到别人的实例。" >&2
+  lsof -nP -iTCP:"${PORT}" -sTCP:LISTEN 2>/dev/null | sed -n '2,4p' | sed 's/^/       占用: /' >&2
+  echo "       改用空闲端口：portal-e2e.sh --port <端口>；或先停掉占用者。" >&2
+  exit 30
+fi
+
 WORK_DIR="$(mktemp -d)"
 SERVER_PID=""
 
@@ -91,6 +109,8 @@ fi
 
 mkdir -p "${WORK_DIR}/users"
 echo "[portal-e2e] 启动门户（回环绑定，自签 JWT 通道）"
+# 自签通道启用时 PORTAL_TEST_JWT_EMAIL 是必填（config.ts 校验），且必须与上面 JWT 的
+# email 声明一致 —— 缺它服务端起不来；本脚本曾因缺这一行长期无法启动（官方入口自坏）。
 PORTAL_ADMIN_HOST="127.0.0.1,localhost" \
 PORTAL_MCP_HOST="mcp.localhost" \
 PORTAL_DB_PATH="${WORK_DIR}/portal.db" \
@@ -101,6 +121,7 @@ PORTAL_TEST_JWT_ENABLED="1" \
 PORTAL_TEST_JWT_JWKS="$(cat "${WORK_DIR}/jwks.json")" \
 PORTAL_TEST_JWT_ISS="https://e2e.test" \
 PORTAL_TEST_JWT_AUD="e2e-aud" \
+PORTAL_TEST_JWT_EMAIL="admin@example.test" \
 npx tsx src/server.ts > "${WORK_DIR}/server.log" 2>&1 &
 SERVER_PID=$!
 

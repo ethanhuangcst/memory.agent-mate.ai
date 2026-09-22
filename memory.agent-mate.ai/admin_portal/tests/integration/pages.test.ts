@@ -151,14 +151,33 @@ describe('用户列表页', () => {
 });
 
 describe('令牌生命周期（页面）', () => {
-  it('签发：明文只在本次响应出现一次；随后列表只有前缀', async () => {
+  it('签发：303 回详情页 + 明文只显示一次（方案 D）', async () => {
     const issued = await form('/admin/api/users/alice/tokens', { action: 'issue', label: 'MacBook' });
-    expect(issued.statusCode).toBe(200);
-    expect(issued.body).toContain('Copy this token now');
+    // 方案 D：不再在 API 地址上渲染明文，而是 303 回详情页 + 一次性引用 cookie
+    expect(issued.statusCode).toBe(303);
+    expect(issued.headers.location).toBe('/admin/users/alice');
+    expect(issued.body.match(TOKEN_PATTERN)).toBeNull();
+    const cookie = String(issued.headers['set-cookie']).split(';')[0] ?? '';
+    expect(cookie).toContain('portal_issued=');
 
-    const plaintexts = issued.body.match(TOKEN_PATTERN) ?? [];
+    const page = await app.inject({
+      method: 'GET',
+      url: '/admin/users/alice',
+      headers: authHeaders({ cookie }),
+    });
+    expect(page.statusCode).toBe(200);
+    expect(page.body).toContain('Copy this token now');
+    const plaintexts = page.body.match(TOKEN_PATTERN) ?? [];
     expect(plaintexts).toHaveLength(1);
     const plaintext = plaintexts[0] as string;
+
+    // 第二次请求（模拟刷新）不得再次出现明文
+    const again = await app.inject({
+      method: 'GET',
+      url: '/admin/users/alice',
+      headers: authHeaders({ cookie }),
+    });
+    expect(again.body.match(TOKEN_PATTERN)).toBeNull();
 
     const detail = await app.inject({ method: 'GET', url: '/admin/users/alice', headers: authHeaders() });
     expect(detail.statusCode).toBe(200);
@@ -167,7 +186,7 @@ describe('令牌生命周期（页面）', () => {
     expect(detail.body).toContain('MacBook');
   });
 
-  it('轮换：旧前缀变为已吊销，新明文出现一次', async () => {
+  it('轮换：旧前缀变为已吊销，新明文只显示一次（方案 D）', async () => {
     const detail = await app.inject({ method: 'GET', url: '/admin/users/alice', headers: authHeaders() });
     const prefix = (detail.body.match(/memo_[A-Za-z0-9_-]{8}/) ?? [])[0] as string;
 
@@ -176,11 +195,19 @@ describe('令牌生命周期（页面）', () => {
       prefix,
       returnTo: 'html',
     });
-    expect(rotated.statusCode).toBe(200);
-    const plaintexts = rotated.body.match(TOKEN_PATTERN) ?? [];
+    expect(rotated.statusCode).toBe(303);
+    expect(rotated.headers.location).toBe('/admin/users/alice');
+    const cookie = String(rotated.headers['set-cookie']).split(';')[0] ?? '';
+
+    const page = await app.inject({
+      method: 'GET',
+      url: '/admin/users/alice',
+      headers: authHeaders({ cookie }),
+    });
+    const plaintexts = page.body.match(TOKEN_PATTERN) ?? [];
     expect(plaintexts).toHaveLength(1);
     expect(plaintexts[0]).not.toBe(prefix);
-    expect(rotated.body).toContain('Revoked');
+    expect(page.body).toContain('Revoked');
   });
 
   it('吊销：303 回跳，行保留且动作入口消失', async () => {

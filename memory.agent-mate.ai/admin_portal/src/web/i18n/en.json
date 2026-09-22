@@ -258,5 +258,6 @@
   "unauth.diag.channelOn": "The self-signed test channel is ENABLED on this instance, so you can sign in from this page.",
   "unauth.diag.channelOff": "The self-signed test channel is disabled — sign-in must come from Cloudflare Access.",
   "unauth.diag.tokenFile": "Expected test token file:",
-  "users.field.handle": "Username"
+  "users.field.handle": "Username",
+  "detail.issued.expired": "The plaintext is no longer available — it is shown only once. Issue a new token if you still need one."
 }
