@@ -421,6 +421,7 @@ admin_portal/
 | **spawn 前断言失败**（库路径为空 / 不在 `/data/users/` 内 / 与 handle 不匹配） | **500** | `spawn_assertion_failed` | **拒绝且不 spawn**（`AC4.4` / `AC4.7`）· 必写审计行 · 不回传库路径 |
 | **spawn 失败**（二进制缺失 / 权限 / 上游启动即退） | **503** | `upstream_unavailable` | 必写审计行 · 错误体只含场景名，**不含上游 stderr 原文** |
 | **上游超时** | **视时点而定**（见下方实测机制） | `upstream_timeout` / MCP 层错误 | **不能用单一状态码表达** —— 实测分三支（握手期 503 · 转发期 MCP 层错误 · 转发阶段同步异常 504） |
+| **转发阶段的其他异常**（SDK / 桥的**内部状态错误**，非上游业务错误） | **502** | `upstream_error` | **新增行（2026-09-23 `3.10` 探针定档）** · 必写审计行 + 日志 · **`504` 只留给超时** —— 把内部错误报成「上游超时」会把排障引向错误方向（实测这些异常的来源只有：`Transport already started` / `Stateless transport cannot be reused` / `Cannot send a response on a standalone SSE stream` / `No connection established for request ID`） |
 | **配额超限**（上游返回配额错误） | **429** | `QUOTA_EXCEEDED` | **透传上游客口**（取值见 [`../knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md`](../knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md)）· 门户**不自建**计数器（`AC7.1`） |
 | **客户端断开** | 无响应（连接已断） | — | 仅回收子进程并注销会话（`AC3.4`） |
 
@@ -434,7 +435,20 @@ admin_portal/
 
 ⇒ 两条结论：① **`504` 的适用范围是「响应头未发出的转发阶段异常」，不是「任何上游超时」**（把它读成后者会让验收断言写错）；② 超时必须加在**上游请求**上，在 HTTP 层用 `Promise.race` 包转发**不生效**（转发把响应交给异步流后立即返回）。
 
-**三条统一纪律**：① 错误体一律 `{"error":"<code>","message":"<可读说明>"}`，**不含**内部路径、堆栈或上游 stderr 原文；② 任何失败路径都**不得留下未回收的子进程**（与 §12.7 的回收触发同源）；③ `spawn_assertion_failed` 与 `upstream_unavailable` **必写审计行**。
+**转发阶段失败的分类定档（2026-09-23，`3.10` 探针实测后为 `3.8` 定档）**：`relay` 的 `catch` 里**能捞到什么**、该报**什么**，此前是「一律 `upstream_timeout`」。实测后按**异常来源**分三层：
+
+| 层 | 来源 | 处理 | 依据 |
+|---|---|---|---|
+| **上游业务错误**（`-32601` / `-32602` / 上游 `-32603` 等） | 上游回的 error response | **无需写代码** —— SDK 自动保留 `code` / `message` / `data` 并转成 JSON-RPC error 发回客户端 | 探针断言 3：客户端收到 `code=-32601`（**原样**） |
+| **上游超时**（`-32001 RequestTimeout`） | SDK client 的请求超时 | 见上方三分支（握手期 **503** · 转发期 **MCP 层错误** · 同步异常 **504**） | 已有 |
+| **其他异常**（`-32000 ConnectionClosed` 与 SDK / 桥的内部状态错误） | 传输层 | `-32000` → **503**（与 spawn 失败同形：客户端看来都是「上游没了」）· 其余 → **502 `upstream_error`** | 探针实测：`webStandardStreamableHttp.js` 的全部 `throw` 点**均为内部状态错误**，无一来自上游业务 |
+
+**两条实测细节（会决定实现写法，别按直觉写）**：
+
+- **`message` 会被逐层加 `MCP error <code>: ` 前缀**：每经过一次 SDK 客户端就加一层（本探针拓扑实测 **3 层**）。**`code` 是原样的、无需重建**；若要 `message` 也干净，必须在 `fallbackRequestHandler` 里用 `error.code` / `error.message` **手工重建**错误体。
+- **两个 fallback 必须构造后赋值实例属性**（`server.fallbackRequestHandler = …`）。按类型提示传构造参数（`ServerOptions` 类型上合法）**静默失效** —— `Protocol` 的构造函数只把 options 存进 `_options`，从不提升为实例属性；后果是请求侧被合成 `Method not found`、通知侧**直接静默丢弃**（连错误都不报）。依据与反例见 [`../../probes/bridge-fallback-probe/`](../../probes/bridge-fallback-probe/) 的断言 2 / 5。
+
+**四条统一纪律**：① 错误体一律 `{"error":"<code>","message":"<可读说明>"}`，**不含**内部路径、堆栈或上游 stderr 原文；② 任何失败路径都**不得留下未回收的子进程**（与 §12.7 的回收触发同源）；③ `spawn_assertion_failed` 与 `upstream_unavailable` **必写审计行**；④ **转发阶段的异常必留一行日志 + 一行审计**（动作 `mcp_upstream_error`，`detail` 只放 `stage` / `errorCode` / 规范化 message，**不含**上游 stderr 原文）—— 「上游起不来」与「转发阶段出错」是两类故障，混在一起会让排障无从下手。
 
 ### 12.6 门户数据模型落地
 

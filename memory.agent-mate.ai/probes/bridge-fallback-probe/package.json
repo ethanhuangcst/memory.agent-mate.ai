@@ -1,0 +1,13 @@
+{
+  "name": "bridge-fallback-probe",
+  "private": true,
+  "type": "module",
+  "description": "Sprint 4 3.10 探针：桥装上 fallback 后，未注册方法与通知能否原样透传给上游、错误是否保留上游形状。产物可丢弃。",
+  "scripts": {
+    "probe": "node probe.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.30.0",
+    "zod": "4.6.5"
+  }
+}

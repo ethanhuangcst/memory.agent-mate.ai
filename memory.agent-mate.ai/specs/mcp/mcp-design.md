@@ -263,6 +263,17 @@ aimem-ssh ALL=(root) NOPASSWD: /usr/bin/docker exec -i ai-memory-mcp ai-memory m
 > | **请求缺 `Accept: application/json, text/event-stream` 会得 406** | 这是协议层门禁、不是业务分支：裸 `fetch` 测试 `/mcp` 时会先撞上它（实测） |
 >
 > **探针未覆盖、现已定档**（2026-09-23，Sprint 4 `3.1` 开工前置）：**失败面的 HTTP 状态码与错误体** → [`../web-portal/web-design.md`](../web-portal/web-design.md) §12.5 的逐场景映射表（401 / 403 / 500 / 503 / 504 / 429 + 统一错误体纪律）；**`last_used_at` 的更新粒度** → 同文件 §4.4（**会话建立时更新一次**，非每请求）。**仍未定**：每 key / 全局并发与超时的**默认值**（键名已登记于 §12.9，取值归 Sprint 4 `4.1`）。另实测到一条上游行为：**库文件的父目录不会被自动创建**（未预建则 `failed to open database`）—— 正是 `3.2` 断言要拦的形态。
+>
+> **`3.10` 探针补充的事实（2026-09-23，为 `3.8` 定档；探针与原始输出见 [`../../probes/bridge-fallback-probe/`](../../probes/bridge-fallback-probe/)）**：回答「未注册的请求与通知能否原样透传、错误是否保持上游形状」，**五项断言全 PASS、退出码 `0`、两次复跑一致**。
+>
+> | 结论 | 实测与依据 |
+> |---|---|
+> | **未注册的请求能原样转发** | 上游支持而桥未注册的方法（`resources/list`）由**上游**应答，结果**逐字保留**（连非标准形状都穿过 ⇒ 宽松 schema `z.unknown()` 不校验）。反证：不装 fallback 时 SDK 合成 `Method not found` |
+> | **上游错误码原样保留，但 `message` 被逐层加前缀** | 客户端收到的 `code=-32601` 是**原样**的；`message` 被加了 **3 层** `MCP error <code>: `（每过一次 SDK 客户端加一层）⇒ **`code` 不必重建**，要 `message` 干净则须在 fallback 里重建错误体 |
+> | **两个 fallback 必须构造后赋值实例属性** | 传构造参数（`ServerOptions = ProtocolOptions & {…}`，类型上完全合法）**静默失效**：`Protocol` 的构造函数只把 options 存进 `_options`，**从不**提升为实例属性，而 `_onrequest` / `_onnotification` 读的是实例属性 ⇒ 请求侧被合成 `Method not found`、通知侧**直接静默丢弃**（连错误都不报）。**这是实现最易踩的一条** |
+> | **`cancelled` 与 `progress` 在每一跳都被 SDK 内置消费** | SDK 在 `Protocol` 构造函数里就注册了这两个通知的 handler ⇒ 它们**永远落不到** `fallbackNotificationHandler`。要转发取消**必须显式 `setNotificationHandler(CancelledNotificationSchema, …)`**（实测覆盖后能抵达上游进程的 stdin） |
+> | **转发通知的 client 必须声明对应能力** | `Client.notification()` 会走 `assertNotificationCapability`：`roots/list_changed` 要求 `capabilities.roots.listChanged`，否则抛错并被 `_onnotification` 的 `.catch(...)` 交给 `onerror` **静默吞掉**（首轮实测：桥收到了通知、转发却无声失败）。`cancelled` / `progress` 属 `always allowed`，不受此限 |
+> | **转发阶段能捞到的异常全是内部状态错误** | `webStandardStreamableHttp.js` 的 `throw` 点仅 5 处（`Transport already started` · `Stateless transport cannot be reused across requests` · `Cannot send a response on a standalone SSE stream` · `No connection established for request ID`）⇒ **无一是上游业务错误** ⇒ 分类口径见 [`../web-portal/web-design.md`](../web-portal/web-design.md) §12.5 的「转发阶段失败的分类定档」 |
 
 **部署顺序依赖**：`ai-memory-mcp` 先起（创建命名卷 `ai_memory_data`），门户以 `external: true` 引用。
 

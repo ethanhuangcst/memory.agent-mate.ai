@@ -8,6 +8,25 @@
 
 ## 2026-09-23
 
+### `3.8` 技术准备：`3.10` 探针定档「fallback 的正确写法」与「转发失败怎么分类」
+
+**为什么**：`3.8` 的两条判据（「未注册的请求与通知原样转发」「失败按类型可诊断」）全部依赖 SDK 的**转发与错误传播形状**，而这些形状本仓从未用过 —— 照直觉写会**静默失效**。于是按 [`ADR-017`](adr/ADR-017-complexity-probe-before-real-build.md) 先交付一个只回答一个可证伪问题的探针。
+
+**做了什么**：
+
+- **`3.10` 探针**（[`../probes/bridge-fallback-probe/`](../probes/bridge-fallback-probe/)）：本机 `node` + **假上游观测器**（不依赖 docker），A/B 双 Server 并排对照 —— A 组专门用「构造参数」写法充当**反例**。五项断言全 PASS、退出码 `0`、两次复跑一致 ⇒ 判据为「通」，`3.8` 具备开工条件。
+- **两条会决定实现写法的硬约束**（已回写 [`mcp/mcp-design.md`](mcp/mcp-design.md) §5.6.2 实证块）：
+  1. **两个 fallback 必须构造后赋值实例属性**。按类型提示传构造参数（`ServerOptions = ProtocolOptions & {…}`，类型上完全合法）**静默失效** —— `Protocol` 的构造函数只把 options 存进 `_options`，从不提升为实例属性，而 `_onrequest` / `_onnotification` 读的正是实例属性 ⇒ 请求侧被合成 `Method not found`、**通知侧直接 `return`**（连错误都不报）。
+  2. **`cancelled` 与 `progress` 在每一跳都被 SDK 内置消费**（`Protocol` 构造函数里就注册了这两个 handler）⇒ 它们**永远落不到 fallback**；要转发取消**必须显式 `setNotificationHandler(CancelledNotificationSchema, …)`**。
+- **失败分类定档**（[`web-portal/web-design.md`](web-portal/web-design.md) §12.5）：新增 **502 `upstream_error`** 行 + 「转发阶段失败的分类定档」三层表 —— **上游业务错误由 SDK 自动透传且 `code` 原样保留**（零代码）／超时三分支／其余内部错误 502；纪律由三条扩为**四条**（新增「转发阶段异常必留日志 + 审计」，动作 `mcp_upstream_error`）。同批录下「`message` 被逐层加 `MCP error <code>: ` 前缀（本拓扑 3 层），而 `code` 不必重建」。
+- **用例登记**（[`mcp/mcp-test.md`](mcp/mcp-test.md) §4-F）：新增 `TC-M-L1-15` / `TC-M-L1-16` / `TC-M-L1-17`；并修正 `TC-M-L1-14` 里与 §12.5 新口径冲突的一处（「上游超时 → 504」→「**视时点而定**」，补 502 行）。
+
+**验证**：探针两次复跑退出码均 **`0`**（五项断言全 PASS）· `make doc-links` 零悬空 · **门户离线套件与覆盖率不受影响**（本批未改任何产品代码）。
+
+**边界（用户口径「只做技术准备，不实现」）**：未改 `admin_portal/src/bridge/` 下任何文件，未改产品测试 —— `3.8` / `3.9` 的实现属其自身。
+
+---
+
 ### `3.1` 自 `Done` 退回 `WIP`：code review 的缺口拆为两个增量
 
 **为什么**：`3.1` 交付并通过真上游验收后，用 `mcp-server-patterns` 做了一轮 code review，共发现四处缺口。其中两处不是「能不能跑通」层面的问题，而是**桥的自我声明与实现不一致** —— 桥自称「把请求原样转给上游、门户语义知识 = 0」，但 `transport.ts` 只注册了 4 个方法，其余请求由**桥自己合成** `MethodNotFound`；能力与版本**硬编码**，客户端看不到真实上游。用户判定：**「能跑通」不等于「按契约可用」** ⇒ `3.1` 退回 `WIP`，缺口拆为两个增量。
