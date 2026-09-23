@@ -173,6 +173,8 @@ COPY --from=ghcr.io/alphaonedev/ai-memory:<tag> \
 | `audit` | `id` PK, `ts`, `actor`, `action`, `target`, `detail_json`, `source_ip` |
 | `sessions`（可选） | `id` PK, `user_id`, `started_at`, `ended_at`, `client_info`, `remote_ip` |
 
+**`last_used_at` 的更新粒度（2026-09-23 定档，Sprint 4 `3.1` 开工前置）**：**会话建立（令牌认证成功）时更新一次**，**不是**每个工具调用更新。理由：一次会话内多个请求共用一个上游 stdio 子进程，「使用该令牌」的自然语义是「用它建了会话」；且避免每请求写库。**判据**：[`web-stories.md`](./web-stories.md) `AC3.7`（同一用户的多把令牌 `last_used_at` 各自独立更新）—— 未定档前，请求级与会话级两种实现都能让该 AC 判「过」。
+
 **存储位置**：**独立卷**（`admin_portal_data` → `/srv/portal`），**不在 `/data` 下** —— 避免与用户记忆混放（备份误收 / ai-memory 目录扫描触及）。
 
 ---
@@ -346,7 +348,7 @@ admin_portal/
 ├── tsconfig.json
 ├── src/
 │   ├── server.ts               # 启动自检（§3.4）→ Fastify 装配 → listen
-│   ├── config.ts               # env 读取与校验；加载 launch 模板（真源 ../mcp/mcp-design.md §5.6.4）
+│   ├── config.ts               # env 读取与校验（**不含** launch 模板来源 —— 模板已内建，见 §12.9）
 │   ├── selfcheck.ts            # 四项 fail-closed 自检
 │   ├── web/                    # portal-web
 │   │   ├── routes/             # index(首页 = 接入说明) · admin.users · admin.detail · admin.audit · admin.capacity · admin.mcp
@@ -357,7 +359,8 @@ admin_portal/
 │   │   ├── route.ts            # /mcp 路由（仅接受 {MCP_HOST}）
 │   │   ├── session.ts          # 会话注册表与生命周期、回收、吊销终止
 │   │   ├── spawn.ts            # 占位符替换 + 断言 + spawn
-│   │   └── transport.ts        # Streamable HTTP server transport ⇄ stdio client transport
+│   │   ├── transport.ts        # Streamable HTTP server transport ⇄ stdio client transport
+│   │   └── launch-template.ts  # **内建 launch 模板常量**（逐字对照 ../mcp/mcp-design.md §5.6.4，由启动自检断言；见 §12.9）
 │   └── shared/                 # host-split.ts · handle.ts · audit.ts · redact.ts
 ├── assets/                     # UI 资产（源自 specs/web-portal/mockups/assets/，清单见 §15）
 └── README.md                   # UI 资产清单与同步方式（见 §15）
@@ -405,7 +408,23 @@ admin_portal/
 | 背压 | stdio 管道与 HTTP 流**按 stream 处理**，**不整包缓冲**；对超大响应设门户级上限并**明确报错**（避免大响应击穿内存） |
 | 会话注册表 | `sessionId → { userId, handle, child, transport, startedAt, lastActivityAt, clientInfo }` |
 | 回收触发 | 客户端断开 · HTTP 流结束 · **空闲超时** · **单会话最长时长** · **吊销事件** → `kill` 子进程并注销（AC3.4 / TC-P-L3-04） |
-| 失败映射 | **断言失败 → 拒绝且不 spawn**（AC4.4 / AC4.7）；spawn 失败 → 结构化错误 + 审计行；**不向客户端**回传内部路径或堆栈 |
+**失败映射（2026-09-23 定档，Sprint 4 `3.1` 开工前置）**
+
+> 为什么必须写死：`MS1 AC-M1.2` / `AC-M1.4` 只写「被拒」、`TC-P-L2-02` 只写「拒绝」—— **没有状态码**，桥的对外契约就可被任意实现，`3.6` / `3.7` 与真实客户端会对不上。逐场景定档如下（与 [`../mcp/mcp-test.md`](../mcp/mcp-test.md) §4-F 的断言一一对应）。
+
+| 场景 | HTTP | 错误体 `error` | 说明与判据 |
+|---|---|---|---|
+| 未携带 `Authorization` | **401** | `unauthorized` | **不降级为匿名**（`MS1 AC-M1.2`） |
+| `memo_` 令牌不存在 / 已吊销 / 用户已停用 | **401** | `unauthorized` | **统一 401**：不区分「不存在」与「已吊销」，不给探测者区分信号 |
+| 非 `memo_` 前缀（含 `Bearer` 缺失或畸形） | **401** | `unauthorized` | **且不创建**任何用户目录或库（`MS1 AC-M1.4`） |
+| 面不匹配（在 `<ADMIN_HOST>` 上访问 `/mcp`） | **403** | `wrong_face` | 面隔离**先于**身份（既有实现，见 §12.3） |
+| **spawn 前断言失败**（库路径为空 / 不在 `/data/users/` 内 / 与 handle 不匹配） | **500** | `spawn_assertion_failed` | **拒绝且不 spawn**（`AC4.4` / `AC4.7`）· 必写审计行 · 不回传库路径 |
+| **spawn 失败**（二进制缺失 / 权限 / 上游启动即退） | **503** | `upstream_unavailable` | 必写审计行 · 错误体只含场景名，**不含上游 stderr 原文** |
+| **上游超时**（请求已发出但无响应） | **504** | `upstream_timeout` | 同时触发回收（`kill` 子进程并注销会话） |
+| **配额超限**（上游返回配额错误） | **429** | `QUOTA_EXCEEDED` | **透传上游客口**（取值见 [`../knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md`](../knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md)）· 门户**不自建**计数器（`AC7.1`） |
+| **客户端断开** | 无响应（连接已断） | — | 仅回收子进程并注销会话（`AC3.4`） |
+
+**三条统一纪律**：① 错误体一律 `{"error":"<code>","message":"<可读说明>"}`，**不含**内部路径、堆栈或上游 stderr 原文；② 任何失败路径都**不得留下未回收的子进程**（与 §12.7 的回收触发同源）；③ `spawn_assertion_failed` 与 `upstream_unavailable` **必写审计行**。
 
 ### 12.6 门户数据模型落地
 
@@ -443,7 +462,7 @@ admin_portal/
 |---|---|---|
 | `PORTAL_ADMIN_HOST` / `PORTAL_MCP_HOST` | 两个面各自的 Host（面隔离判据） | 是 |
 | `PORTAL_DB_PATH` | 门户库文件路径（**必须不在 `/data` 下**） | 是 |
-| `PORTAL_LAUNCH_TEMPLATE` | `launch` 模板来源（真源 [`../mcp/mcp-design.md`](../mcp/mcp-design.md) §5.6.4） | 是 |
+| ~~`PORTAL_LAUNCH_TEMPLATE`~~ | **已内建为代码常量**（`src/bridge/launch-template.ts`），**不再作为 env 键**（2026-09-23 定档）：模板是「门户对上游的唯一知识」，改它等于升级适配 ⇒ 与代码同版本控制；由**启动自检**断言其与 [`../mcp/mcp-design.md`](../mcp/mcp-design.md) §5.6.4 **逐字一致**（`TC-M-L0-01`） | 否（已内建） |
 | `PORTAL_SESSION_IDLE_TIMEOUT` / `PORTAL_SESSION_MAX_DURATION` | 空闲超时 / 单会话最长时长 | 是 |
 | `PORTAL_MAX_CONCURRENCY_PER_KEY` / `PORTAL_MAX_CONCURRENCY_GLOBAL` | 并发上限 | 是 |
 | `PORTAL_RESPONSE_MAX_BYTES` | 单响应上限（背压保护） | 是 |

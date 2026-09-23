@@ -235,9 +235,23 @@ aimem-ssh ALL=(root) NOPASSWD: /usr/bin/docker exec -i ai-memory-mcp ai-memory m
 | # | 步骤 | 归属 |
 |---|---|---|
 | 1 | 校验 `memo_`：`sha256(token)` → 查门户库 → `{handle, status}` | 门户（令牌模型见 `web-design.md` §4.1） |
-| 2 | 断言 `handle` 合法 + 拼 env/argv（模板来自**配置**，非代码） | 门户执行，断言依据见 §5.6.4 不变量 1–3 |
+| 2 | 断言 `handle` 合法 + 拼 env/argv（模板为**内建常量**，门户只做占位符替换） | 门户执行，断言依据见 §5.6.4 不变量 1–3 |
 | 3 | **spawn 子进程；MCP 协议桥 HTTP(Streamable) ⇄ stdio** | **本文件**（**一会话一子进程**，见 §6.1 D3） |
 | 4 | 会话结束 → kill 子进程 | 门户（子进程随父进程死亡是 β′ 的天然保证，见 §5.6.3） |
+
+> **实证（2026-09-23，Sprint 4 `3.5` 探针 · 本机 macOS + Rosetta 环境）**：上表**第 3 步已按 [`ADR-017`](../adr/ADR-017-complexity-probe-before-real-build.md) 用可丢弃探针跑通** —— 探针在 [`../../probes/mcp-bridge-probe/`](../../probes/mcp-bridge-probe/)（**不入制品**），结论如下。
+>
+> | 结论 | 实测值 |
+> |---|---|
+> | SDK 与传输 | `@modelcontextprotocol/sdk@1.30.0`：服务端 `StreamableHTTPServerTransport` + 客户端 `StdioClientTransport`，**双向转发跑通** ⇒ **无需自行实现协议**（与本表第 3 步的原意一致） |
+> | HTTP 层会话语义 | server transport 以 `sessionIdGenerator` **每会话生成一个 id**（实测形如 `7677a16a-…`）；传输为 **POST + 流式响应**（`GET` 语义本探针**未断言**） |
+> | 一次会话全链路 | `initialize`（HTTP 握手 + 上游握手 **25–43ms**；上游连接 **370–464ms**）→ `tools/list` **8 项**（core 档 ✓ 与 §8 一致）→ `memory_store` → `memory_recall` **回读到刚写入的标记**（`mode:hybrid`） |
+> | 会话回收 | 上游子进程数 **0 → 1 → 0**（连接前 / 会话中 / 收尾后）。**收尾必须显式 `close()` 上游 client** —— 首版漏了这一步，容器内实测留下孤儿进程 |
+> | 子进程 spawn 形状 | `StdioClientTransport` 的 `command` / `args` / `env` / `cwd` / `stderr` 足以表达模板（探针即以 `docker exec -i … ai-memory mcp --tier smart --profile core` 模拟）；上游日志**走 stderr**、stdout 独占 JSON-RPC（与 §1 事实 2 一致） |
+>
+> **本机环境的两个坑（会影响后续探针与运维脚本）**：① 容器底座是 debian-slim，**没有 `ps`**；② 本机跑 x86_64 镜像经 **Rosetta** 转译 ⇒ **所有 `/proc/<pid>/exe` 都指向 `/mnt/lima-rosetta/rosetta`**，「按 exe 判进程」在本机不成立 —— 判进程请用 **cmdline**（且带足区分参数，否则会把别处遗留的同形进程一起数进来）。
+>
+> **探针未覆盖、现已定档**（2026-09-23，Sprint 4 `3.1` 开工前置）：**失败面的 HTTP 状态码与错误体** → [`../web-portal/web-design.md`](../web-portal/web-design.md) §12.5 的逐场景映射表（401 / 403 / 500 / 503 / 504 / 429 + 统一错误体纪律）；**`last_used_at` 的更新粒度** → 同文件 §4.4（**会话建立时更新一次**，非每请求）。**仍未定**：每 key / 全局并发与超时的**默认值**（键名已登记于 §12.9，取值归 Sprint 4 `4.1`）。另实测到一条上游行为：**库文件的父目录不会被自动创建**（未预建则 `failed to open database`）—— 正是 `3.2` 断言要拦的形态。
 
 **部署顺序依赖**：`ai-memory-mcp` 先起（创建命名卷 `ai_memory_data`），门户以 `external: true` 引用。
 
@@ -269,7 +283,9 @@ aimem-ssh ALL=(root) NOPASSWD: /usr/bin/docker exec -i ai-memory-mcp ai-memory m
 
 #### 5.6.4 启动模板（`launch`）与强制不变量
 
-门户代码里的 ai-memory 知识 = 0；全部知识收敛到**一段配置**（门户只做占位符替换，不解析语义）：
+> **载体（2026-09-23 定档）**：模板在门户侧**内建为代码常量**（`admin_portal/src/bridge/launch-template.ts`），**不通过环境变量注入** —— 模板是「门户对上游的唯一知识」，改动它等于升级适配，应与代码同版本控制；由**启动自检**断言其与本节的逐字一致（`TC-M-L0-01`）。据此，[`../web-portal/web-design.md`](../web-portal/web-design.md) §12.9 的 `PORTAL_LAUNCH_TEMPLATE` 键**取消**。
+
+门户代码里的 ai-memory 知识 = 0；全部知识收敛到**一段内建模板常量**（门户只做占位符替换，不解析语义）：
 
 ```yaml
 launch:

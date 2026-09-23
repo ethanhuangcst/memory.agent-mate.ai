@@ -1,0 +1,12 @@
+{
+  "name": "mcp-bridge-probe",
+  "private": true,
+  "type": "module",
+  "description": "Sprint 4 3.5 探针：验证 HTTP(Streamable) 门户侧 ⇄ stdio 上游子进程 的双向往返。产物可丢弃。",
+  "scripts": {
+    "probe": "node probe.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.30.0"
+  }
+}
