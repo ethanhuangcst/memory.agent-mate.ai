@@ -102,6 +102,32 @@ def assert_no_overflow(page: Page, where: str) -> None:
     assert not offenders, f"{where}：元素溢出容器 {offenders}"
 
 
+def assert_status_single_line(page: Page, where: str) -> None:
+    """状态标签必须是单行。
+
+    为什么需要：用户列表的「状态」列在表格 auto 布局下只剩约 57px（「库路径」列吃掉
+    635px），而「已吊销」需要 49 + 状态点 7 + 间距约 7.65 ≈ 64px ⇒ 中文默认允许任意字符间
+    断行，于是被挤成「已吊 / 销」两行（2026-09-23 由用户截图发现；实测 h=50 / line-height=25.2）。
+    样式侧已用 `white-space: nowrap` 修掉，这里加断言防回归 —— 布局类缺陷只靠肉眼发现
+    一次就够了（Issue 8 与本案同一教训）。
+    """
+    too_tall = page.evaluate(
+        """() => {
+          const bad = [];
+          for (const el of document.querySelectorAll('.status')) {
+            const cs = getComputedStyle(el);
+            const lh = cs.lineHeight === 'normal' ? parseFloat(cs.fontSize) * 1.2 : parseFloat(cs.lineHeight);
+            const h = el.getBoundingClientRect().height;
+            if (h > lh * 1.5) {
+              bad.push({ text: (el.textContent || '').trim(), height: Math.round(h), lineHeight: Math.round(lh) });
+            }
+          }
+          return bad;
+        }"""
+    )
+    assert not too_tall, f"{where}：状态标签折行了（应为单行）{too_tall}"
+
+
 def _value_metrics(page: Page, selector: str) -> dict[str, int]:
     """量「文本实际宽度 / 盒子可用宽度」，写进证据（数字比「看起来没溢出」可信）。"""
     return page.evaluate(
@@ -176,6 +202,7 @@ def run_flow(page: Page, base_url: str, admin_email: str) -> dict[str, str]:
     expect(page.locator(".app-header")).to_contain_text(admin_email)
     expect(page.locator("nav.nav a")).to_have_count(4)
     assert_no_overflow(page, "用户列表")
+    assert_status_single_line(page, "用户列表")
     assert_footer_pinned(page, "用户列表")
     _shot(page, "01-users-list")
 

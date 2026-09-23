@@ -2294,7 +2294,11 @@ td.table-check {
 .bar-fill.is-warn { background: var(--danger); }
 
 /* ---- 状态：我方用「状态点 + 文本」，显式覆盖参考的等宽标签写法 ---- */
-.status { display: inline-flex; align-items: center; gap: 0.45rem; font-family: var(--font-ui); font-size: 0.9rem; font-weight: 400; letter-spacing: 0; text-transform: none; color: var(--ink-2); }
+/* `white-space: nowrap` 的必要性（2026-09-23 实测）：表格 auto 布局下「库路径」列会吃掉
+   大部分宽度，用户列表的「状态」列只剩 **57px**；而「已吊销」需要 49 + 状态点 7 + 间距
+   约 7.65 ≈ **64px** ⇒ 中文默认允许任意字符间断行，于是被挤成「已吊 / 销」两行（`.status`
+   实测 h=50 / line-height=25.2）。状态标签语义上不可拆，故整块禁止折行。 */
+.status { display: inline-flex; align-items: center; gap: 0.45rem; font-family: var(--font-ui); font-size: 0.9rem; font-weight: 400; letter-spacing: 0; text-transform: none; color: var(--ink-2); white-space: nowrap; }
 .status::before { content: ""; width: 7px; height: 7px; border: 1px solid var(--ink); background: var(--ink); flex-shrink: 0; }
 .status.is-off { color: var(--danger); }
 .status.is-off::before { border-color: var(--danger); background: transparent; }

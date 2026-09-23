@@ -68,7 +68,6 @@
   "users.col.created": "Created",
   "users.col.status": "Status",
   "users.empty": "No users yet. Create the first one.",
-  "users.caption": "Each user has its own database. Paths are monospaced for character-level checks.",
   "users.st.active": "Active",
   "users.st.revoked": "Revoked",
   "users.invalid": "Lowercase letters, digits, underscore and hyphen only.",

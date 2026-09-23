@@ -20,8 +20,7 @@
 
     {% if users.length > 0 %}
     <div class="table-wrap" data-users-table>
-      <table>
-        <caption class="field-note">{{ t('users.caption') }}</caption>
+      <table aria-label="{{ t('users.title') }}">
         <thead>
           <tr>
             <th>{{ t('users.col.handle') }}</th>

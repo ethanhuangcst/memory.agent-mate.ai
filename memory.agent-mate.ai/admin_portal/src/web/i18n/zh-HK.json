@@ -68,7 +68,6 @@
   "users.col.created": "開立",
   "users.col.status": "狀態",
   "users.empty": "仲未有用戶。開第一位。",
-  "users.caption": "每個用戶一個獨立數據庫。路徑用等寬字體，方便逐個字核對。",
   "users.st.active": "正常",
   "users.st.revoked": "已撤銷",
   "users.invalid": "只可以用小寫字母、數字、底線同連字符。",

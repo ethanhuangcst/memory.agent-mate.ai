@@ -68,7 +68,6 @@
   "users.col.created": "创建",
   "users.col.status": "状态",
   "users.empty": "还没有用户。建第一位。",
-  "users.caption": "每位用户一个独立数据库。路径用等宽字体，便于逐字符核对。",
   "users.st.active": "正常",
   "users.st.revoked": "已吊销",
   "users.invalid": "只能用小写字母、数字、下划线与连字符。",
