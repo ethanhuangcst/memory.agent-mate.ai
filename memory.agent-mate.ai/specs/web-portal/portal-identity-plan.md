@@ -83,7 +83,7 @@
 | `architecture.md` | 若产品级视角也需一行，另议（当前门户决议统一登记在 `web-design.md` §0） |
 | `adr/ADR-015-*.md` | **新增**（决策、备选、代价、边界） |
 | `change-log.md` | 按日期追加一行（本批做了什么、证据、未做） |
-| `sprint-backlog.md` | Sprint 4 判据补充：真实邮箱身份 + 生产护栏 + 原型/文档同步 |
+| `sprint-backlog.md` | Sprint 4 `#2` 判据补充：真实邮箱身份 + 生产护栏 + 原型/文档同步 |
 | `deployment.md` | 真身份/隧道相关章节核对（含 MCP 面 Bypass 口径） |
 | `specs/mcp/*.md` | 核对 MCP 面主机名与 Bypass 口径；如受本批影响则更新 |
 | `product-backlog.md` | 登记本批收口与遗留 |
@@ -162,7 +162,7 @@
 | **SBI-D1** | `web-stories.md`：新增「开发登录准入 / 真实邮箱身份 / 生产身份来源白名单」的故事与 `AC` | 评审 + 实现期 | 新增 `AC` 编号连续；每个新 `AC` 在 `web-test.md` 有对应用例号（**0 悬空**）；**按 [`ADR-019`](../adr/ADR-019-spec-basic-constraints-and-executable-uptake.md) 覆盖四类基本约束**（重复/冲突 · 不存在 · 非法输入 · 并发与二次操作）与**状态前置条件**（开发登录入口在哪些配置下存在/不存在） | — |
 | **SBI-D2** | `web-design.md` §6 认证模型：开发登录入口边界 · `PORTAL_TEST_JWT_EMAIL` · 身份来源护栏 · 与 `ADR-015` 互链 | 评审 | 三处口径与实现一致（`admin-guard.ts` 的 `isIdentitySourceAllowed`、`config.ts` 的必填键），链接有效（`make doc-links`） | — |
 | **SBI-D3** | `web-test.md`：登记 T1–T4 四条用例（真实邮箱 / 缺配置拒绝 / 生产来源拒绝 / 审计 actor） | 实现期 + 验收 | T1–T4 每条都能指到 `dev-login.test.ts` 里的**实际用例名** | — |
-| **SBI-D4** | `sprint-backlog.md`（Sprint 4 判据补充 + 后续按 SBI 编排）· `product-backlog.md`（登记本批收口与遗留） | 排期 | 两文件互链一致；Sprint 4 行含「真实邮箱 + 生产护栏」判据要点 | — |
+| **SBI-D4** | `sprint-backlog.md`（Sprint 4 `#2` 判据补充 + 后续按 SBI 编排）· `product-backlog.md`（登记本批收口与遗留） | 排期 | 两文件互链一致；Sprint 4 `#2` 行含「真实邮箱 + 生产护栏」判据要点 | — |
 | **SBI-D5** | `deployment.md` 真身份 / 隧道章节核对 · `specs/mcp/*.md` 主机名与 Bypass 口径核对 | 运维 | 只读核对：受影响则更新，**未受影响则显式登记「已核对、无需改」** | — |
 | **SBI-P1** | `mockups/`：**新增**开发登录页与 401 自诊断块（含四语言词条），按 [`ADR-018`](../adr/ADR-018-mockup-as-clickable-simulation.md) 做成**可点击的全路径仿真** | 评审 | 新页可打开；四语言键集合一致；**关键路径可点通**（成功 / 失败 / 刷新 / 返回 / 同一入口第二次操作）；断言从静态渲染扩展到交互路径且全绿 | — |
 | **SBI-P2** | `mockups/`：同步 Issue 1–5 的界面修正（停用用户无签发入口且有「恢复访问」· 弹窗内显示失败原因 · 长文本折行） | 评审 | 两份 `portal.css` 逐文件一致（sha256）；对应断言在原型侧通过 | — |

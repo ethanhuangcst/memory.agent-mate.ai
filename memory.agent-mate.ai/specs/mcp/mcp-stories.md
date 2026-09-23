@@ -37,14 +37,14 @@
 
 | # | 故事 | 角色 | AC | Product Backlog | Sprint | 设计 | 测试用例 |
 |---|---|---|---|---|---|---|---|
-| <a id="ms1"></a>MS1 | 对外 MCP 端点与令牌接入 | 用户 | AC-M1.1–AC-M1.4 | [`product-backlog.md`](../product-backlog.md) #32 · #14 · #30 | Sprint 4 PSP-W2「端到端接入」 | [`mcp-design.md`](./mcp-design.md) §5.6.2 | TC-M-L1-01 · TC-M-L1-02 · TC-M-L2-01 · TC-P-L1-03 · TC-P-L2-01 · TC-P-L2-02（门户侧执行） |
-| <a id="ms2"></a>MS2 | 跨用户物理隔离的可观察判据 | 用户 | AC-M2.1–AC-M2.4 | [`product-backlog.md`](../product-backlog.md) #4 · #11 | Sprint 4 PSP-W2「端到端接入」 | [`mcp-design.md`](./mcp-design.md) §3 · §6.1 D3 · §6.2 V3 | TC-M-L1-03 · TC-M-L1-04 · TC-M-L3-01 |
-| <a id="ms3"></a>MS3 | 会话桥与子进程生命周期 | 集成方 | AC-M3.1–AC-M3.4 | [`product-backlog.md`](../product-backlog.md) #33 | Sprint 4 PSP-W2「端到端接入」 | [`mcp-design.md`](./mcp-design.md) §5.6.2 | TC-M-L1-05 · TC-M-L1-06 |
-| <a id="ms4"></a>MS4 | 启动模板与身份注入契约 | 集成方 | AC-M4.1–AC-M4.4 | [`product-backlog.md`](../product-backlog.md) #34 | Sprint 4 PSP-W2「端到端接入」 | [`mcp-design.md`](./mcp-design.md) §5.6.1 · §5.6.4 | TC-M-L0-01 · TC-M-L1-07 · TC-M-L3-02 |
-| <a id="ms5"></a>MS5 | 制品契约与上游耦合面守护 | 运维 | AC-M5.1–AC-M5.4 | [`product-backlog.md`](../product-backlog.md) #35 · #21 | Sprint 4 PSP-W3 · Sprint 7 | [`mcp-design.md`](./mcp-design.md) §5.6.3 · §9 M | TC-M-L1-08 · TC-M-L1-09 |
-| <a id="ms6"></a>MS6 | 档位与工具可达性 | 用户 | AC-M6.1–AC-M6.3 | [`product-backlog.md`](../product-backlog.md) #36 | Sprint 5 PSP-M3 | [`mcp-design.md`](./mcp-design.md) §8 · §9 J4 | TC-M-L1-10 · TC-M-L1-11 |
-| <a id="ms7"></a>MS7 | 配额与限流在 MCP 面的生效 | 管理员 | AC-M7.1–AC-M7.4 | [`product-backlog.md`](../product-backlog.md) #6 · #17 | Sprint 4 PSP-W3 · Sprint 6 #10 | [`mcp-design.md`](./mcp-design.md) §5.4 · §9 L | TC-M-L1-12 · TC-M-L3-03 |
-| <a id="ms8"></a>MS8 | 每用户库的后台维护 | 运维 | AC-M8.1–AC-M8.4 | [`product-backlog.md`](../product-backlog.md) #13 | Sprint 3 #5（已定档）· 生产定时器留 Sprint 6 | [`mcp-design.md`](./mcp-design.md) §5.3 | TC-M-L1-13 · TC-M-L3-04 |
+| <a id="ms1"></a>MS1 | 对外 MCP 端点与令牌接入 | 用户 | AC-M1.1–AC-M1.4 | [`product-backlog.md`](../product-backlog.md) #32 · #14 · #30 | Sprint 4「接入链路与端到端取证」 | [`mcp-design.md`](./mcp-design.md) §5.6.2 | TC-M-L1-01 · TC-M-L1-02 · TC-M-L2-01 · TC-P-L1-03 · TC-P-L2-01 · TC-P-L2-02（门户侧执行） |
+| <a id="ms2"></a>MS2 | 跨用户物理隔离的可观察判据 | 用户 | AC-M2.1–AC-M2.4 | [`product-backlog.md`](../product-backlog.md) #4 · #11 | Sprint 4「接入链路与端到端取证」 | [`mcp-design.md`](./mcp-design.md) §3 · §6.1 D3 · §6.2 V3 | TC-M-L1-03 · TC-M-L1-04 · TC-M-L3-01 |
+| <a id="ms3"></a>MS3 | 会话桥与子进程生命周期 | 集成方 | AC-M3.1–AC-M3.4 | [`product-backlog.md`](../product-backlog.md) #33 | Sprint 4「接入链路与端到端取证」 | [`mcp-design.md`](./mcp-design.md) §5.6.2 | TC-M-L1-05 · TC-M-L1-06 |
+| <a id="ms4"></a>MS4 | 启动模板与身份注入契约 | 集成方 | AC-M4.1–AC-M4.4 | [`product-backlog.md`](../product-backlog.md) #34 | Sprint 4「接入链路与端到端取证」 | [`mcp-design.md`](./mcp-design.md) §5.6.1 · §5.6.4 | TC-M-L0-01 · TC-M-L1-07 · TC-M-L3-02 |
+| <a id="ms5"></a>MS5 | 制品契约与上游耦合面守护 | 运维 | AC-M5.1–AC-M5.4 | [`product-backlog.md`](../product-backlog.md) #35 · #21 | Sprint 5 · Sprint 7 | [`mcp-design.md`](./mcp-design.md) §5.6.3 · §9 M | TC-M-L1-08 · TC-M-L1-09 |
+| <a id="ms6"></a>MS6 | 档位与工具可达性 | 用户 | AC-M6.1–AC-M6.3 | [`product-backlog.md`](../product-backlog.md) #36 | Sprint 6 `#11` | [`mcp-design.md`](./mcp-design.md) §8 · §9 J4 | TC-M-L1-10 · TC-M-L1-11 |
+| <a id="ms7"></a>MS7 | 配额与限流在 MCP 面的生效 | 管理员 | AC-M7.1–AC-M7.4 | [`product-backlog.md`](../product-backlog.md) #6 · #17 | Sprint 6 `#2`–`#5` | [`mcp-design.md`](./mcp-design.md) §5.4 · §9 L | TC-M-L1-12 · TC-M-L3-03 |
+| <a id="ms8"></a>MS8 | 每用户库的后台维护 | 运维 | AC-M8.1–AC-M8.4 | [`product-backlog.md`](../product-backlog.md) #13 | Sprint 3 #5（已定档）· 生产定时器留 Sprint 5 | [`mcp-design.md`](./mcp-design.md) §5.3 | TC-M-L1-13 · TC-M-L3-04 |
 
 ---
 
@@ -344,7 +344,7 @@ Scenario: stdio 会话下的 HTTP 专属上限不生效且已登记结论
 
 **故事**：作为**运维**，我希望每个用户库的过期记忆与 WAL 被周期性回收，以便库不会只涨不缩、过期数据不会长期残留。
 
-**范围边界**：调度**定档为主机 cron**，唯一入口是逐库维护脚本（[`./mcp-design.md`](./mcp-design.md) §5.3）。**生产定时器安装、日志采集与告警留 Sprint 6**，本 Sprint 只冻结命令口径与失败语义。
+**范围边界**：调度**定档为主机 cron**，唯一入口是逐库维护脚本（[`./mcp-design.md`](./mcp-design.md) §5.3）。**生产定时器安装、日志采集与告警留 Sprint 5**，本 Sprint 只冻结命令口径与失败语义。
 
 ```gherkin
 @AC-M8.1 @happy
@@ -392,9 +392,9 @@ Scenario: 环境不可用时不得把「什么都没维护」当作成功
 | # | 项 | 说明 |
 |---|---|---|
 | 1 | `MS5 AC-M5.3` 的探针步骤尚未落地 | `scripts/upstream-preflight.sh --with-image` 已能校验镜像指纹，但「镜像内 `--help` / `id aimem` 与 baseline 快照比对」这一步登记为待补（[`./mcp-design.md`](./mcp-design.md) §9 M） |
-| 2 | `MS8` 的生产定时器与告警 | 安装、日志与告警留 Sprint 6；本 Sprint 只冻结命令口径、失败语义与退出码 |
-| 3 | `MS6 AC-M6.2` 的复现矩阵 | 「中文 vs 英文提问 × 对外 8 项工具」的完整矩阵归 Sprint 5 `PSP-M3`；本文件只固定判据 |
-| 4 | 归档只增不减 | `gc` 默认归档而非硬删 ⇒ `archived_memories` 会持续累积；清理逃生口 `archive purge` 的调度同样留 Sprint 6（[`./mcp-design.md`](./mcp-design.md) §5.3「边界」） |
+| 2 | `MS8` 的生产定时器与告警 | 安装、日志与告警留 Sprint 5；本 Sprint 只冻结命令口径、失败语义与退出码 |
+| 3 | `MS6 AC-M6.2` 的复现矩阵 | 「中文 vs 英文提问 × 对外 8 项工具」的完整矩阵归 Sprint 6 `#11`；本文件只固定判据 |
+| 4 | 归档只增不减 | `gc` 默认归档而非硬删 ⇒ `archived_memories` 会持续累积；清理逃生口 `archive purge` 的调度同样留 Sprint 5（[`./mcp-design.md`](./mcp-design.md) §5.3「边界」） |
 
 ## 变更记录
 

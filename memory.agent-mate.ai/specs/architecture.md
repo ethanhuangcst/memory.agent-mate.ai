@@ -183,7 +183,7 @@ memory.agent-mate.ai = 上游 `ai-memory-mcp` 的**私有化部署 + 定制**（
     ├── upstream.lock   # 版本坐标唯一真相源
     ├── deploy/         # 部署事实文件（compose / 模板 / 示例 env）
     ├── scripts/        # 探针与守卫脚本
-    ├── backup/         # 备份脚本（Sprint 6 落地）
+    ├── backup/         # 备份脚本（Sprint 5 落地）
     └── specs/          # 本文档所在目录 = 全部 spec 的唯一真源
 ```
 
@@ -249,6 +249,6 @@ memory.agent-mate.ai = 上游 `ai-memory-mcp` 的**私有化部署 + 定制**（
 | [`deployment.md`](./deployment.md) | 部署 / 配置 / 升级 / 备份 / 回滚 / 排障 |
 | [`mcp/mcp-design.md`](./mcp/mcp-design.md) | MCP 能力、多用户隔离、档位与工具、上游契约面全量 |
 | [`mcp/mcp-test.md`](./mcp/mcp-test.md) | MCP 测试策略 + 计划 + 用例 |
-| [`mcp/mcp-stories.md`](./mcp/mcp-stories.md) | MCP 侧故事与验收条件（Sprint 5 设计包交付物；正文待 Sprint 5 #1 落盘） |
+| [`mcp/mcp-stories.md`](./mcp/mcp-stories.md) | MCP 侧故事与验收条件（设计包定稿在 Sprint 6 `#9`） |
 | [`web-portal/web-design.md`](./web-portal/web-design.md) · [`web-stories.md`](./web-portal/web-stories.md) · [`web-test.md`](./web-portal/web-test.md) | 门户设计 / 故事 / 测试 |
 | [`../upstream.lock`](../upstream.lock) · [`adr/`](./adr/) · [`knowledge/`](./knowledge/) | 版本坐标 · 架构决议 · 可复用知识 |

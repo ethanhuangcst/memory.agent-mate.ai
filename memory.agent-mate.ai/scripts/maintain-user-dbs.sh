@@ -6,7 +6,7 @@
 # TTL 过期记忆永不驱逐、WAL 永不回收。
 #
 # 定档结论（2026-09-21 实测；详见 specs/mcp/mcp-design.md §5.3 与 specs/mcp/mcp-test.md §4-C TC-GC）：
-#   - 调度：**宿主机 cron**；本脚本是唯一入口。生产定时器安装 / 日志采集 / 告警留 Sprint 6。
+#   - 调度：**宿主机 cron**；本脚本是唯一入口。生产定时器安装 / 日志采集 / 告警留 Sprint 5。
 #   - 逐库命令：`ai-memory --db <库绝对路径> gc --json`
 #                `ai-memory --db <库绝对路径> curator --once --max-ops N --json`
 #   - 覆盖面：`gc` 自身即覆盖 TTL 驱逐与 WAL 回收（CLI 分发器对**写命令**做 post-run

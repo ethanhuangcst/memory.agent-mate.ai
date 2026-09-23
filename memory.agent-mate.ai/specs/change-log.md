@@ -6,6 +6,25 @@
 
 ---
 
+## 2026-09-23
+
+### Replan：Sprint 目标重写为「上线产物 → 生产上线 → 运营与口径」
+
+**为什么**：原排期把同一件事（让受邀用户真正用上）切成**三段、跨三个 Sprint** —— 桥在 Sprint 4、两端合跑在 Sprint 5、集成验收与上线在 Sprint 6，形成 **4 跳依赖链**。用户口径（2026-09-23）：**每个 Sprint 必须是一个完整闭环，尽量不让两个 Sprint 之间存在大的依赖**；并把 Sprint 4 的目标改为「全套产品最小 MVP 上线野草云4」。
+
+**做了什么**：
+
+- **Sprint 4** → 「交付可上线的全套产品最小 MVP（接入链路跑通 + 隔离取证）」：原 Sprint 5 的「全链路联通」「跨用户隔离」并入为 `3.6` / `3.7`，原 Sprint 6 的「本地完整集成验收」前移为 `#8`；**新增** `3.5`「mcp:桥可行性探针」（按 [`ADR-017`](./adr/ADR-017-complexity-probe-before-real-build.md)，桥是该 Sprint 唯一首次引入的跨进程协议）与 `4.4`「deploy:上线配置指南」（三段：Cloudflare Access / SSH 密钥对 / 对象存储，含每步验证点 —— 用户口径「我都有，但需要详细的指南如何配置」）。移出 12 行，并在该 Sprint 末登记「移出登记」表。
+- **Sprint 5** → 「全套产品最小 MVP 上线野草云4（生产部署 · 上线验收 · 备份恢复）」：整体承接原 Sprint 6 的部署、接入面与备份内容；**新增**「门户镜像与编排制品」—— 全仓此前**不存在**门户 Dockerfile 与门户 compose（该缺口在设计包期以「假设（可推翻）」登记过，一直未产出），是重排后新识别的最关键缺口。
+- **Sprint 6** → 「门户运营闭环与对外口径定稿」：承接原 Sprint 4 移出的运营、容量、界面与文档收口项，以及原 Sprint 5 的 MCP 侧收尾；其中原 Sprint 4 `4.8` 与原 Sprint 6 `#10`（同一件事的「判据面」与「实测面」）**合并为一行**。
+- **Sprint 7** 不变（升级治理）。
+- **同步面**：RID Registry 与覆盖对照表逐行改指（R1–R3 / D1–D6）· [`product-backlog.md`](./product-backlog.md) 的 31 条 `Sprint` 投影与 5 处关联列链接文字 · [`web-portal/web-stories.md`](./web-portal/web-stories.md) 故事索引 14 行 · [`mcp/mcp-stories.md`](./mcp/mcp-stories.md) / [`mcp/mcp-test.md`](./mcp/mcp-test.md) / [`mcp/mcp-design.md`](./mcp/mcp-design.md) 的落点列与前瞻句 · [`deployment.md`](./deployment.md) · [`architecture.md`](./architecture.md) · [`web-portal/web-design.md`](./web-portal/web-design.md) · [`web-portal/web-test.md`](./web-portal/web-test.md) · [`web-portal/portal-identity-plan.md`](./web-portal/portal-identity-plan.md) · [`web-portal/issues-log.md`](./web-portal/issues-log.md) · [`adr/ADR-009`](./adr/ADR-009-per-user-db-isolation-over-single-db-agent-id.md) · [`adr/ADR-008`](./adr/ADR-008-local-baseline-reuses-production-compose.md) · [`../scripts/limits-probe.sh`](../scripts/limits-probe.sh) 与 [`../scripts/maintain-user-dbs.sh`](../scripts/maintain-user-dbs.sh) 的注释。5 个稳定锚点 id 全部保留、只随行迁移，并显式声明「**id 前缀不等于当前 Sprint 号**」（`s4-audit-view` / `s4-identity-docs` 现落在 Sprint 6）。
+- **历史不改**：Sprint 1–3 的回顾正文、各文档变更记录流水、`knowledge/*` 证据、[`sdd-scrum-practices.md`](./sdd-scrum-practices.md) 的体例举例按原样保留（该口径与「活跃引用必改」在上一轮 Replan 中已定型）。
+
+**验证**：`make doc-links` → **45 个 Markdown / 1190 条相对链接 / 零悬空**（首次跑曾抓出变更记录里一处通配符链接 `ADR-008-*.md`，已改为纯文本）· 原型断言 **159/159** · `sprint-backlog.md` 内 5 个锚点 id **各定义 1 处** · RID 覆盖对照表 **R1–R3 / D1–D6 每行 4/4 列非空** · 全仓 grep 指向旧落点的**活跃引用为 0**（已排除变更记录与历史叙述）· `product-backlog.md` 的 31 条投影与 `sprint-backlog.md` 逐条核对一致。
+
+---
+
 ## 2026-09-22
 
 ### 门户实现：`PSP-W1`「账号与凭证」（Sprint 4 `#2`）交付
@@ -553,3 +572,4 @@
 | 2026-09-23 | **`PSP-W1` 计划收尾（`online-e2e` 项）+ 文档口径纠正**：① **结掉 2026-09-22 登记的那条 fail-loud 工具缺陷**（当日现象：真身份实例占用 8788 ⇒ E2E 自启的回环实例绑定失败 ⇒ 浏览器打到配置为真域名的实例 ⇒ 面隔离 **403** 的**误导性失败**）：修后端口被占用时打印**占用进程**并以**退出码 30** 拒绝启动，空闲端口照常全绿；② 在线套件的「明确跳过」语义**实测**通过（`scripts/portal-e2e.sh --online` ⇒ **40** + SKIP 文案）；同时量到 `make portal-e2e` 会把非零码**折叠为 2** ⇒「跳过」与「失败」在 make 层面不可分，机器调用方须直接调用脚本（脚本头已写明）；③ `web-test.md` 回填实测：离线测试 **261 项**、覆盖率 语句 **92.78** / 分支 **85.90** / 函数 **97.76** / 行 **94.26**（阈值 92/85/96/93，门禁绿灯；语句边距 +0.78 偏薄）；④ 在线套件**真链路运行**登记为「**未测**」（缺 Service Token 与隧道地址两项环境变量，需持有者执行），与「不通」分开登记（链路本身已于 2026-09-22 由 `tunnel-dev.sh --verify` 验过）。 |
 | 2026-09-23 | **脱敏：Cloudflare Access 团队域不再入仓**：`change-log` / `issues-log` / `web-login-plan` 共 **1** 处曾写入真实团队域，已统一替换为 `<team-domain>.cloudflareaccess.com`。依据：`web-login-plan.md` 自身边界「**不写密钥与真实值**（真值只存在于本机被忽略的 `admin_portal/.env`）」。**AUD 未泄漏** —— 文档只按名引用 `.env` 的 AUD，未写其值。**保留项**：`me@ethanhuang.com` 是**产品对外的公开联系地址**（公开说明页与原型中本就在用、且早已提交）⇒ 不属脱敏范围。发现的机制：提交前的敏感值兜底扫描（本次新增做法，已并入提交清单）。 |
 | 2026-09-23 | **删除用户列表说明文案 + 状态标签折行修复（Issue 9）**：① 表头说明「每位用户一个独立数据库。路径用等宽字体，便于逐字符核对。」整体删除（四语言词条同步移除，键数 **261 → 260** 且四语言一致），并删除承载它的 `<caption>`、给 `<table>` 补 `aria-label`（避免表格失去无障碍名称）；② **Issue 9**：状态列仅 **57px** 而「已吊销」需约 **64px**（49 文本 + 7 状态点 + 7.65 间距）⇒ 中文默认允许任意字符间断行，标签被折成「已吊 / 销」两行（实测 `.status` h=**50** / line-height 25.2）⇒ `.status { white-space: nowrap }`（两份 CSS 同步、sha256 一致），并新增 E2E 断言 `assert_status_single_line()` —— 既有护栏只查**溢出**，而折行不产生溢出故长期漏检；③ **`SBI-V1` 完成**（七条门禁全绿 + 真实邮箱 `me@ethanhuang.com` 人手截图；2026-09-22 那次测试身份的验收随之失效）。证据：261 测试 / 原型 159 / 离线 E2E 全通过。 |
+| 2026-09-23 | **Sprint 计划体例改造：PSP 批次细化为 Increment（规则由用户逐条定稿）**：① **体例**（[`sdd-scrum-practices.md`](sdd-scrum-practices.md) §2.1）：待办表列名 `事项` → **`Increment`**（`类别` / `模块` 保留）；命名必须为 **`范围:名词`**，范围词表限定 `web-portal` / `mcp` / `deploy` / `backup`，且**范围按契约归属**判定（不按代码位置、不按接收方角色 —— 例：会话桥实现于 `admin_portal/src/bridge/` 但契约真源在 [`mcp/mcp-design.md`](mcp/mcp-design.md) §5.6 ⇒ `mcp:会话桥`）；每行必须是一个**可交付的增量**，粒度以「一个功能」为起点、按 §2.4 的 SBI 判据过大时拆到**子功能**；**验收条件必须二值判定**（只有满足/不满足），格式为「条件名称 + 判定依据」。② **拆分**：Sprint 4 原 `#3`（`PSP-W2`）→ `3.1`–`3.6`、原 `#4`（`PSP-W3`）→ `4.1`–`4.10`；Sprint 5 原 `#2`/`#3`/`#4`（`PSP-M1/M2/M3`）→ `2.1`–`2.2` / `3.1`–`3.2` / `4.1`；[`web-portal/portal-identity-plan.md`](web-portal/portal-identity-plan.md) §8 的剩余 SBI 排入（`D1`–`D5`、`P2`、`P3` → Sprint 4 `#7`–`#13`；`V2P`、`V2` → Sprint 5 `#5`–`#6`）。③ **两处未决项按证据落定**：容量 `S7` 按 AC 拆为 `3.5`（会话限流）/ `3.6`（配额透传）/ `4.7`–`4.9`（磁盘方案、规模上限、限流结论）—— 依据是 [`web-portal/web-design.md`](web-portal/web-design.md) §7「上游无『会话』概念 ⇒ 会话级限流必须门户自建」，故依赖会话桥者排在桥之后；Sprint 4 `#3` 与 Sprint 5 `#3` 的判据重叠按「**桥本身（Sprint 4 交付 `3.1`–`3.4`）/ 两端合跑 + 跨用户隔离 + 拒绝路径（Sprint 5 `3.x`）**」划界，重叠消除。④ **引用同步**：`web-stories.md` 14 行故事落点按新编号重算；`product-backlog.md` 关联列改指新编号；`web-test.md` 的 `D1` 落点改指 `3.2`；`issues-log.md` 的批次标题改名；**四个被外部引用的锚点**（`s4-mcp-session-bridge` / `s4-audit-view` / `s5-access-surfaces` / `s5-production-acceptance`）保留、27 处引用未断。⑤ **历史不改**：`#1` / `#2` / `#5` / `#6`（已 `Done`）与 ADR、change-log 流水、回顾正文中的旧批次名一律保留（[`ADR-016`](adr/ADR-016-sbi-delivery-granularity.md) 第 3 条「既有批次不重排」）。**编号基准**：重排前 `#3`/`#4` 指 `PSP-W2`/`PSP-W3`、Sprint 5 `#2`/`#3`/`#4` 指 `PSP-M1`/`M2`/`M3`；重排后 **`3.x` / `4.x` 表示由原 `#3` / `#4` 拆出的子项**，Sprint 5 的 `2.x` / `3.x` / `4.1` 同理。证据：`make doc-links` 无悬空（45 文件 / **1155** 相对链接）；拆分后表格列数与锚点完整性均校验通过。 |

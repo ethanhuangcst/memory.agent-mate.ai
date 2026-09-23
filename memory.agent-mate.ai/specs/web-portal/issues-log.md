@@ -1,5 +1,5 @@
 # sprint 1
-## PSP-W2「端到端接入」
+## mcp:会话桥（Sprint 4「接入链路与端到端取证」，原 `PSP-W2`）
 ### Issue 1: Can issue token for deactivated user
 - Admin loged in, user page
 - create a new user ethanhuang, then deactivate it

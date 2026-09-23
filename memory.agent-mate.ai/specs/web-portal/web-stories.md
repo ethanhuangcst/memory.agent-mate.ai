@@ -24,20 +24,20 @@
 
 | # | 故事 | 角色 | AC | Product Backlog | Sprint | 设计 | 测试用例 |
 |---|---|---|---|---|---|---|---|
-| <a id="s1"></a>S1 | 创建用户（邀请制） | 管理员 | AC1.1–AC1.8 | [`product-backlog.md`](../product-backlog.md) #27 | Sprint 4 PSP-W1「账号与凭证」 | [`web-design.md`](./web-design.md) §4.2 | TC-P-L0-01 · TC-P-L1-01 · TC-P-L3-02 |
-| <a id="s2"></a>S2 | 令牌生命周期 | 管理员 | AC2.1–AC2.9 | [`product-backlog.md`](../product-backlog.md) #3 | Sprint 4 PSP-W1「账号与凭证」 | [`web-design.md`](./web-design.md) §4.1 | TC-P-L0-04 · TC-P-L1-02 · TC-P-L2-11 · TC-P-L3-04 |
-| <a id="s3"></a>S3 | 令牌接入的门户侧执行（MCP 侧契约已迁） | 用户 | `AC3.3`–`AC3.5` · `AC3.7`（`AC3.1` / `AC3.2` / `AC3.6` → [`../mcp/mcp-stories.md`](../mcp/mcp-stories.md) `MS1` / `MS6`） | [`product-backlog.md`](../product-backlog.md) #14 / #28 | Sprint 4 PSP-W2「端到端接入」 | [`web-design.md`](./web-design.md) §2 / §4.1 | TC-P-L1-04 · TC-P-L1-06 · TC-P-L2-03 |
-| <a id="s4"></a>S4 | 门户侧的隔离执行与审计（MCP 侧契约已迁） | 用户 | `AC4.3`–`AC4.7`（`AC4.1` / `AC4.2` → [`../mcp/mcp-stories.md`](../mcp/mcp-stories.md) `MS2`） | [`product-backlog.md`](../product-backlog.md) #4 / #11 | [Sprint 4 PSP-W2「端到端接入」](../sprint-backlog.md#s4-mcp-session-bridge) | [`web-design.md`](./web-design.md) §1 / §5 | TC-P-L0-02 · TC-P-L0-03 · TC-P-L1-05 · TC-P-L1-07 · TC-P-L3-01 · TC-P-L3-05 · TC-P-L3-09 |
-| <a id="s5"></a>S5 | 审计可追溯 | 管理员 | AC5.1–AC5.3 | [`product-backlog.md`](../product-backlog.md) #5 | [Sprint 4 PSP-W3「可运维、可发布」](../sprint-backlog.md#s4-audit-view) | [`web-design.md`](./web-design.md) §4.4 | TC-P-L0-05 |
-| <a id="s6"></a>S6 | 接入说明页与 i18n | 新用户 | AC6.1–AC6.11 | [`product-backlog.md`](../product-backlog.md) #7 | Sprint 4 PSP-W3「可运维、可发布」 | [`web-design.md`](./web-design.md) §2 / §13 / §14 | TC-P-L2-04 · TC-P-L2-05 · TC-P-L2-07 |
-| <a id="s7"></a>S7 | 容量、配额与限流 | 管理员 | AC7.1–AC7.6 | [`product-backlog.md`](../product-backlog.md) #6 / #17 / #29 | Sprint 4 PSP-W2 / PSP-W3 · Sprint 6 #10 / #11 | [`web-design.md`](./web-design.md) §7 · [`../mcp/mcp-design.md`](../mcp/mcp-design.md) §5.4 | TC-P-L3-06 · TC-P-L3-07 |
-| <a id="s8"></a>S8 | 主人保底路径不受影响 | 主人 | AC8.1–AC8.4 | [`product-backlog.md`](../product-backlog.md) #14 | [Sprint 6「接入面」](../sprint-backlog.md#s5-access-surfaces) | [`web-design.md`](./web-design.md) §2 | TC-P-L1-08 |
-| <a id="s9"></a>S9 | 门户自身数据的边界 | 运维 | AC9.1–AC9.4 | [`product-backlog.md`](../product-backlog.md) #9 / #26 | Sprint 6 #9 | [`web-design.md`](./web-design.md) §4.4 / §11 | TC-P-L1-10 · TC-P-L3-08 |
-| <a id="s10"></a>S10 | 管理面访问控制与面隔离 | 管理员 | AC10.1–AC10.10 | [`product-backlog.md`](../product-backlog.md) #2 / #16 | Sprint 4 PSP-W1「账号与凭证」 | [`web-design.md`](./web-design.md) §6 / §6.1 | TC-P-L3-03 · TC-P-L1-14 |
-| <a id="s11"></a>S11 | 门户启动自检（fail-closed） | 运维 | AC11.1–AC11.5 | [`product-backlog.md`](../product-backlog.md) #18 | Sprint 4 PSP-W3「可运维、可发布」 | [`web-design.md`](./web-design.md) §3.4 | TC-P-L0-06 · TC-P-L0-07 · TC-P-L0-08 · TC-P-L0-09 |
-| <a id="s12"></a>S12 | 门户制品契约与升级治理 | 运维 | AC12.1–AC12.5 | [`product-backlog.md`](../product-backlog.md) #18 | Sprint 4 PSP-W3「可运维、可发布」· Sprint 7 #3 / #6 | [`web-design.md`](./web-design.md) §3.1 / §3.2 / §9 | TC-P-L1-09 · TC-P-L1-11 · TC-P-L1-12 |
-| <a id="s13"></a>S13 | 门户容器最小攻击面 | 运维 | AC13.1–AC13.3 | [`product-backlog.md`](../product-backlog.md) #16 · [`../adr/ADR-012`](../adr/ADR-012-portal-launch-mechanism-no-docker-socket.md) | Sprint 4 PSP-W2 / PSP-W3 | [`web-design.md`](./web-design.md) §3 / §8 T1 | TC-P-L1-08 · TC-P-L1-13 |
-| <a id="s14"></a>S14 | 门户 UI 设计系统与版式一致性 | 运维 | AC14.1–AC14.12 | [`product-backlog.md`](../product-backlog.md) #7 | Sprint 4 PSP-W3「可运维、可发布」 | [`web-design.md`](./web-design.md) §13 / §14 | TC-P-L0-10 · TC-P-L0-11 · TC-P-L2-06 · TC-P-L2-08 · TC-P-L2-09 · TC-P-L2-10 · TC-P-L2-12 · TC-P-L2-13 |
+| <a id="s1"></a>S1 | 创建用户（邀请制） | 管理员 | AC1.1–AC1.8 | [`product-backlog.md`](../product-backlog.md) #27 | Sprint 4 `#2` | [`web-design.md`](./web-design.md) §4.2 | TC-P-L0-01 · TC-P-L1-01 · TC-P-L3-02 |
+| <a id="s2"></a>S2 | 令牌生命周期 | 管理员 | AC2.1–AC2.9 | [`product-backlog.md`](../product-backlog.md) #3 | Sprint 4 `#2` | [`web-design.md`](./web-design.md) §4.1 | TC-P-L0-04 · TC-P-L1-02 · TC-P-L2-11 · TC-P-L3-04 |
+| <a id="s3"></a>S3 | 令牌接入的门户侧执行（MCP 侧契约已迁） | 用户 | `AC3.3`–`AC3.5` · `AC3.7`（`AC3.1` / `AC3.2` / `AC3.6` → [`../mcp/mcp-stories.md`](../mcp/mcp-stories.md) `MS1` / `MS6`） | [`product-backlog.md`](../product-backlog.md) #14 / #28 | [Sprint 4 `3.1`](../sprint-backlog.md#s4-mcp-session-bridge) · `3.4` | [`web-design.md`](./web-design.md) §2 / §4.1 | TC-P-L1-04 · TC-P-L1-06 · TC-P-L2-03 |
+| <a id="s4"></a>S4 | 门户侧的隔离执行与审计（MCP 侧契约已迁） | 用户 | `AC4.3`–`AC4.7`（`AC4.1` / `AC4.2` → [`../mcp/mcp-stories.md`](../mcp/mcp-stories.md) `MS2`） | [`product-backlog.md`](../product-backlog.md) #4 / #11 | Sprint 4 `3.2` / `3.3` / `3.4` | [`web-design.md`](./web-design.md) §1 / §5 | TC-P-L0-02 · TC-P-L0-03 · TC-P-L1-05 · TC-P-L1-07 · TC-P-L3-01 · TC-P-L3-05 · TC-P-L3-09 |
+| <a id="s5"></a>S5 | 审计可追溯 | 管理员 | AC5.1–AC5.3 | [`product-backlog.md`](../product-backlog.md) #5 | [Sprint 6 `#1`](../sprint-backlog.md#s4-audit-view) | [`web-design.md`](./web-design.md) §4.4 | TC-P-L0-05 |
+| <a id="s6"></a>S6 | 接入说明页与 i18n | 新用户 | AC6.1–AC6.11 | [`product-backlog.md`](../product-backlog.md) #7 | Sprint 4 `4.2` | [`web-design.md`](./web-design.md) §2 / §13 / §14 | TC-P-L2-04 · TC-P-L2-05 · TC-P-L2-07 |
+| <a id="s7"></a>S7 | 容量、配额与限流 | 管理员 | AC7.1–AC7.6 | [`product-backlog.md`](../product-backlog.md) #6 / #17 / #29 | Sprint 4 `4.1` · Sprint 6 `#2`–`#5` | [`web-design.md`](./web-design.md) §7 · [`../mcp/mcp-design.md`](../mcp/mcp-design.md) §5.4 | TC-P-L3-06 · TC-P-L3-07 |
+| <a id="s8"></a>S8 | 主人保底路径不受影响 | 主人 | AC8.1–AC8.4 | [`product-backlog.md`](../product-backlog.md) #14 | [Sprint 5 `#12`](../sprint-backlog.md#s5-access-surfaces) | [`web-design.md`](./web-design.md) §2 | TC-P-L1-08 |
+| <a id="s9"></a>S9 | 门户自身数据的边界 | 运维 | AC9.1–AC9.4 | [`product-backlog.md`](../product-backlog.md) #9 / #26 | Sprint 5 `#3` · Sprint 5 `#16` | [`web-design.md`](./web-design.md) §4.4 / §11 | TC-P-L1-10 · TC-P-L3-08 |
+| <a id="s10"></a>S10 | 管理面访问控制与面隔离 | 管理员 | AC10.1–AC10.10 | [`product-backlog.md`](../product-backlog.md) #2 / #16 | Sprint 4 `#2` | [`web-design.md`](./web-design.md) §6 / §6.1 | TC-P-L3-03 · TC-P-L1-14 |
+| <a id="s11"></a>S11 | 门户启动自检（fail-closed） | 运维 | AC11.1–AC11.5 | [`product-backlog.md`](../product-backlog.md) #18 | Sprint 4 `4.3` | [`web-design.md`](./web-design.md) §3.4 | TC-P-L0-06 · TC-P-L0-07 · TC-P-L0-08 · TC-P-L0-09 |
+| <a id="s12"></a>S12 | 门户制品契约与升级治理 | 运维 | AC12.1–AC12.5 | [`product-backlog.md`](../product-backlog.md) #18 | Sprint 5 `#2` · Sprint 7 `#3` / `#6` | [`web-design.md`](./web-design.md) §3.1 / §3.2 / §9 | TC-P-L1-09 · TC-P-L1-11 · TC-P-L1-12 |
+| <a id="s13"></a>S13 | 门户容器最小攻击面 | 运维 | AC13.1–AC13.3 | [`product-backlog.md`](../product-backlog.md) #16 · [`../adr/ADR-012`](../adr/ADR-012-portal-launch-mechanism-no-docker-socket.md) | Sprint 5 `#4` | [`web-design.md`](./web-design.md) §3 / §8 T1 | TC-P-L1-08 · TC-P-L1-13 |
+| <a id="s14"></a>S14 | 门户 UI 设计系统与版式一致性 | 运维 | AC14.1–AC14.12 | [`product-backlog.md`](../product-backlog.md) #7 | Sprint 6 `#6` | [`web-design.md`](./web-design.md) §13 / §14 | TC-P-L0-10 · TC-P-L0-11 · TC-P-L2-06 · TC-P-L2-08 · TC-P-L2-09 · TC-P-L2-10 · TC-P-L2-12 · TC-P-L2-13 |
 
 ---
 
@@ -891,7 +891,7 @@ Scenario: logo 尺寸按位置分档
 | 4 | ~~门户技术栈~~ **已定（2026-09-22）** | **Node.js 22 LTS + TypeScript；Fastify + Nunjucks 服务端模板 + 原生 CSS；MCP 桥用官方 `@modelcontextprotocol/sdk` 双 transport；门户库 SQLite** —— 选型理由与被拒备选见 [`web-design.md`](./web-design.md) §12.0，决议登记 §0 **D9** |
 | 5 | 反向代理选型 | 未定（NPM / Caddy / 其它）—— [`web-design.md`](./web-design.md) §10 #3 |
 | 6 | MCP 传输实现 | 本项目唯一非平凡工程量；优先复用官方 SDK 的 server transport + stdio client transport，不自行实现协议 —— [`web-design.md`](./web-design.md) §10 #4 |
-| 7 | ~~每用户库后台维护的执行方~~ **已定档（Sprint 3 #5）** | **主机 cron** 逐库调度，唯一入口 `scripts/maintain-user-dbs.sh`；命令口径、覆盖面实测与失败语义见 [`../mcp/mcp-design.md`](../mcp/mcp-design.md) §5.3，故事 [`../mcp/mcp-stories.md`](../mcp/mcp-stories.md) `MS8`。生产定时器与告警留 Sprint 6 |
+| 7 | ~~每用户库后台维护的执行方~~ **已定档（Sprint 3 #5）** | **主机 cron** 逐库调度，唯一入口 `scripts/maintain-user-dbs.sh`；命令口径、覆盖面实测与失败语义见 [`../mcp/mcp-design.md`](../mcp/mcp-design.md) §5.3，故事 [`../mcp/mcp-stories.md`](../mcp/mcp-stories.md) `MS8`。生产定时器与告警留 Sprint 5 |
 | 8 | 是否启用静态加密（`AI_MEMORY_ENCRYPT_AT_REST`） | 未定；注意它只防「快照离开主机后被读」，不防门户被攻破 —— [`web-design.md`](./web-design.md) §10 #6 / §8 T10 |
 | 9 | 门户镜像重建是否自动化 | 建议纳入版本锁变更触发的流水线 —— [`web-design.md`](./web-design.md) §10 #7 |
 | 10 | 管理面**没有密码重设**入口（`D11` 撤销） | 已知限制，本轮接受：身份由 Cloudflare Access 认定，登录走 Google（主）与邮箱一次性验证码（兜底），故**没有密码可重设**；失效链为「改策略 → Cloudflare 账号 → 服务器 SSH」，根凭证（Cloudflare 账号第二因素恢复码）**须离线保存**（`AC10.8`）。撤销理由见 [`web-design.md`](./web-design.md) §0 **D11** 与 §6.1 |

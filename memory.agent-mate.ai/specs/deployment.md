@@ -191,7 +191,7 @@ bash memory.agent-mate.ai/scripts/maintain-user-dbs.sh --dry-run   # 先核对�
 make maintain-user-dbs                                             # 逐库 gc + curator --once
 ```
 
-调度定档为**宿主机 cron**（生产定时器安装 / 日志采集 / 告警留 Sprint 6）。脚本两条硬约束：每条调用**显式 `--db <绝对路径>`**（漏传会静默回落相对路径库；容器内 `AI_MEMORY_DB` 指向主库 ⇒ 有误操作主库的风险）、每条调用显式 `AI_MEMORY_REQUIRE_AGENT_ATTESTATION=0`（v0.11 起上游缺省翻转为全 surface required）。单库失败**不中断**、最终非零退出供 cron 告警。
+调度定档为**宿主机 cron**（生产定时器安装 / 日志采集 / 告警留 Sprint 5）。脚本两条硬约束：每条调用**显式 `--db <绝对路径>`**（漏传会静默回落相对路径库；容器内 `AI_MEMORY_DB` 指向主库 ⇒ 有误操作主库的风险）、每条调用显式 `AI_MEMORY_REQUIRE_AGENT_ATTESTATION=0`（v0.11 起上游缺省翻转为全 surface required）。单库失败**不中断**、最终非零退出供 cron 告警。
 
 退出码契约：`0` 全部成功 · `1` 至少一个库失败 · `2` 参数错误 · `3` 环境不可用（容器未运行）—— 环境不可用时**不得静默成功**，否则 cron 会长期漏维护而不报警。
 
@@ -285,7 +285,7 @@ make curl-probe                # 参考用：直连容器 HTTP API 探针（生�
 6. curator 日志显示 `tagged` 数增长（非 0）
 7. `ai-memory doctor` 双通道 200 + `1024-dim` + `tier: smart`
 
-> 端到端验收脚本由 Sprint 6 编写；MCP 协议层用例见 [`mcp/mcp-test.md`](./mcp/mcp-test.md)。
+> 端到端验收脚本由 Sprint 5 编写；MCP 协议层用例见 [`mcp/mcp-test.md`](./mcp/mcp-test.md)。
 
 ---
 
@@ -294,7 +294,7 @@ make curl-probe                # 参考用：直连容器 HTTP API 探针（生�
 | 项 | 方案 |
 |---|---|
 | 备份对象 | 容器内 `/data`（SQLite + config + keys + cache） |
-| 目录 | `/data/backups`（备份脚本 Sprint 6 落地到 `memory.agent-mate.ai/backup/`） |
+| 目录 | `/data/backups`（备份脚本 Sprint 5 落地到 `memory.agent-mate.ai/backup/`） |
 | 本地快照 | `sqlite3 /data/ai-memory.db ".backup '/data/backups/ai-memory-<ts>.db'"`（**在线备份首选**，非 `cp` 裸文件） |
 | 频率 | **每日 1 次**（对齐 RPO ≤ 24h）；留存 ≥ 30 份，带时间戳 |
 | 外迁 | **每日**同步到 OSS 兼容对象存储 `<OSS_BUCKET>`；同步后**校验 `sha256sum` 一致** |
@@ -410,7 +410,7 @@ bash scripts/pin-update.sh <ref> [--force]          # 更新锁文件（--force 
 
 > 模板原文含真实端点与凭据，**永不入仓**；本节只保留可公开的运维事实。真实值见 gitignored `secrets.local*.md`。
 
-### 12.2 门户接入部署（本地开发 Sprint 4 起；生产接入在 Sprint 6）
+### 12.2 门户接入部署（本地开发 Sprint 4 起；生产接入在 Sprint 5）
 
 - 门户**不依赖**既有容器运行（共享数据卷是唯一耦合点：`/data/users/<handle>/ai-memory.db` 需同时被两边读写）；**不挂 docker socket**（D1 = β′，[`architecture.md`](./architecture.md) §2.1 #8）。
 - 部署动作：新建 `/opt/ai-memory/` 下门户 compose；**两个 stack 独立**，可单独重启。

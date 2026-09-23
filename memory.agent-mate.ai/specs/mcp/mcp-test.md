@@ -32,7 +32,7 @@
 | L1.7 | 配额探针 | [`../../scripts/limits-probe.sh`](../../scripts/limits-probe.sh)（一次性库 `/data/users/limits-probe/` + 每轮全新身份 + **仅 env 注入**小阈值；退出码 0/10/20/30/40/50/60/70，`--self-test` 负向自测） | 上游 `[limits]` **改配置不等于行为生效**：配额逐 `(agent_id, namespace)` 盖章、且 **CLI 一次性写入不计费**，用错验证方式会得出「配额失效」的假结论（用例见 §4-D TC-LIMIT） |
 | L1.8 | 每库维护探针 | [`../../scripts/gc-probe.sh`](../../scripts/gc-probe.sh)（独立一次性库 + 静态审计维护脚本 + `--self-test`；退出码 0/10/20/30/40/50/60/70） | 上游维护覆盖面判错：**TTL 驱逐不只由 `gc` 触发**（`store`/`list`/`recall`/`import` 都会惰性清扫）⇒ 误把 `gc` 计数当「过期总量」；漏传 `--db` ⇒ 静默新建相对路径库或误操作主库；v0.11 attestation 缺省翻转后维护任务升级即失效（用例见 §4-C TC-GC） |
 | L2 | 客户端接入 | Cursor 加载（§3 配置），人肉核对工具清单与一次问答 | 真实客户端环境差异（env / 传输 / 重连） |
-| L3 | 生产通道 | 同 L1 模式，传输换成 `ssh ai-memory`（Sprint 6） | SSH forced command / `no-pty` / 密钥边界 |
+| L3 | 生产通道 | 同 L1 模式，传输换成 `ssh ai-memory`（Sprint 5） | SSH forced command / `no-pty` / 密钥边界 |
 
 原则（承自项目探针惯例）：
 
@@ -55,13 +55,13 @@
 | Sprint 2 #5 | L1.5 隔离探针：本地预实证 A/B/C 三组全绿（P1a 静默证据 → D1/D2 的存在理由） | 已完成 2026-09-20 |
 | Sprint 2 #8 | L1.6 多语言探针：三语言 × 三通路结论矩阵（部分支持，§4-E）+ 客户端通路交叉复现一致 | 已完成 2026-09-21 |
 | 档位核对（原计划项，已提前完成） | TC-TIER：**双探针** `memory_capabilities` + `tools/list` 计数（core=8 / graph=20 / admin=22 / power=57 / full=101） | 已完成 2026-09-21（定档 + 模板四处已写 `--profile`；各档计数实测 7 档全绿，证据见 §4-C） |
-| Sprint 3 #2–#3「D2 + 隔离本地负向回归」 | TC-ISO：移除共享 DB fallback 后重跑 V1，断言 fail-loud、目标非共享主库且主库不变 | 已完成本地验收 2026-09-21（`iso-probe.sh` 退出码 0；生产复验待 Sprint 6） |
-| Sprint 3 #4「上游 `[limits]` 配置与行为验证」 | TC-LIMIT：三类配额 `QUOTA_EXCEEDED` + `quota-status` 交叉核对 + 向量触顶拒绝 + HTTP 专属项对 stdio 无副作用 | 已完成本地验收 2026-09-21（`limits-probe.sh` 退出码 0；HTTP 面超限与生产通道复验待 Sprint 6） |
-| Sprint 3 #5「每用户库维护行为定档」 | TC-GC：`gc` / TTL 驱逐（含读路径惰性清扫）/ WAL 回收 / `curator --once` 的覆盖面对账 + 维护脚本静态审计 | 已完成本地验收 2026-09-21（`gc-probe.sh` 退出码 0，7 项断言；生产定时器与告警待 Sprint 6） |
+| Sprint 3 #2–#3「D2 + 隔离本地负向回归」 | TC-ISO：移除共享 DB fallback 后重跑 V1，断言 fail-loud、目标非共享主库且主库不变 | 已完成本地验收 2026-09-21（`iso-probe.sh` 退出码 0；生产复验待 Sprint 5） |
+| Sprint 3 #4「上游 `[limits]` 配置与行为验证」 | TC-LIMIT：三类配额 `QUOTA_EXCEEDED` + `quota-status` 交叉核对 + 向量触顶拒绝 + HTTP 专属项对 stdio 无副作用 | 已完成本地验收 2026-09-21（`limits-probe.sh` 退出码 0；HTTP 面超限与生产通道复验待 Sprint 5） |
+| Sprint 3 #5「每用户库维护行为定档」 | TC-GC：`gc` / TTL 驱逐（含读路径惰性清扫）/ WAL 回收 / `curator --once` 的覆盖面对账 + 维护脚本静态审计 | 已完成本地验收 2026-09-21（`gc-probe.sh` 退出码 0，7 项断言；生产定时器与告警待 Sprint 5） |
 | 已取消（只影响已排除方案②） | TC-LEAK：去重/合成是否回显他人私有内容 | 已取消 2026-09-21 |
 | Sprint 4 | 门户 / 公网入口若引入：先回到 §0 #5 增补远程接入用例（TC-HTTP） | 待做 |
-| Sprint 4 #1「MCP 侧接入面契约与故事落盘」 | TC-M：门户接入面契约用例登记（端点与令牌门禁 · 会话桥与子进程 · 启动模板与身份注入 · 制品契约 · 档位与工具可达性 · 配额生效 · 每库维护） | 用例已登记（§4-F）；实测随 PSP-W2 / PSP-W3 与 Sprint 5 PSP-M3 执行 |
-| Sprint 6 | 服务器冒烟 L3（ssh 通道跑同构 jsonl）+ 生产 doctor 三静默失败点；备份（TC-BAK）/ 恢复（TC-REV）/ 吊销（TC-SSH-03） | 待做 |
+| Sprint 4 #1「MCP 侧接入面契约与故事落盘」 | TC-M：门户接入面契约用例登记（端点与令牌门禁 · 会话桥与子进程 · 启动模板与身份注入 · 制品契约 · 档位与工具可达性 · 配额生效 · 每库维护） | 用例已登记（§4-F）；实测随 Sprint 4 `3.x` / Sprint 5 与 Sprint 6 `#11` 执行 |
+| Sprint 5 | 服务器冒烟 L3（ssh 通道跑同构 jsonl）+ 生产 doctor 三静默失败点；备份（TC-BAK）/ 恢复（TC-REV）/ 吊销（TC-SSH-03） | 待做 |
 | 回归触发 | 每次改动 config（含 `[limits]`）/ 镜像 tag / 档位 / forced command、**任一 attestation 模板**、**启动模板**或**每库维护脚本**后重跑 L0 + L1 + L1.5（含 TC-ATT-01）+ L1.7（TC-LIMIT）+ L1.8（TC-GC）+ §4-F（TC-M），并跑静态 `make attestation-paths`（TC-ATT-02；其断言 C 的核对目标 2026-09-22 已随文档边界修正改指 `mcp-design.md` §5.6.4） | 持续 |
 
 ---
@@ -88,7 +88,7 @@
 - 生效核对：Settings → MCP 出现 `ai-memory-local` 且可见 8 个 `memory_*` 工具。
 - **改档位**：在 `args` 里加 `--profile <family>`（如 `--profile core,graph`）；改完**必须重启该 MCP 条目 / reconnect**（harness 不支持延迟注册）。
 
-### 生产（Sprint 6 上线后，与本地条目并存）
+### 生产（Sprint 5 上线后，与本地条目并存）
 
 ```json
 "ai-memory": { "command": "ssh", "args": ["ai-memory"] }
@@ -154,19 +154,19 @@
 
 > 现役探针：[`../../scripts/iso-probe.sh`](../../scripts/iso-probe.sh)（退出码 0 全通过 / 10 前置 / 20 解析链 / 30 隔离 / 40 维护 / 50 方案②会话），组 A=P1a/P1b/P4，组 B=P2/P3/P5，组 C=P6。可重复性已验证：第二次起必然命中 near-duplicate 去重，探针**分会话**处理（写入会话先取「生效标记」再另开会话检索），故重复运行稳定。
 
-### D. 生产通道与运维（Sprint 4 / 6 占位）
+### D. 生产通道与运维（Sprint 5 占位）
 
 | ID | 用例 | 断言 | 阶段 |
 |---|---|---|---|
-| TC-SSH-01 | `ssh ai-memory` 跑 §4-A 同构 jsonl 会话 | 与 L1 结果一致（握手 + 8 工具 + 写入 + 跨进程召回） | Sprint 6 |
-| TC-SSH-02 | `no-pty` / 误加 `-t` 负例 | 加 `-t` 时 stdio 帧损坏 → 客户端报错（证明 `no-pty` 必要） | Sprint 6 |
-| TC-SSH-03 | 吊销：删除该用户 `authorized_keys` 行 | 该密钥 SSH **立即失败** | Sprint 6 #7 |
-| TC-BAK-01 | 备份脚本遍历全部库产出快照 + manifest | `sha256sum` 与 manifest 一致；外迁后回读比对通过 | Sprint 6 #5 / #9 |
-| TC-REV-01 | 恢复演练（在**临时库**上） | 恢复后原库被 rename 为 `pre-restore-*`（in-place 行为，契约面 I5） | Sprint 6 |
-| TC-LIMIT-01 | **`[limits]` 三类配额行为**（本地基线，Sprint 3 #4） | 探针 [`../../scripts/limits-probe.sh`](../../scripts/limits-probe.sh) 在**独立一次性库 + 每轮全新身份**上只经 env 注入小阈值（模板零污染）：① `AI_MEMORY_MAX_MEMORIES_PER_DAY=1` → 第 2 次 `memory_store` 返回 `QUOTA_EXCEEDED`；② `AI_MEMORY_MAX_STORAGE_BYTES=1` → 首次写入即 `QUOTA_EXCEEDED`；③ `AI_MEMORY_MAX_LINKS_PER_DAY=1`（会话内 `--profile graph`）→ 第 1 条 `memory_link` 成功、第 2 条被拒；④ 三类均以 `ai-memory quota-status --namespace global --json`（**刻意去掉注入 env**，namespace 与 `memory_store` 默认值一致）交叉核对配额行**仍等于注入值** —— 证明配额行在首次写入时已被盖章，而非重读 env；若查错 namespace，会读到现场新建行的默认值而误报「注入没生效」 | **已完成本地验收 2026-09-21**（退出码 0；`--self-test` 负向自测通过）。生产 SSH 通道复核留 Sprint 6 |
-| TC-LIMIT-02 | **向量索引容量 + HTTP 专属项对 stdio 的非生效对照** | ① `AI_MEMORY_VECTOR_INDEX_CAPACITY=1` + `AI_MEMORY_VECTOR_INDEX_HARD_FAIL=true`：跨进程预热 ≥1 条后，插入被上游拒绝（stderr 出现 `hnsw.eviction` 的 `vector index at capacity: rejecting insert (hard-fail-at-cap mode)` ERROR），且记忆行仍落库（上游 `insert` 返回 `void`，不回滚写入）。**注意**：该 target 不在默认 `ai_memory=info` 过滤器内，探针须显式放宽 `RUST_LOG` 才能观测，且须先断言阻塞预热已落地；② `AI_MEMORY_MAX_PAGE_SIZE=1` / `AI_MEMORY_MAX_INFLIGHT_REQUESTS=1` 下 stdio 会话的 `memory_store` 与 `memory_list` **均正常** | **已完成本地验收 2026-09-21**；HTTP 面超限行为本地**无法触发**（容器不发布端口、镜像无 curl/wget）→ 留 Sprint 6 |
+| TC-SSH-01 | `ssh ai-memory` 跑 §4-A 同构 jsonl 会话 | 与 L1 结果一致（握手 + 8 工具 + 写入 + 跨进程召回） | Sprint 5 |
+| TC-SSH-02 | `no-pty` / 误加 `-t` 负例 | 加 `-t` 时 stdio 帧损坏 → 客户端报错（证明 `no-pty` 必要） | Sprint 5 |
+| TC-SSH-03 | 吊销：删除该用户 `authorized_keys` 行 | 该密钥 SSH **立即失败** | Sprint 5 #12 |
+| TC-BAK-01 | 备份脚本遍历全部库产出快照 + manifest | `sha256sum` 与 manifest 一致；外迁后回读比对通过 | Sprint 5 #15 / #16 |
+| TC-REV-01 | 恢复演练（在**临时库**上） | 恢复后原库被 rename 为 `pre-restore-*`（in-place 行为，契约面 I5） | Sprint 5 |
+| TC-LIMIT-01 | **`[limits]` 三类配额行为**（本地基线，Sprint 3 #4） | 探针 [`../../scripts/limits-probe.sh`](../../scripts/limits-probe.sh) 在**独立一次性库 + 每轮全新身份**上只经 env 注入小阈值（模板零污染）：① `AI_MEMORY_MAX_MEMORIES_PER_DAY=1` → 第 2 次 `memory_store` 返回 `QUOTA_EXCEEDED`；② `AI_MEMORY_MAX_STORAGE_BYTES=1` → 首次写入即 `QUOTA_EXCEEDED`；③ `AI_MEMORY_MAX_LINKS_PER_DAY=1`（会话内 `--profile graph`）→ 第 1 条 `memory_link` 成功、第 2 条被拒；④ 三类均以 `ai-memory quota-status --namespace global --json`（**刻意去掉注入 env**，namespace 与 `memory_store` 默认值一致）交叉核对配额行**仍等于注入值** —— 证明配额行在首次写入时已被盖章，而非重读 env；若查错 namespace，会读到现场新建行的默认值而误报「注入没生效」 | **已完成本地验收 2026-09-21**（退出码 0；`--self-test` 负向自测通过）。生产 SSH 通道复核留 Sprint 5 |
+| TC-LIMIT-02 | **向量索引容量 + HTTP 专属项对 stdio 的非生效对照** | ① `AI_MEMORY_VECTOR_INDEX_CAPACITY=1` + `AI_MEMORY_VECTOR_INDEX_HARD_FAIL=true`：跨进程预热 ≥1 条后，插入被上游拒绝（stderr 出现 `hnsw.eviction` 的 `vector index at capacity: rejecting insert (hard-fail-at-cap mode)` ERROR），且记忆行仍落库（上游 `insert` 返回 `void`，不回滚写入）。**注意**：该 target 不在默认 `ai_memory=info` 过滤器内，探针须显式放宽 `RUST_LOG` 才能观测，且须先断言阻塞预热已落地；② `AI_MEMORY_MAX_PAGE_SIZE=1` / `AI_MEMORY_MAX_INFLIGHT_REQUESTS=1` 下 stdio 会话的 `memory_store` 与 `memory_list` **均正常** | **已完成本地验收 2026-09-21**；HTTP 面超限行为本地**无法触发**（容器不发布端口、镜像无 curl/wget）→ 留 Sprint 5 |
 | TC-I18N-01 | 多语言检索（占位 → 已由 §4-E 六用例扩展替代） | 见 §4-E（TC-I18N-01..06，2026-09-21 全通过） | 已完成 2026-09-21 |
-| TC-ATT-01 | `AI_MEMORY_REQUIRE_AGENT_ATTESTATION` 开关生效（**正负对照**，不断言字段） | `=0`：`memory_store` 成功（无 `isError`，行落库）；`=1`：同一写入被拒（`isError=true` + `agent attestation failed: … this write is unsigned`）。**`attest_level=claimed` 不可直接断言**：v0.10.0 的 MCP 响应 / `memory_get` / `export` / `memories` 表都不暴露该值 —— 它是上游**文档与启动告警的措辞**（仅在 daemon 绑非回环且宽松时打印） | **已完成 2026-09-21**（本地基线，探针 [`../../scripts/mcp-smoke.sh`](../../scripts/mcp-smoke.sh) 会话 C；生产 SSH 通道复核留 Sprint 6） |
+| TC-ATT-01 | `AI_MEMORY_REQUIRE_AGENT_ATTESTATION` 开关生效（**正负对照**，不断言字段） | `=0`：`memory_store` 成功（无 `isError`，行落库）；`=1`：同一写入被拒（`isError=true` + `agent attestation failed: … this write is unsigned`）。**`attest_level=claimed` 不可直接断言**：v0.10.0 的 MCP 响应 / `memory_get` / `export` / `memories` 表都不暴露该值 —— 它是上游**文档与启动告警的措辞**（仅在 daemon 绑非回环且宽松时打印） | **已完成 2026-09-21**（本地基线，探针 [`../../scripts/mcp-smoke.sh`](../../scripts/mcp-smoke.sh) 会话 C；生产 SSH 通道复核留 Sprint 5） |
 | TC-ATT-02 | **attestation 四路径口径静态一致**（无 Docker、无网络） | compose `ai-memory` / `curator` 各一处 `"0"`（恰好 2）；`deployment.md` 用户行与 `mcp-design.md` §5.2 模板的 `-e` 子句**逐字一致**且含该 env；门户 launch 模板含该 env（**真源 2026-09-22 由 `web-design.md` §3.3 迁至 [`./mcp-design.md`](./mcp-design.md) §5.6.4**，脚本断言 C 的核对目标随之改指）；现行文档无已证伪口径回流 —— **禁用字面模式清单见脚本内 `STALE_PATTERNS`**，本表不复述，以免扫描器扫中自身 | **已完成 2026-09-21**；2026-09-22 迁目标后复跑通过（探针 [`../../scripts/attestation-paths-check.sh`](../../scripts/attestation-paths-check.sh)，`make attestation-paths`；退出码 0/10/20，五类负向注入自测通过） |
 | TC-HTTP-01 | （仅当开放 HTTP 入口）url + api_key 接入；未带 key → 401；`X-API-Key` 头生效 | §0 #5 前置配置已落地 | Sprint 4 或 §0 #5 落地时 |
 
@@ -190,29 +190,29 @@
 
 > **来源**：本层由 [`../web-portal/web-stories.md`](../web-portal/web-stories.md) 原 `S3` / `S4` 中属**跨进程 / 上游契约**的验收条件迁入（逐条映射见 [`./mcp-stories.md`](./mcp-stories.md)「迁入映射」），并为 MCP 侧新增功能补足用例。
 > **AC 真源**：[`./mcp-stories.md`](./mcp-stories.md)（`MS1`–`MS8`）。**本层用例编号 `TC-M-L{层}-{nn}` 只追加、不重排。**
-> **状态**：用例**已登记**；实测随 `Sprint 4 PSP-W2「端到端接入」` / `PSP-W3「可运维、可发布」` 与 Sprint 5 `PSP-M3` 执行（`MS5` / `MS8` 的生产项留 Sprint 6）。
+> **状态**：用例**已登记**；实测随 `Sprint 4「接入链路与端到端取证」` / `Sprint 5「生产上线闭环」` 与 Sprint 6「门户运营闭环」 执行（`MS5` / `MS8` 的生产项留 Sprint 5）。
 
 | ID | 用例 | 期望 | 覆盖 AC | 阶段 |
 |---|---|---|---|---|
-| TC-M-L1-01 | 持有效令牌经 `{MCP_HOST}/mcp` 完成一次 `memory_store` | 握手 + 工具调用成功，记忆落在该用户库 | `MS1 AC-M1.1` | Sprint 4 PSP-W2 |
-| TC-M-L1-02 | 无令牌 / 已吊销令牌连接 | 会话建立**被拒**，且不降级为匿名访问 | `MS1 AC-M1.2` | Sprint 4 PSP-W2 |
-| TC-M-L2-01 | 令牌解析出的库路径与会话实际使用的库一致 | 写入只落在 `/data/users/<handle>/ai-memory.db`，主库计数不变 | `MS1 AC-M1.3` · `AC-M1.4` | Sprint 4 PSP-W2 |
-| TC-M-L1-03 | 跨用户检索互不可见（双向） | 两个方向都未命中；各自能检索到自己的记忆 | `MS2 AC-M2.1` · `AC-M2.3` | Sprint 4 PSP-W2 |
-| TC-M-L1-04 | 按 id 直取他人记忆 | 返回「记忆不存在」，不返回任何内容 | `MS2 AC-M2.2` | Sprint 4 PSP-W2 |
-| TC-M-L3-01 | **负向**：单库形态下的写路径伪造 | 会话内以他人身份标记写入**不进入**他人库；他库无该内容 | `MS2 AC-M2.4` | Sprint 4 PSP-W2（对应 V1） |
-| TC-M-L1-05 | 一会话一子进程 | 每个会话对应恰好一个上游子进程，且以该用户库路径与身份启动 | `MS3 AC-M3.1` | Sprint 4 PSP-W2 |
-| TC-M-L1-06 | 会话结束回收 + 不复用 + 无跨会话响应残留 | 子进程退出无残留；两会话两进程；新会话响应不含上一会话片段 | `MS3 AC-M3.2`–`AC-M3.4` | Sprint 4 PSP-W2 |
-| TC-M-L0-01 | 模板逐键核对（argv 与 env 只含真源登记的键） | 与 [`./mcp-design.md`](./mcp-design.md) §5.6.4 逐字一致；多键或改键即失败 | `MS4 AC-M4.1` | Sprint 4 PSP-W2 |
-| TC-M-L1-07 | **负向**：身份经 `--agent-id` 参数注入 | 校验失败，报错指出须用 `AI_MEMORY_AGENT_ID` 环境变量 | `MS4 AC-M4.2` | Sprint 4 PSP-W2 |
-| TC-M-L3-02 | **负向门禁**：`AI_MEMORY_DB` 置空 / 指向他用户有效库 | spawn **前**拒绝并告警；不出现静默落主库的会话；会话未写入数据 | `MS4 AC-M4.3` · `AC-M4.4` | Sprint 4 PSP-W2（对应 V1 / D1） |
-| TC-M-L1-08 | 候选镜像三项制品契约核对 | 二进制路径 · bookworm 系底座含 `ca-certificates` · `aimem` 存在 | `MS5 AC-M5.1` | Sprint 4 PSP-W3 |
-| TC-M-L1-09 | 门户与上游镜像的 `aimem` UID/GID 对齐；契约缺项阻断升级 | 两者一致；缺项或改名时预检**失败并阻断** | `MS5 AC-M5.2`–`AC-M5.4` | Sprint 4 PSP-W3 · Sprint 7 |
-| TC-M-L1-10 | 对外 8 项 / 管理员 22 项的档位核对 | `initialize` 回包注册数与定档一致 | `MS6 AC-M6.1` | 文档级已完成（TC-TIER-03）；实跑随 Sprint 5 PSP-M3 |
-| TC-M-L1-11 | 非英文输入的写入 + 召回命中；关键词边界被登记 | 中文写入与语义召回可用；子串关键词按 `J4` 边界未命中且有探针证据 | `MS6 AC-M6.2` · `AC-M6.3` | Sprint 5 PSP-M3（底稿见 §4-E） |
-| TC-M-L1-12 | 超每用户配额被拒 + 按用户独立 + CLI 不计费的负向对照 | `QUOTA_EXCEEDED`；B 不受 A 影响；CLI 写入成功**不被**采信为「配额失效」 | `MS7 AC-M7.1`–`AC-M7.3` | 本地部分已验（TC-LIMIT-01）；生产复核留 Sprint 6 |
+| TC-M-L1-01 | 持有效令牌经 `{MCP_HOST}/mcp` 完成一次 `memory_store` | 握手 + 工具调用成功，记忆落在该用户库 | `MS1 AC-M1.1` | Sprint 4 |
+| TC-M-L1-02 | 无令牌 / 已吊销令牌连接 | 会话建立**被拒**，且不降级为匿名访问 | `MS1 AC-M1.2` | Sprint 4 |
+| TC-M-L2-01 | 令牌解析出的库路径与会话实际使用的库一致 | 写入只落在 `/data/users/<handle>/ai-memory.db`，主库计数不变 | `MS1 AC-M1.3` · `AC-M1.4` | Sprint 4 |
+| TC-M-L1-03 | 跨用户检索互不可见（双向） | 两个方向都未命中；各自能检索到自己的记忆 | `MS2 AC-M2.1` · `AC-M2.3` | Sprint 4 |
+| TC-M-L1-04 | 按 id 直取他人记忆 | 返回「记忆不存在」，不返回任何内容 | `MS2 AC-M2.2` | Sprint 4 |
+| TC-M-L3-01 | **负向**：单库形态下的写路径伪造 | 会话内以他人身份标记写入**不进入**他人库；他库无该内容 | `MS2 AC-M2.4` | Sprint 4（对应 V1） |
+| TC-M-L1-05 | 一会话一子进程 | 每个会话对应恰好一个上游子进程，且以该用户库路径与身份启动 | `MS3 AC-M3.1` | Sprint 4 |
+| TC-M-L1-06 | 会话结束回收 + 不复用 + 无跨会话响应残留 | 子进程退出无残留；两会话两进程；新会话响应不含上一会话片段 | `MS3 AC-M3.2`–`AC-M3.4` | Sprint 4 |
+| TC-M-L0-01 | 模板逐键核对（argv 与 env 只含真源登记的键） | 与 [`./mcp-design.md`](./mcp-design.md) §5.6.4 逐字一致；多键或改键即失败 | `MS4 AC-M4.1` | Sprint 4 |
+| TC-M-L1-07 | **负向**：身份经 `--agent-id` 参数注入 | 校验失败，报错指出须用 `AI_MEMORY_AGENT_ID` 环境变量 | `MS4 AC-M4.2` | Sprint 4 |
+| TC-M-L3-02 | **负向门禁**：`AI_MEMORY_DB` 置空 / 指向他用户有效库 | spawn **前**拒绝并告警；不出现静默落主库的会话；会话未写入数据 | `MS4 AC-M4.3` · `AC-M4.4` | Sprint 4（对应 V1 / D1） |
+| TC-M-L1-08 | 候选镜像三项制品契约核对 | 二进制路径 · bookworm 系底座含 `ca-certificates` · `aimem` 存在 | `MS5 AC-M5.1` | Sprint 5 |
+| TC-M-L1-09 | 门户与上游镜像的 `aimem` UID/GID 对齐；契约缺项阻断升级 | 两者一致；缺项或改名时预检**失败并阻断** | `MS5 AC-M5.2`–`AC-M5.4` | Sprint 5 · Sprint 7 |
+| TC-M-L1-10 | 对外 8 项 / 管理员 22 项的档位核对 | `initialize` 回包注册数与定档一致 | `MS6 AC-M6.1` | 文档级已完成（TC-TIER-03）；实跑随 Sprint 5 `#11` |
+| TC-M-L1-11 | 非英文输入的写入 + 召回命中；关键词边界被登记 | 中文写入与语义召回可用；子串关键词按 `J4` 边界未命中且有探针证据 | `MS6 AC-M6.2` · `AC-M6.3` | Sprint 5 `#11`（底稿见 §4-E） |
+| TC-M-L1-12 | 超每用户配额被拒 + 按用户独立 + CLI 不计费的负向对照 | `QUOTA_EXCEEDED`；B 不受 A 影响；CLI 写入成功**不被**采信为「配额失效」 | `MS7 AC-M7.1`–`AC-M7.3` | 本地部分已验（TC-LIMIT-01）；生产复核留 Sprint 5 |
 | TC-M-L3-03 | stdio 下 HTTP 专属上限不生效且结论已登记 | 该准入层不触发，结论有探针证据 | `MS7 AC-M7.4` | 本地已验（TC-LIMIT-02） |
 | TC-M-L1-13 | 逐库维护覆盖 TTL 驱逐与 WAL 回收 | `gc` 驱逐过期行并截断 `-wal`；`curator --once` 报告可解析 | `MS8 AC-M8.1` | 已完成本地验收（TC-GC / `gc-probe.sh`） |
-| TC-M-L3-04 | **负向**：漏传 `--db` · 单库失败不中断 · 环境不可用须响亮失败 | 脚本拒绝执行并退出非零；其余库继续处理；退出码符合契约 `0/1/2/3` | `MS8 AC-M8.2`–`AC-M8.4` | 静态审计已过（`make attestation-paths` 断言 E）；生产 cron 留 Sprint 6 |
+| TC-M-L3-04 | **负向**：漏传 `--db` · 单库失败不中断 · 环境不可用须响亮失败 | 脚本拒绝执行并退出非零；其余库继续处理；退出码符合契约 `0/1/2/3` | `MS8 AC-M8.2`–`AC-M8.4` | 静态审计已过（`make attestation-paths` 断言 E）；生产 cron 留 Sprint 5 |
 
 > **与 `web-test.md` 的分工**：`TC-P-*` 是**门户侧**用例（页面 / 账号 / 令牌 / 审计 / 启动自检 / 容器加固），`TC-M-*` 是**跨进程与上游契约**用例。`TC-M-L1-03` / `TC-M-L1-04` 与门户侧 `TC-P-L1-07` / `TC-P-L3-05` 断言**同一隔离行为但视角不同**（前者断言契约判据，后者断言门户集成路径），**不视为重复**。
 

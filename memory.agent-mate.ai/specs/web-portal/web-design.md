@@ -274,7 +274,7 @@ COPY --from=ghcr.io/alphaonedev/ai-memory:<tag> \
 | 2 | ~~门户技术栈~~ **已定（2026-09-22）** | **Node.js 22 LTS + TypeScript；Fastify + Nunjucks 服务端模板 + 原生 CSS（`:root` 令牌）；MCP 桥用官方 `@modelcontextprotocol/sdk`（Streamable HTTP server transport + stdio client transport）；门户库 SQLite**。选型理由、被拒备选与落地形态见 **§12** |
 | 3 | 反向代理选型 | 未定（NPM / Caddy / 其它） |
 | 4 | MCP 传输实现 | **已定（落点已迁 MCP 侧）**：**本项目唯一非平凡工程量**；优先复用官方 MCP SDK 的「server transport + stdio client transport」组合，**不自行实现协议**。设计真源 [`../mcp/mcp-design.md`](../mcp/mcp-design.md) §5.6.2；契约与故事 [`../mcp/mcp-stories.md`](../mcp/mcp-stories.md) `MS3` |
-| 5 | 每用户库后台维护（GC / curator / TTL）由谁执行 | **已定（Sprint 3 #5）：主机 cron** 逐库调度，唯一入口 `scripts/maintain-user-dbs.sh`。真源 [`../mcp/mcp-design.md`](../mcp/mcp-design.md) §5.3；故事 [`../mcp/mcp-stories.md`](../mcp/mcp-stories.md) `MS8`。生产定时器与告警留 Sprint 6 |
+| 5 | 每用户库后台维护（GC / curator / TTL）由谁执行 | **已定（Sprint 3 #5）：主机 cron** 逐库调度，唯一入口 `scripts/maintain-user-dbs.sh`。真源 [`../mcp/mcp-design.md`](../mcp/mcp-design.md) §5.3；故事 [`../mcp/mcp-stories.md`](../mcp/mcp-stories.md) `MS8`。生产定时器与告警留 Sprint 5 |
 | 6 | 是否启用 `AI_MEMORY_ENCRYPT_AT_REST` | 见 T10；需评估密钥托管与恢复路径 |
 | 7 | 门户镜像重建是否自动化 | 建议纳入 `upstream.lock` 变更触发的流水线 |
 | 8 | 写路径泄露探针（[`../mcp/mcp-design.md`](../mcp/mcp-design.md) §6.4 #1） | 物理隔离下不构成跨用户泄露 ⇒ 对门户**不是阻断项** |
@@ -476,7 +476,7 @@ admin_portal/
 | 5 | 共享卷 `ai_memory_data` 以 `external` 引用 | 门户 → 上游 stack | §11 步骤 4/6 | 待生产执行 |
 | 6 | 静态护栏 `make attestation-paths`（模板真源已迁 MCP 侧） | CI → 文档 | [`../mcp/mcp-test.md`](../mcp/mcp-test.md) §4-D TC-ATT-02 | **已迁移并复跑通过** |
 | 7 | 反向代理与 CF Access 面配置 | 运维 → 门户 | §6 · §11 步骤 2/3 | 选型未定（§10 #3） |
-| 8 | 门户库备份纳入备份脚本 | 运维 → 门户 | [`../product-backlog.md`](../product-backlog.md) #9 · TC-P-L3-08 | 待 Sprint 6 |
+| 8 | 门户库备份纳入备份脚本 | 运维 → 门户 | [`../product-backlog.md`](../product-backlog.md) #9 · TC-P-L3-08 | 待 Sprint 5 |
 
 ## 13. UI 设计系统（geeky + neat 的性冷淡风 · 纯单色）
 
