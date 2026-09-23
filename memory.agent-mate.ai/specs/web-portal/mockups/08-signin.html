@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<!-- 08 · 需要身份（未认证态）—— 与实现 admin_portal/src/web/views/unauthorized.njk 对应。
+     为什么单独一页而不是塞进某个管理页：这一页**不复用管理面外壳**（没有顶栏/侧栏），
+     因为「没有身份」时外壳需要的那套上下文根本不存在。
+     两条通道两种首屏动作：
+       - 生产：主按钮「登录」→ 真实目标是 /admin/users（Cloudflare Access 会接管并弹出登录窗口）；
+               原型里静态站没有该路径，故指向 02-users.html 表示「登录后落到用户页」。
+       - 开发（?mode=dev）：主按钮变「以测试管理员身份登录」→ 09-dev-login.html，并显示自诊断块。
+     eyebrow 用 unauth.eyebrow（Issue 9：此前误用 placeholder.eyebrow，渲染成「尚未交付」）。 -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sign in required</title>
+<link rel="icon" href="assets/logo.png" type="image/png">
+<link rel="stylesheet" href="assets/portal.css">
+</head>
+<body class="app-shell" data-title-key="unauth.title">
+<a class="sr-only" href="#content" data-i18n="a11y.skip">Skip to content</a>
+
+<main id="content" class="content">
+  <section class="section">
+    <p class="eyebrow" data-i18n="unauth.eyebrow">Identity required</p>
+    <h1 data-i18n="unauth.title">Sign in required</h1>
+    <p class="lead-note" data-i18n="unauth.body">This portal has no password. Sign-in is handled by Cloudflare Access.</p>
+    <div class="btn-row">
+      <a class="btn btn-page" href="02-users.html" data-i18n="unauth.login" data-auth-prod>Sign in</a>
+      <a class="btn btn-page" href="09-dev-login.html" data-i18n="unauth.login_dev" data-auth-dev hidden>Sign in as test admin</a>
+      <a class="btn-text" href="01-instructions.html" data-i18n="nav.site">Instructions</a>
+    </div>
+
+    <section class="callout" data-dev-diagnostics hidden>
+      <p><span data-i18n="unauth.diag.host">Host you used:</span> <span class="mono">127.0.0.1:8788</span></p>
+      <p data-i18n="unauth.diag.channel_on">This instance has the self-signed test channel enabled, so you can sign in on this page.</p>
+      <p><span data-i18n="unauth.diag.token_file">Expected test token file:</span> <span class="mono">.portal-data/dev/token</span></p>
+    </section>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <p data-i18n="copyright">copyright © Ethan Huang</p>
+</footer>
+
+<script src="assets/i18n.js"></script>
+<script src="assets/mockup.js"></script>
+</body>
+</html>

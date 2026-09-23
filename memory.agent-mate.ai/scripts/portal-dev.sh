@@ -81,6 +81,21 @@ if [ -n "${missing}" ]; then
   exit 30
 fi
 
+BIND_PORT="${PORTAL_PORT:-8788}"
+
+# 端口预检：已被占用时**在启动前 fail-loud**，且放在所有副作用（生成密钥、签发令牌、
+# 跑迁移）之前。为什么需要：没有这一步时，占用冲突要等 node 起来才暴露，用户看到的
+# 是一串 Node 内部堆栈（EADDRINUSE + `进程退出码 1`），看不出真正原因 —— 而
+# 「已经开着一个实例，又敲了一次启动」恰恰是最常见的操作。与 portal-e2e.sh 的
+# 同名检查同一口径（那边是防「静默测到别人的实例」，这边是防「看不出为什么起不来」）。
+if command -v lsof >/dev/null 2>&1 && lsof -nP -iTCP:"${BIND_PORT}" -sTCP:LISTEN >/dev/null 2>&1; then
+  echo "ERROR: 端口 ${BIND_PORT} 已被占用 —— 多半是已经开着一个门户实例，无需再启一个。" >&2
+  lsof -nP -iTCP:"${BIND_PORT}" -sTCP:LISTEN 2>/dev/null | sed -n '2,4p' | sed 's/^/       占用: /' >&2
+  echo "       停止现有实例：make down（或在它所在终端按 Ctrl+C）" >&2
+  echo "       确实要并行再开一个：把环境文件里的 PORTAL_PORT 改成其它端口" >&2
+  exit 30
+fi
+
 # 回环判定：与 src/shared/host-split.ts 的 isLoopbackHost 保持同一语义
 is_loopback() {
   case "$1" in
@@ -184,7 +199,6 @@ else
   echo "[portal-dev] 提示：PORTAL_USERS_ROOT 未设置，将回落 /data/users（生产默认）"
 fi
 
-BIND_PORT="${PORTAL_PORT:-8788}"
 if [ "${DEV_LOGIN}" -eq 1 ]; then
   echo "[portal-dev] ─────────────────────────────────────────────────────────────"
   echo "[portal-dev] 快速登录已就绪（仅本机开发；Host 全为回环，生产仍禁用该通道）"

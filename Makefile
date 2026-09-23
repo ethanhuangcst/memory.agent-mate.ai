@@ -16,8 +16,10 @@ PORTAL_TEST := memory.agent-mate.ai/scripts/portal-test.sh
 PORTAL_E2E := memory.agent-mate.ai/scripts/portal-e2e.sh
 PORTAL_TUNNEL := memory.agent-mate.ai/scripts/tunnel-dev.sh
 PORTAL_COVERAGE := memory.agent-mate.ai/scripts/portal-coverage.sh
+# 本机快速路径的环境文件（回环 Host + PORTAL_TEST_JWT_EMAIL），已 gitignore。
+PORTAL_LOCAL_ENV := memory.agent-mate.ai/admin_portal/.env.local
 
-.PHONY: help upstream pin pin-update preflight preflight-test backup restore-drill secret-check doc-links attestation-paths maintain-user-dbs hooks-install portal-dev portal-test portal-e2e portal-tunnel portal-coverage
+.PHONY: help upstream pin pin-update preflight preflight-test backup restore-drill secret-check doc-links attestation-paths maintain-user-dbs hooks-install up down portal-up portal-down portal-dev portal-test portal-e2e portal-tunnel portal-coverage
 
 help:
 	@grep -E '^[a-zA-Z0-9_-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*## "} {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
@@ -59,7 +61,41 @@ hooks-install: ## 安装 pre-commit 钩子到 .git/hooks/（不改 git config）
 	install -m 0755 $(PRE_COMMIT_HOOK) .git/hooks/pre-commit
 	@echo "已安装 pre-commit 钩子（扫描暂存区公网 IP）；可用 git commit --no-verify 绕过"
 
-portal-dev: ## 本机启动门户（PSP-W1；前置检查 + 迁移 + 监听，追加 ARGS 如 ARGS=--watch）
+# 启动/停止的短别名。命名沿用既有 portal-* 家族，但日常只打 make up / make down。
+# 注意：make 会把任何非零退出码**压平为 2**，脚本自己的退出码契约（portal-dev.sh 头部：
+#   0/10/20/30）在 make 层看不到 —— 需要按码分流时直接调脚本。这一点刻意写在这里，
+#   免得有人以为「make 返回 0/2」就是脚本的契约。
+up: portal-up ## 同 portal-up（快捷键：make up）
+down: portal-down ## 同 portal-down（快捷键：make down）
+
+portal-up: ## 【日常入口】一条命令启动本机门户（.env.local + 自签登录；ARGS=--watch 自动重启）
+	@[ -f $(PORTAL_LOCAL_ENV) ] || { \
+	  echo "ERROR: 缺少 $(PORTAL_LOCAL_ENV)" >&2; \
+	  echo "       先准备本机回环配置：cp memory.agent-mate.ai/admin_portal/.env.example $(PORTAL_LOCAL_ENV)" >&2; \
+	  echo "       需要 PORTAL_ADMIN_HOST/MCP_HOST 为回环，并设置 PORTAL_TEST_JWT_EMAIL（开发登录身份）" >&2; \
+	  exit 30; }
+	@echo "  → 环境文件: $(PORTAL_LOCAL_ENV)（回环 Host，自签登录通道）"
+	@echo "  → 停止：前台 Ctrl+C；若在后台跑，用 make portal-down"
+	bash $(PORTAL_DEV) --env-file $(PORTAL_LOCAL_ENV) --dev-login $(ARGS)
+
+portal-down: ## 停止本机门户（端口默认取 .env.local 的 PORTAL_PORT；可用 PORT=8794 指定）
+	@command -v lsof >/dev/null 2>&1 || { echo "ERROR: 未找到 lsof，无法定位监听进程" >&2; exit 20; }
+	@port="$(PORT)"; \
+	if [ -z "$$port" ]; then \
+	  port=$$(sed -n 's/^PORTAL_PORT=\([0-9][0-9]*\).*/\1/p' $(PORTAL_LOCAL_ENV) 2>/dev/null | tail -1); \
+	fi; \
+	port=$${port:-8788}; \
+	pids=$$(lsof -nP -iTCP:$$port -sTCP:LISTEN -t 2>/dev/null); \
+	if [ -z "$$pids" ]; then echo "  端口 $$port 上没有监听进程（无需停止）"; exit 0; fi; \
+	echo "  端口 $$port 的监听进程："; \
+	lsof -nP -iTCP:$$port -sTCP:LISTEN 2>/dev/null | sed -n '2,6p' | sed 's/^/    /'; \
+	kill $$pids 2>/dev/null && echo "  已发送 SIGTERM：$$(echo $$pids | tr '\n' ' ')"; \
+	sleep 1; \
+	if lsof -nP -iTCP:$$port -sTCP:LISTEN -t >/dev/null 2>&1; then \
+	  echo "  仍在运行：$$(lsof -nP -iTCP:$$port -sTCP:LISTEN -t | tr '\n' ' ')（可再执行一次，或手动 kill -9）"; \
+	else echo "  已停止"; fi
+
+portal-dev: ## 门户启动的底层入口（默认加载 .env 即真实域名配置；本机日常请用 portal-up）
 	bash $(PORTAL_DEV) $(ARGS)
 
 portal-test: ## 门户离线测试（类型检查 + 单元/集成；零网络依赖）

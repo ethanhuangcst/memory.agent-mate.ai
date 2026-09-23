@@ -133,6 +133,38 @@ def _assert_all_viewports(page: Page, where: str) -> None:
         page.set_viewport_size(original)
 
 
+def assert_footer_pinned(page: Page, where: str) -> None:
+    """页脚贴底（2026-09-23 用户要求：所有页面）。
+
+    为什么要**量**而不是读 CSS：这是「内容不足一屏」才暴露的问题 ——
+    `min-height: 100vh` 加一栏 `flex: 1` 只是规则，不能证明某个页面真的贴底。
+    同 Issue 8 的教训：只有量出来的矩形作数。
+    两个条件：① 未滚动时页脚底边 = 视口底边（贴底）；② 滚到底时内容底边不越过页脚顶边（不遮挡）。
+    """
+    top = page.evaluate(
+        """() => {
+          const f = document.querySelector('.site-footer').getBoundingClientRect();
+          return { footerBottom: Math.round(f.bottom), innerH: window.innerHeight };
+        }"""
+    )
+    assert abs(top["footerBottom"] - top["innerH"]) <= 1, (
+        f"{where}：未滚动时页脚未贴底（页脚底 {top['footerBottom']}px / 视口 {top['innerH']}px）"
+    )
+    page.evaluate("window.scrollTo(0, document.documentElement.scrollHeight)")
+    page.wait_for_timeout(120)
+    bottom = page.evaluate(
+        """() => {
+          const f = document.querySelector('.site-footer').getBoundingClientRect();
+          const main = document.querySelector('main').getBoundingClientRect();
+          return { footerTop: Math.round(f.top), mainBottom: Math.round(main.bottom) };
+        }"""
+    )
+    assert bottom["mainBottom"] <= bottom["footerTop"] + 1, (
+        f"{where}：滚到底时内容被页脚遮挡（内容底 {bottom['mainBottom']}px / 页脚顶 {bottom['footerTop']}px）"
+    )
+    page.evaluate("window.scrollTo(0, 0)")
+
+
 def run_flow(page: Page, base_url: str, admin_email: str) -> dict[str, str]:
     """跑通「建用户 → 签发 → 列出 → 轮换 → 吊销 → 停用」并返回关键证据。"""
     evidence: dict[str, str] = {}
@@ -144,6 +176,7 @@ def run_flow(page: Page, base_url: str, admin_email: str) -> dict[str, str]:
     expect(page.locator(".app-header")).to_contain_text(admin_email)
     expect(page.locator("nav.nav a")).to_have_count(4)
     assert_no_overflow(page, "用户列表")
+    assert_footer_pinned(page, "用户列表")
     _shot(page, "01-users-list")
 
     # ---- 2. 建用户（对话框 → 提交 → 303 到详情页）----
@@ -179,6 +212,7 @@ def run_flow(page: Page, base_url: str, admin_email: str) -> dict[str, str]:
     expect(page.locator("#issued-token")).to_have_text(plaintext)
     expect(page.get_by_text("E2E laptop")).to_be_visible()
     assert_no_overflow(page, "详情页（明文面板）")
+    assert_footer_pinned(page, "详情页（明文面板）")
     _shot(page, "05-token-issued-once")
 
     # ---- 4. 刷新后明文不再出现（AC2.1 / AC2.2）----
@@ -302,6 +336,7 @@ def run_flow(page: Page, base_url: str, admin_email: str) -> dict[str, str]:
     # 上一步已把语言切到中文（cookie 持久），这里显式指定英文再断言英文文案
     page.goto(f"{base_url}/admin/audit?lang=en", wait_until="networkidle")
     expect(page.locator(".content")).to_contain_text("NOT DELIVERED YET")
+    assert_footer_pinned(page, "占位页（内容不足一屏）")
     _shot(page, "13-placeholder-audit")
 
     # ---- 10. 面隔离：管理域名上不应有 /mcp ----

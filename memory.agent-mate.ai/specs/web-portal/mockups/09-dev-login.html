@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<!-- 09 · 开发登录（仅本机开发）—— 与实现 admin_portal/src/web/views/dev-login.njk 对应。
+     为什么单独一页：它是「获得身份」的动作页，与 401 页一样是**独立文档**
+     （此时还没有身份，不复用管理面外壳）。
+     两个状态（用查询参数切换，沿用 02 页 ?empty=1 那种既有约定）：
+       - 默认：有测试 Token ⇒ 主按钮可点，登录后落到 02-users.html（模拟落到用户页）
+       - ?mode=missing：找不到 Token ⇒ 显示原因 + 修复提示 + 期望的 Token 文件路径
+     eyebrow 用 devLogin.eyebrow（= ADMIN，与其他页面同一体例：上层短标签、不翻译）。 -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Development sign-in</title>
+<link rel="icon" href="assets/logo.png" type="image/png">
+<link rel="stylesheet" href="assets/portal.css">
+</head>
+<body class="app-shell" data-title-key="devLogin.title">
+<a class="sr-only" href="#content" data-i18n="a11y.skip">Skip to content</a>
+
+<main id="content" class="content">
+  <section class="section" data-dev-login>
+    <p class="eyebrow" data-i18n="devLogin.eyebrow">ADMIN</p>
+    <h1 data-i18n="devLogin.title">Development sign-in</h1>
+    <p class="lead-note" data-i18n="devLogin.lead">This page exists only on loopback development.</p>
+
+    <form method="post" action="02-users.html" data-dev-login-form>
+      <div class="btn-row">
+        <button type="submit" class="btn btn-page" data-i18n="devLogin.submit">Sign in as test admin</button>
+        <a class="btn-text" href="01-instructions.html" data-i18n="nav.site">Instructions</a>
+      </div>
+    </form>
+
+    <div data-dev-login-missing hidden>
+      <p class="error-inline" data-i18n="devLogin.noToken">No test token found.</p>
+      <p class="field-note" data-i18n="devLogin.hint">Expected token file</p>
+      <p class="dialog-path"><span class="mono">.portal-data/dev/token</span></p>
+    </div>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <p data-i18n="copyright">copyright © Ethan Huang</p>
+</footer>
+
+<script src="assets/i18n.js"></script>
+<script src="assets/mockup.js"></script>
+</body>
+</html>

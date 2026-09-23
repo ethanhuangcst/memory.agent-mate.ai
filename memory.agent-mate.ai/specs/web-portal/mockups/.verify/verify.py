@@ -45,6 +45,8 @@ PAGES = [
     "05-capacity.html",
     "06-admin-mcp.html",
     "index.html",
+    "08-signin.html",
+    "09-dev-login.html",
 ]
 BRAND = "memory.agent-mate.ai - AI Memory MCP"
 MCP_URL = "https://memory.agent-mate.ai/mcp"
@@ -421,6 +423,63 @@ with sync_playwright() as p:
     page.click(".menu-toggle")
     page.wait_for_timeout(150)
     check("窄屏 · 点击后侧栏展开", sidebar.is_visible())
+    ctx.close()
+
+      # ---------- 12. 需要身份页 / 开发登录页 / 页脚贴底 / 侧栏会话区（2026-09-23）----------
+    ctx = browser.new_context(viewport={"width": 1280, "height": 900})
+    page = ctx.new_page()
+
+    page.goto(BASE + "/08-signin.html?lang=CN")
+    page.wait_for_load_state("networkidle")
+    eyebrow = page.locator(".eyebrow").first.inner_text().strip()
+    check("08 · eyebrow 为 ADMIN（Issue 9：不得再出现「尚未交付」）", eyebrow == "ADMIN", eyebrow)
+    check("08 · 生产登录入口指向用户页", page.locator('a[data-auth-prod][href="02-users.html"]').count() == 1)
+    check("08 · 生产态不显示开发入口", not page.locator("a[data-auth-dev]").is_visible())
+
+    page.goto(BASE + "/08-signin.html?lang=CN&mode=dev")
+    page.wait_for_load_state("networkidle")
+    check("08 · 开发态显示开发登录入口", page.locator("a[data-auth-dev]").is_visible())
+    check("08 · 开发态显示自诊断块", page.locator("[data-dev-diagnostics]").is_visible())
+
+    page.goto(BASE + "/09-dev-login.html?lang=CN")
+    page.wait_for_load_state("networkidle")
+    check("09 · 默认态显示登录按钮", page.locator("[data-dev-login-form] button[type=submit]").is_visible())
+    check("09 · eyebrow 为 ADMIN", page.locator(".eyebrow").first.inner_text().strip() == "ADMIN")
+
+    page.goto(BASE + "/09-dev-login.html?lang=CN&mode=missing")
+    page.wait_for_load_state("networkidle")
+    check("09 · 缺 Token 态隐藏表单", not page.locator("[data-dev-login-form]").is_visible())
+    check("09 · 缺 Token 态显示原因与提示", page.locator("[data-dev-login-missing]").is_visible())
+
+    for name in ("08-signin.html", "01-instructions.html"):
+        page.goto(BASE + "/" + name)
+        page.wait_for_load_state("networkidle")
+        m1 = page.evaluate("""() => {
+          const f = document.querySelector('.site-footer').getBoundingClientRect();
+          return { footerBottom: Math.round(f.bottom), viewport: window.innerHeight };
+        }""")
+        check("页脚贴底 · " + name, abs(m1["footerBottom"] - m1["viewport"]) <= 1, m1)
+        page.evaluate("window.scrollTo(0, document.documentElement.scrollHeight)")
+        page.wait_for_timeout(120)
+        m2 = page.evaluate("""() => {
+          const f = document.querySelector('.site-footer').getBoundingClientRect();
+          const main = document.querySelector('main').getBoundingClientRect();
+          return { footerTop: Math.round(f.top), mainBottom: Math.round(main.bottom) };
+        }""")
+        check("页脚不遮挡内容 · " + name, m2["mainBottom"] <= m2["footerTop"] + 1, m2)
+
+    page.goto(BASE + "/02-users.html?lang=CN")
+    page.wait_for_load_state("networkidle")
+    check("会话区 · 侧栏存在会话区", page.locator(".nav-session").count() == 1)
+    nav_count = page.locator(".nav a").count()
+    check("会话区 · 导航目的地仍为 4 项", nav_count == 4, nav_count)
+    check("会话区 · 登出按钮文案非空", len(page.locator(".nav-logout").inner_text().strip()) > 0)
+    geo = page.evaluate("""() => {
+      const nav = document.querySelector('.nav').getBoundingClientRect();
+      const ses = document.querySelector('.nav-session').getBoundingClientRect();
+      return { navBottom: Math.round(nav.bottom), sessionTop: Math.round(ses.top) };
+    }""")
+    check("会话区 · 位于导航之下", geo["sessionTop"] >= geo["navBottom"], geo)
     ctx.close()
 
     browser.close()

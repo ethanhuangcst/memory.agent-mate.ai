@@ -46,6 +46,13 @@ html {
   font-size: 17px;
 }
 
+/* `hidden` 属性必须真的隐藏。
+   原因：UA 的 `[hidden] { display: none }` 优先级极低，**任何**带 `display` 的类都会盖过它 ——
+   本仓已实测到实例：`.btn { display: inline-flex }` 让 `hidden` 的按钮照样可见
+   （原型 `08-signin.html` 的变体切换、实现里用 `hidden` 控制的错误行都受影响）。
+   这条是基础规则，两份 CSS（实现与原型）必须逐字一致。 */
+[hidden] { display: none !important; }
+
 html[lang="zh-CN"] body {
   font-family: "Noto Sans SC", "Outfit", system-ui, sans-serif;
 }
@@ -812,8 +819,24 @@ textarea:focus {
   background: var(--bg);
   flex-direction: column;
   min-height: 100vh;
+  /* 移动端地址栏收起/展开时 100vh 会算错 */
+  min-height: 100dvh;
   display: flex;
 }
+
+/* 页脚贴底（所有页面，2026-09-23 用户指出）：
+   仅靠 `min-height: 100vh` 不够 —— 还需要**可增长的那一栏**，否则内容不足一屏时
+   页脚会停在内容下方、页面底部留一大片空白（实测：未认证页 / 开发登录页）。
+   - 管理面外壳：`.app-body { flex: 1 }` 已承担（既有 ✓）
+   - 独立页（未认证页 / 开发登录页 / 接入说明页）：它们的 `<main>` 是 `.app-shell` 的**直接子元素**
+     ⇒ 让 `.content` 也能增长（在 `.app-body` 的网格里该声明被忽略，无副作用）
+   - 公开说明页：实现用 `.content`，原型用 `.home-main` ⇒ **两个都登记**
+     （只写一个就会出现「规则在、类名无」或反之 —— 本仓已吃过这类亏）
+   - 原型画廊：`.gallery { flex: 1 }` 已承担（既有 ✓）
+   注意：本条**不改变** `D14` 外框冻结 —— 页脚仍是 `position: sticky; bottom: 0`。 */
+.content,
+.home-main { flex: 1 1 auto; }
+
 
 .app-header {
   border-bottom: 1px solid var(--line);
@@ -902,6 +925,32 @@ textarea:focus {
 .nav a:hover {
   color: var(--ink);
 }
+
+/* 侧栏底部的「会话区」（2026-09-23）：
+   登出是**会话动作**，不是导航目的地 ⇒ 与 `.nav` 的目的地列表分开、贴在侧栏底部
+   （`.sidebar` 已是 column flex，`margin-top: auto` 把它推到底）。
+   排版与 `.nav a` 对齐（同样的左右内边距与字号），但它不是链接 ⇒ 用自己的按钮样式，
+   并按既有惯例给 `:focus-visible` 轮廓（全站唯一 focus 语言：2px 墨色轮廓）。 */
+.nav-session {
+  margin-top: auto;
+  padding: 1.15rem 0 0;
+  border-top: 1px solid var(--line);
+}
+.nav-session .nav-logout {
+  appearance: none;
+  background: none;
+  border: 0;
+  width: 100%;
+  padding: 0.7rem 1.35rem;
+  font: inherit;
+  font-size: 1rem;
+  color: var(--mute);
+  text-align: left;
+  cursor: pointer;
+}
+.nav-session .nav-logout:hover { color: var(--ink); }
+.nav-session .nav-logout:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
+
 
 .nav a.active {
   color: var(--ink);
@@ -1440,6 +1489,7 @@ td.table-check {
   background: var(--bg);
   flex-direction: column;
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
 }
 

@@ -114,6 +114,18 @@
     });
   }
 
+  /* 登出仿真：静态站不支持 POST，也无法真正结束会话（生产由 Cloudflare Access 接管）。
+     这里拦截提交并跳到「需要身份」页 —— 等价于「登出后回到登出态」，于是
+     「点登出 → 落到需要身份页」这一段在原型里可点通（ADR-018 的全路径仿真）。 */
+  function bindLogout() {
+    document.querySelectorAll("[data-logout]").forEach(function (form) {
+      form.addEventListener("submit", function (e) {
+        e.preventDefault();
+        window.location.href = form.getAttribute("action");
+      });
+    });
+  }
+
   function bindCopy() {
     document.querySelectorAll("[data-copy]").forEach(function (btn) {
       btn.addEventListener("click", function () {
@@ -190,6 +202,16 @@
       if (auditTable) auditTable.hidden = true;
       if (auditEmpty) auditEmpty.hidden = false;
     }
+    var mode = params.get("mode");
+    if (mode === "dev") {
+      document.querySelectorAll("[data-dev-diagnostics]").forEach(function (el) { el.hidden = false; });
+      document.querySelectorAll("[data-auth-dev]").forEach(function (el) { el.hidden = false; });
+      document.querySelectorAll("[data-auth-prod]").forEach(function (el) { el.hidden = true; });
+    }
+    if (mode === "missing") {
+      document.querySelectorAll("[data-dev-login-form]").forEach(function (el) { el.hidden = true; });
+      document.querySelectorAll("[data-dev-login-missing]").forEach(function (el) { el.hidden = false; });
+    }
     var confirm = params.get("confirm");
     if (confirm) {
       var dlg = document.getElementById("dialog-" + confirm);
@@ -201,6 +223,7 @@
     bindLocale();
     bindMenu();
     bindDialogs();
+    bindLogout();
     bindCopy();
     bindHandleField();
     applyQueryState();

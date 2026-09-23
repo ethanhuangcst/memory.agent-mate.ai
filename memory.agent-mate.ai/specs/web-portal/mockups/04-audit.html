@@ -36,6 +36,14 @@
       <a href="05-capacity.html" data-i18n="nav.capacity">Capacity</a>
       <a href="06-admin-mcp.html" data-i18n="nav.guide">Admin MCP config</a>
     </nav>
+    <div class="nav-session">
+    <!-- 登出是**会话动作**，不是导航目的地 ⇒ 与上面的目的地列表分开、贴在侧栏底部。
+         静态原型里 POST 无法真正登出 ⇒ mockup.js 拦截提交并跳到「需要身份」页（模拟 302 到登出态），
+         于是「点登出 → 落到 08-signin」这一段在这里就能点通（ADR-018 的全路径仿真）。 -->
+    <form method="post" action="08-signin.html" data-logout>
+      <button type="submit" class="nav-logout" data-i18n="nav.logout">Log out</button>
+    </form>
+    </div>
   </aside>
 
   <main id="content" class="content">
@@ -141,7 +149,7 @@
       <p data-i18n="audit.empty">No events match. Clear the user or widen the range.</p>
     </div>
 
-    <div class="callout callout-info" style="margin-top:1.5rem">
+    <div class="callout" style="margin-top:1.5rem">
       <p data-i18n="audit.note">No token plaintext, no memory content. A refused session writes nothing, so it has no path.</p>
     </div>
   </main>

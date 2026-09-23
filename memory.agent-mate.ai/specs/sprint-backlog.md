@@ -23,6 +23,7 @@
 | **D3** | **严重** | 依赖 | 一会话一子进程，禁止跨用户复用或池化 | 会话生命周期与当前用户的独立 MCP 子进程绑定。 | 复用进程会把单库隔离边界交还给门户，错误不会被上游感知。 | [#14 定制 — 接入面](./product-backlog.md#pb-14) | [Sprint 4 PSP-W2「端到端接入」](#s4-mcp-session-bridge) · [`web-portal/web-design.md`](./web-portal/web-design.md) §3 | 实现与测试落在 Sprint 4 PSP-W2「端到端接入」。 | Pending | 2026-09-21 |
 | **D4** | **中** | 依赖 | 会话审计记录解析后的库路径 | 每次会话开始时记录最终解析的用户库路径。 | 缺失时无法事后界定串号范围与追责。 | [#5 审计视图](./product-backlog.md#pb-5) | [Sprint 4 PSP-W3「可运维、可发布」](#s4-audit-view) · [`web-portal/web-stories.md`](./web-portal/web-stories.md) S5 · [`web-portal/web-test.md`](./web-portal/web-test.md) §2 | 实现与测试落在 Sprint 4 PSP-W3「可运维、可发布」。 | Pending | 2026-09-21 |
 | **D5** | **阻塞** | 依赖 | 上线前负向验收门禁 | 生产模板未通过 V1 负向验证时阻断上线。 | 缺失时上线流程可能把静默共享主库误判为成功。 | [#26 部署 · 验证 · 文档化](./product-backlog.md#pb-26) | [Sprint 3「隔离本地负向回归」](#s3-isolation-negative-regression) · [Sprint 6「上线验收」](#s5-production-acceptance) · [`mcp/mcp-design.md`](./mcp/mcp-design.md) §6.2 | 本地门禁已在 Sprint 3「多用户隔离负向回归」定型；生产执行留在 Sprint 6「上线验收」。 | Implemented | 2026-09-21 |
+| **D6** | **阻塞** | 依赖 | 公网真身份链路的上线验收（人工 SSO + 自动化 Service Token） | 门户身份由 Cloudflare Access 认定，而**凭据与策略分置两侧**（门户侧只认签名断言，策略在 CF 控制台）。本机已验证「未认证被拦（302）」与「Service Token 直达（200）」；但**在线套件真链路未跑**（缺 `PORTAL_E2E_ONLINE_BASE_URL` 与 Access Service Token），人工 SSO 也尚未在**生产配置**下复核。 | 两处易失准，且**失败与正常拒绝同形**：① Service Token 未加入该 Access 应用策略 ⇒ 302（与「用户未授权」无法区分）；② 门户后端配置与公网 Host 不匹配（如用回环配置的对端接公网 Host）⇒ 已认证后仍 403，表现为「认证成功却进不去管理面」。 | [#26 部署 · 验证 · 文档化](./product-backlog.md#pb-26) | [Sprint 6「上线验收」](#s5-production-acceptance) · [`web-portal/portal-identity-plan.md`](./web-portal/portal-identity-plan.md) §8（`SBI-V1` / `SBI-V2P` / `SBI-V2`） · [`web-portal/web-login-plan.md`](./web-portal/web-login-plan.md) §2 | 本机链路已验证（302 拦截 / Service Token 200）；**上线后**在生产配置下复跑在线套件（退出码须为 **0**，不得以 40 跳过）并留人工 SSO 截图。凭据排查先取判据 `service_token_status`（团队不一致与策略未配症状相同）。 | Pending | 2026-09-23 |
 
 > **级别口径**：**致命** = 不报错且造成跨用户数据串号；**阻塞** = 不解决则不得上线；**严重** = 单点失效即串号或安全边界失效；**中** = 影响可审计性或可观测性。
 > **类型口径**：风险 = 可能发生的失效；阻碍 = 已发生或正在发生的阻塞；依赖 = 关闭风险所依赖的落地项。当前没有阻碍类条目。
@@ -40,6 +41,7 @@
 | D3 | [#14 定制 — 接入面](./product-backlog.md#pb-14) | [#14 一会话一子进程](./product-backlog.md#pb-14) · [`web-portal/web-design.md`](./web-portal/web-design.md) §3 | [Sprint 4 PSP-W2「端到端接入」](#s4-mcp-session-bridge) |
 | D4 | [#5 审计视图](./product-backlog.md#pb-5) | [#5 解析后库路径](./product-backlog.md#pb-5) · [`web-portal/web-test.md`](./web-portal/web-test.md) §2 | [Sprint 4 PSP-W3「可运维、可发布」](#s4-audit-view) |
 | D5 | [#26 部署 · 验证 · 文档化](./product-backlog.md#pb-26) | [#26 上线负向门禁](./product-backlog.md#pb-26) · [`mcp/mcp-design.md`](./mcp/mcp-design.md) §6.2 | [Sprint 3「隔离本地负向回归」](#s3-isolation-negative-regression) · [Sprint 6「上线验收」](#s5-production-acceptance) |
+| D6 | [#26 部署 · 验证 · 文档化](./product-backlog.md#pb-26) | [#26](./product-backlog.md#pb-26) 验收条件 · [`web-portal/portal-identity-plan.md`](./web-portal/portal-identity-plan.md) §8（`SBI-V1` / `SBI-V2P` / `SBI-V2`） · [`web-portal/web-login-plan.md`](./web-portal/web-login-plan.md) §2 | [Sprint 6「上线验收」](#s5-production-acceptance) |
 
 ---
 
@@ -221,6 +223,8 @@ Sprint Goal: 完成 web-portal 本地开发（设计包定稿 + 3 批可交付�
 - 用只读评审把「单向引用」逐条挖出（S1 / S8 / S9 / S12 / S13 的 Sprint 落点未回链）并在**同轮**修完，而不是留到下轮。
 - **Replan 同样没有停在「改 sprint-backlog」**：Sprint 4–7 重排后，同批把 `product-backlog.md` 的 **31 条投影**逐条重算、**6 个对外锚点**保留并指向新位置、跨 8 份文档的**约 46 处**编号引用改指，并把新体例（§2.4 PSP）与 8 份变更记录一次落齐。
 - 交付粒度改按**功能批次（PSP）**表达：Sprint 4/5 的 ToDo 收敛为「1 行设计包 + 3 行批次」，每行「验收条件」是可执行的**交付判据**（引用故事号 / AC 号）而非任务描述。
+- **「先写断言、看它失败，再修，再看它通过」在布局类问题上首次真正生效**：Issue 8（长 Token 前缀撑出弹窗边框）先落 E2E 护栏 —— 修复前实测 `.key-meta-value` `scrollWidth=123 / clientWidth=94`（内容宽于容器 29px），修复后值列 94→322px 且 `scroll == client`。此前两次「CSS 已收口」都被肉眼推翻，根因是「读规则」不等于「量结果」（见 [`ADR-018`](./adr/ADR-018-mockup-as-clickable-simulation.md) 第 5 条）。
+- **本轮把「状态回填」当成交付的一部分**：`portal-identity-plan.md` 写着「未动代码」实际阶段 0/1 已交付、`issues-log.md` 两条写着「未做」实际已完成 —— 一并核实并回填，而不是继续按旧状态汇报（细节见对应文件 2026-09-23 行）。
 
 **本轮学到**
 - **编号空间会撞名**：故事号 S1–S13 与既有的「静默失败点 S1–S4」（`deployment.md` §7.2 / `web-design.md` §5）和 `i18n-probe.sh` 的测试标签 `S1–S12` 同形；`grep` 清扫会同时命中三者，既可能误改也可能因噪声漏判 —— 5 个条目的错指正是这样被掩盖的。见 [`knowledge/docs/spec-doc-conventions.md`](./knowledge/docs/spec-doc-conventions.md) 第 10 条。
@@ -231,6 +235,10 @@ Sprint Goal: 完成 web-portal 本地开发（设计包定稿 + 3 批可交付�
 - **同一编号在三套基准下必然互相矛盾**：重排时「原 Sprint N」在「重排前 / 用户提案 / 落定」三种编号下含义不同，不显式写「编号基准」就一定会自相矛盾。
 - **锚点 id 会与序号脱钩**：条目从 Sprint 5 移到 Sprint 6，锚点仍叫 `s5-*`；不声明「id 前缀 ≠ 当前序号」，后来者就会按前缀反推并改错。
 - **文件改名的同步面不能靠直觉，先找仓内同类先例**：最初按「编号改义」的惯例判断「变更记录里的历史叙述应保留旧名」，但仓内对**文件改名**的既有口径相反 —— **全量同步 + 旧名残留 0 处，只在改名记录里保留旧→新映射**（见本文件与 `sdd-scrum-practices.md` 各自 2026-09-21 的改名行）。差别在于：旧**编号**指向不同语义，旧**文件名**指向同一份文件。两条看起来同类的规则可能方向相反，动手前先在历史记录里找同类先例。
+- **门禁自己也会坏，而且坏了与「没问题」同形**：官方 E2E 入口 `scripts/portal-e2e.sh` 长期**起不来**（启用自签通道时缺必需配置键 `PORTAL_TEST_JWT_EMAIL`，`config.ts` 校验不过），且**会静默把测试跑在别人的实例上**（无端口预检，就绪探测打到占用该端口的既有实例）⇒ **唯一能自动发现布局类问题的入口等于不存在**，这才是 Issue 8 这类缺陷只能靠肉眼发现的机制性原因。修缺陷时必须一并问「产生它的门禁是否可信」。
+- **`make` 会把脚本退出码压平为 2**：`portal-e2e.sh` 的契约是 `0/40/41/30`，但经 `make portal-e2e` 调用后「40 明确跳过」与「41 失败」**不可区分** ⇒ 凡以退出码为契约的入口，机器调用方（CI / 脚本）必须直接调脚本；make 目标只面向人（已写入脚本头注释）。
+- **「用测试身份验过」不等于「用真实身份验过」**：2026-09-22 的人手验收用的是 `admin@example.test`，而身份口径随后改为真实邮箱 ⇒ 那次证据失效、必须重做 —— 这正是 `SBI-V1` 一直挂着的真实原因，不是「忘了做」。
+- **同一动作在两侧意义不同，混用会得到同形失败**：`make up` 走 `.env.local`（回环 Host + 自签通道），`make portal-dev` 走 `.env`（真身份 + 公网 Host），两者互斥且同占端口；混用时「已认证后仍 403」与「未授权」在页面上同形（本轮实测：公网 302 拦截正常，但后端若为回环配置则认证后 403）。
 
 **下轮改进**
 - 新增或重写一份 spec 的编号体系时，同批产出「编号 → 引用方」对照表并逐处回填；只改权威文档不算完成。
@@ -238,6 +246,9 @@ Sprint Goal: 完成 web-portal 本地开发（设计包定稿 + 3 批可交付�
 - 故事号的 Backlog / Sprint 归属以**引用方的实际回链**为准，不凭语义相近推断（据此把 S3 的 Backlog 归属由 `#3 / #14` 校正为 `#14 / #28`）。
 - **立体例判据前先拿已落盘的实例回代**：新判据写完后，逐条检查现有条目是否违反（本轮据此把 `PSP-M2` 改名、给 `PSP-W1` 的判据去掉后一批才交付的动作）。
 - **「零残留」「已扫齐」类声明要写明扫描面**（文档 / 脚本 / 制品 / 配置）并真扫到；重排类改动一律在变更记录顶部给「**编号基准**」说明。
+- 覆盖率门禁加**边距告警**：实测语句 **92.78** / 阈值 92（边距仅 **0.78pt**）—— 新增代码不同步补测就会踩线；低于「阈值 + 1pt」时应显式提示补测。薄弱点：`admin-api.ts` 语句 78.07% · `dev-login.ts` 分支 75%。
+- 原型**入口清单纳入断言**：本轮 `index.html` 漏了 09-dev-login 卡片（静态断言未抓住 ⇒ `ADR-018` 的「每个入口都能点到」形同未验）⇒ 已补卡片与失败态变体，并把「入口清单 ↔ 页面文件」的对账写成断言。
+- **状态回填与交付同批完成**：文档里的「未动代码 / 未做」若不随交付一并更新，下一个读文档的人（包括我自己）会按过期状态汇报 —— 本轮已把四处逐条核实回填。
 
 **UI 迭代轮补充（2026-09-22 同日）**
 

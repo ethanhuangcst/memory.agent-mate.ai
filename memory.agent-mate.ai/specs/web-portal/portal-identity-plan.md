@@ -1,7 +1,7 @@
 # portal-identity-plan — 登录身份收口（真实邮箱）+ 文档/原型同步 + TDD 收尾
 
 > **定位**：本计划覆盖「登录身份必须使用 Cloudflare 注册的真实邮箱」这一收口，及其连带的 spec 同步、原型同步与 Issue 1–5 收尾。**待批准**后按 §5 顺序实施。
-> **状态**：v1 · as_of 2026-09-22 · **未动代码**（本文件仅计划）
+> **状态**：v2 · as_of 2026-09-23 · **阶段 0/1 已交付**（开发登录入口、真实邮箱身份、生产身份来源护栏均已实现并实测；见 §7 的 2026-09-23 逐条复核）。剩余工作按 §8 的 SBI 编排：`SBI-P1` **已交付**（原型 08/09 页 + 159 项断言；本轮补上 index 缺失的 09 入口与失败态变体），`SBI-D1`–`D5`、`SBI-P2`/`P3` **未做**，`SBI-V1` 的**机器门禁已全绿**、**人手截图待补**（2026-09-22 那次验收用的是 `admin@example.test`，身份口径已改为真实邮箱 ⇒ 需重做一次）。
 > **互链**：设计 [`web-design.md`](./web-design.md) · 故事与 AC [`web-stories.md`](./web-stories.md) · 测试 [`web-test.md`](./web-test.md) · 登录恢复 [`web-login-plan.md`](./web-login-plan.md) · 问题台账 [`issues-log.md`](./issues-log.md)
 > **既定约束（用户已选定，不得改回）**：① 身份口径 = **开发登录改用真实邮箱身份 + 生产出现非 Cloudflare 身份即失败**；② mockups = **本轮改动全部反映**；③ specs = **更全**（含 `specs/mcp/` 与 `product-backlog.md`）；④ **按 TDD 实现**。
 
