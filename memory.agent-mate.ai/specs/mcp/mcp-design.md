@@ -251,6 +251,17 @@ aimem-ssh ALL=(root) NOPASSWD: /usr/bin/docker exec -i ai-memory-mcp ai-memory m
 >
 > **本机环境的两个坑（会影响后续探针与运维脚本）**：① 容器底座是 debian-slim，**没有 `ps`**；② 本机跑 x86_64 镜像经 **Rosetta** 转译 ⇒ **所有 `/proc/<pid>/exe` 都指向 `/mnt/lima-rosetta/rosetta`**，「按 exe 判进程」在本机不成立 —— 判进程请用 **cmdline**（且带足区分参数，否则会把别处遗留的同形进程一起数进来）。
 >
+> **`3.1` 实现轮补充的事实（2026-09-23 实测，均为「不做就会踩」的硬约束）**：
+>
+> | 事实 | 后果与对策 |
+> |---|---|
+> | **响应是 SSE 流，响应头先于上游结果发出** | HTTP 状态码在上游应答**之前**已定 ⇒ 「上游太慢」**无法用 `504` 表达**。超时必须加在**上游请求**上（`Client` 的 `RequestOptions.timeout`）⇒ 以 **MCP 层错误**返回。仅**握手阶段**（`client.connect`）的超时还能用状态码表达（归 `503 upstream_unavailable`） |
+> | **`StreamableHTTPServerTransport.handleRequest` 对 `initialize` 立即返回** | 用 `Promise.race` 在 HTTP 层包它做超时**完全无效**（客户端仍会等到上游最终响应）—— 实测踩过 |
+> | **客户端 `transport.close()` 不发任何通知** | 服务端感知不到「客户端主动结束」；要终止会话须用 `transport.terminateSession()`（发 `DELETE`）。否则只能靠空闲超时回收（归 `3.4` / `4.1`） |
+> | **`docker exec` 不转发宿主 env** | 借壳时模板注入的四项 env 会**全丢** ⇒ `memory_store` 成功但落**共享主库**、身份退回默认值。必须显式 `-e VAR`（见 §12.9 的 `PORTAL_LAUNCH_OVERRIDE` 行） |
+> | **SDK `1.30.0` 的类型与 `exactOptionalPropertyTypes` 不兼容** | `onclose` / `sessionId` 声明为可空、而 `Transport` 接口要求非空 ⇒ 需在 `server.connect()` / `client.connect()` 处收窄断言（两处均已留注，不是静默忽略） |
+> | **请求缺 `Accept: application/json, text/event-stream` 会得 406** | 这是协议层门禁、不是业务分支：裸 `fetch` 测试 `/mcp` 时会先撞上它（实测） |
+>
 > **探针未覆盖、现已定档**（2026-09-23，Sprint 4 `3.1` 开工前置）：**失败面的 HTTP 状态码与错误体** → [`../web-portal/web-design.md`](../web-portal/web-design.md) §12.5 的逐场景映射表（401 / 403 / 500 / 503 / 504 / 429 + 统一错误体纪律）；**`last_used_at` 的更新粒度** → 同文件 §4.4（**会话建立时更新一次**，非每请求）。**仍未定**：每 key / 全局并发与超时的**默认值**（键名已登记于 §12.9，取值归 Sprint 4 `4.1`）。另实测到一条上游行为：**库文件的父目录不会被自动创建**（未预建则 `failed to open database`）—— 正是 `3.2` 断言要拦的形态。
 
 **部署顺序依赖**：`ai-memory-mcp` 先起（创建命名卷 `ai_memory_data`），门户以 `external: true` 引用。
@@ -284,6 +295,8 @@ aimem-ssh ALL=(root) NOPASSWD: /usr/bin/docker exec -i ai-memory-mcp ai-memory m
 #### 5.6.4 启动模板（`launch`）与强制不变量
 
 > **载体（2026-09-23 定档）**：模板在门户侧**内建为代码常量**（`admin_portal/src/bridge/launch-template.ts`），**不通过环境变量注入** —— 模板是「门户对上游的唯一知识」，改动它等于升级适配，应与代码同版本控制；由**启动自检**断言其与本节的逐字一致（`TC-M-L0-01`）。据此，[`../web-portal/web-design.md`](../web-portal/web-design.md) §12.9 的 `PORTAL_LAUNCH_TEMPLATE` 键**取消**。
+>
+> **开发期例外（2026-09-23 随 `3.1` 落地）**：`command` / `args` 可被 `PORTAL_LAUNCH_OVERRIDE` 覆盖（**仅 `PORTAL_ENV=development`；production 出现即拒绝启动**），用于本机借壳执行 linux 二进制。**env 不在覆盖范围内** —— 模板注入的四项 env 仍由门户按 handle 生成，**透传由覆盖命令自己负责**（借壳 `docker exec` 时必须显式 `-e`）；漏了这一点会得到「写入成功但落到共享主库、身份退回默认值」的**静默失效**。详见 §12.9 该键行。
 
 门户代码里的 ai-memory 知识 = 0；全部知识收敛到**一段内建模板常量**（门户只做占位符替换，不解析语义）：
 

@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "@fastify/static": "10.1.4",
+    "@modelcontextprotocol/sdk": "1.30.0",
     "better-sqlite3": "13.0.3",
     "fastify": "5.12.5",
     "jose": "6.2.12",

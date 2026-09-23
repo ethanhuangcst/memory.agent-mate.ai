@@ -22,6 +22,11 @@ export const AUDIT_ACTIONS = [
   // 恢复访问（D13 的可逆侧）。与 issue_key 分开记：恢复账号状态与签发新钥匙是两件事，
   // 合成一条会让审计无法回答「这个用户是被谁、在什么时候恢复的」。
   'restore_user',
+  // 接入面（PSP-W2 起）：**会话被拒绝**。只记失败面 —— 依据 web-design.md §12.5 的纪律 3
+  // 「spawn 断言失败与上游不可用必写审计行」。
+  // 注意：「会话开始」的审计行（含解析出的库路径）属审计视图批次（RID D4 / Sprint 6），
+  // 不在本批范围，故此处**只登记拒绝类**，避免与本批之外的动作语义混淆。
+  'mcp_session_rejected',
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

@@ -19,7 +19,7 @@ import { loadConfig, type PortalConfig } from './config';
 import { openDatabase } from './web/db/connection';
 import { currentVersion, migrate, pendingVersions } from './web/db/migrate';
 import { hasBlockingFailure, runSelfCheck, summarizeSelfCheck } from './selfcheck';
-import { classifyHost, decideRequest, HEALTH_PATH } from './shared/host-split';
+import { decideRequest, HEALTH_PATH } from './shared/host-split';
 import { redactText } from './shared/redact';
 import { createRenderEnv } from './web/render';
 import { createI18n } from './web/i18n';
@@ -31,10 +31,16 @@ import { registerAdminUserRoutes } from './web/routes/admin-users';
 import { registerAdminUserDetailRoutes } from './web/routes/admin-user-detail';
 import { registerAdminApiRoutes } from './web/routes/admin-api';
 import { registerDevLoginRoutes } from './web/routes/dev-login';
+import { registerMcpBridgeRoutes } from './bridge/route';
 
 export interface BuildOptions {
   /** 注入用（离线测试传内存库）；不传则由本函数按 `PORTAL_DB_PATH` 打开并负责关闭。 */
   readonly db?: Database.Database;
+  /**
+   * 接入面（`/mcp`）请求级转发的超时（毫秒）；默认见 `bridge/route.ts`。
+   * **仅供测试注入短超时**（让「上游挂起 ⇒ 504」这条路径可被快速覆盖）。
+   */
+  readonly requestTimeoutMs?: number;
 }
 
 export async function buildServer(
@@ -135,17 +141,20 @@ export async function buildServer(
   await registerAdminUserDetailRoutes(app, deps);
   await registerAdminApiRoutes(app, deps);
 
+  // ---- 接入面（MCP）：接管 `/mcp` ----
+  // 面隔离钩子在前（`decideRequest` 只放行 MCP 面到该路径），因此这里只需处理令牌与会话；
+  // 「管理域名上访问 /mcp」在到达本模块之前已被 403 拦下（面隔离先于身份）。
+  registerMcpBridgeRoutes(
+    app,
+    options.requestTimeoutMs === undefined
+      ? deps
+      : { ...deps, requestTimeoutMs: options.requestTimeoutMs },
+  );
+
   app.setNotFoundHandler((request, reply) => {
     const pathname = request.url.split('?')[0] ?? '/';
-    const face = classifyHost(request.headers.host, cfg);
     reply.code(404);
 
-    if (face === 'mcp' && pathname === '/mcp') {
-      return reply.type('application/json; charset=utf-8').send({
-        error: 'not_implemented',
-        detail: 'MCP face ships in PSP-W2',
-      });
-    }
     if (pathname.startsWith('/admin/api')) {
       return reply.type('application/json; charset=utf-8').send({ error: 'not_found', path: pathname });
     }

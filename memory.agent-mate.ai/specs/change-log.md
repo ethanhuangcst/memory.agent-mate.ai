@@ -8,6 +8,36 @@
 
 ## 2026-09-23
 
+### `3.1`「mcp:会话桥」交付：接入面第一次真正可用
+
+**为什么**：在此之前的 `/mcp` 只是一个 `404 not_implemented` 占位 —— 用户拿得到 `memo_` 令牌，却没有任何地方能用它。本批让「持令牌的 MCP 客户端经 `/mcp` 建立会话、完成一次写入与召回」这条链路真正跑通，是**首个对外可用**的增量。
+
+**做了什么**：
+
+- **新增 `admin_portal/src/bridge/`**（五文件）：`launch-template`（内建模板常量，逐字对照契约真源）· `spawn`（占位符替换 + **最小 env 白名单**；fail-closed 路径断言**只预留位置**，归 `3.2`）· `transport`（官方 SDK 的 Streamable HTTP ⇄ stdio **直连转发**，不手写帧解析）· `session`（会话注册表与关闭顺序）· `route`（接管 `/mcp`：统一 **401** 且理由不外泄 · 会话复用要求同一令牌 · 统一失败应答）。
+- **新增配置键 `PORTAL_LAUNCH_OVERRIDE`**：**仅 `development` 生效、production 出现即拒绝启动**（与自签 JWT / 开发登录入口同构）。它解决一个硬约束 —— 本机是 macOS，执行不了镜像内的 linux 二进制，只能用 `docker exec` 借壳。
+- **审计**：新增 `mcp_session_rejected` 动作（失败面纪律 3 的落地）；「会话开始」的审计行仍归审计视图批次（`D4`）。
+- **既有一处改为按行为变更同步**：`public-routes.test.ts` 断言 `/mcp` 返回 `not_implemented` ⇒ 改为 `401 unauthorized`。
+
+**验证**：
+
+- 离线 **297 项**测试全绿（新增：模板与门控单测 17 · `/mcp` 端到端集成 13 · 桥模块单测）。集成测试用**假上游**夹具（`tests/fixtures/fake-upstream.mjs`）⇒ **不依赖 docker、874ms 跑完**，覆盖「写入召回 / 身份与库路径注入 / 五类拒绝路径 / 多令牌使用时间独立 / 会话回收 / 上游不可用 503 + 审计 / 握手超时兜底」。
+- 覆盖率 **92.08 / 85.4 / 96.69 / 93.31**（阈值 92/85/96/93）达标。**如实说明**：新代码一度把语句覆盖率压到 **90.81**（低于阈值），是同批补测才回到线内 —— 这条与上一轮「边距仅 0.78pt」的预警完全对应。
+- `make portal-mcp-probe`（**真上游**，经 `docker exec` 借壳跑容器里的 ai-memory 0.10.0）：**四断言全 PASS、退出码 0** —— `core` 档 8 工具 · `memory_store` 回包 `agent_id=human:probe31` · `memory_recall` 命中 · 库落 `/data/users/probe31/ai-memory.db`。
+
+**实现期实测到的六条硬约束**（已回写 `mcp-design.md` §5.6.2 实证块，它们是「不做就会踩」的）：
+
+1. **响应是 SSE 流、响应头先于上游结果发出** ⇒ 上游超时**无法用 `504` 表达**，必须加在**上游请求**上并以 MCP 层错误返回；只有握手阶段还能用状态码（503）。
+2. `StreamableHTTPServerTransport.handleRequest` 对 `initialize` **立即返回** ⇒ 在 HTTP 层用 `Promise.race` 包超时**完全无效**。
+3. 客户端 `transport.close()` **不发任何通知** ⇒ 要终止会话须用 `terminateSession()`（`DELETE`）。
+4. **`docker exec` 不转发宿主 env** ⇒ 借壳时模板注入的四项 env 全丢：`memory_store` 照样成功，但数据落到**共享主库**、身份退回上游默认值 —— 即**隔离静默失效**。这条直接写进了 §12.9 该键行的语义边界。
+5. SDK `1.30.0` 的 `onclose` / `sessionId` 类型与 `exactOptionalPropertyTypes` 不兼容 ⇒ 两处收窄断言并留注。
+6. 请求缺 `Accept: application/json, text/event-stream` ⇒ **406**（协议层门禁，非业务分支）。
+
+---
+
+## 2026-09-23
+
 ### `3.1` 开工前置：失败面口径、使用时间粒度、模板载体三处定档
 
 **为什么**：review `Sprint 4 3.1「mcp:会话桥」` 时发现三处规格缺口 —— 缺了它们，「写完就算过」的判定可以被**两种不同实现**同时满足，或者干脆无法验收：① `/mcp` 的**失败面没有任何状态码定义**（`MS1 AC-M1.2` 只写「被拒」、用例也只写「拒绝」）；② `last_used_at` 的**更新粒度未定**（请求级与会话级都能让 `AC3.7` 判「过」）；③ launch 模板的**载体未定**（§12.9 把它列为必填 env 键，但代码里根本不存在该键，而模板本身已在 §5.6.4 逐字定稿）。另发现 `3.1` 行的**判据引用失配**。

@@ -109,12 +109,14 @@ describe('面隔离在公开路径上的表现', () => {
   });
 });
 
-describe('404 的三种身体形态', () => {
-  it('MCP 面上的 /mcp ⇒ JSON not_implemented（明确指向 PSP-W2，不伪装 404 空页）', async () => {
+describe('非命中路径的身体形态（MCP 面 `/mcp` 已由接入面接管，不再是 404 占位）', () => {
+  it('MCP 面上的 /mcp 未携带令牌 ⇒ 401 JSON unauthorized（不降级为匿名）', async () => {
+    // 行为变更（Sprint 4 `3.1`，2026-09-23）：此前该路径返回 `404 not_implemented` 占位，
+    // 接入面落地后改由桥模块接管 —— 未携带令牌即 401，与所有「需认证的接入路径」同形。
     const response = await app.inject({ method: 'GET', url: '/mcp', headers: { host: 'mcp.localhost' } });
-    expect(response.statusCode).toBe(404);
+    expect(response.statusCode).toBe(401);
     expect(response.headers['content-type']).toContain('application/json');
-    expect(response.json()).toMatchObject({ error: 'not_implemented' });
+    expect(response.json()).toMatchObject({ error: 'unauthorized' });
   });
 
   it('管理前缀下的未知路径且未认证 ⇒ 401（身份先于路由：未认证者探测不到管理路径是否存在）', async () => {

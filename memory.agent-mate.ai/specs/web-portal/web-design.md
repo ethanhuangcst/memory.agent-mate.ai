@@ -403,7 +403,7 @@ admin_portal/
 |---|---|
 | 会话标识 | 门户生成 `sessionId` 并与**该会话的上游子进程**一对一绑定（注册表键） |
 | 服务端 transport | 官方 SDK 的 **Streamable HTTP server transport**，挂到 `/mcp`；**兼容旧版 SSE 客户端**（§10 #4） |
-| 客户端 transport | 官方 SDK 的 **stdio client transport**：`command` / `args` / `env` **全部来自 `launch` 模板的替换结果**，门户**不解析语义** |
+| 客户端 transport | 官方 SDK 的 **stdio client transport**：`command` / `args` / `env` **全部来自 `launch` 模板的替换结果**，门户**不解析语义**。**开发期例外**：`command`/`args` 可被 `PORTAL_LAUNCH_OVERRIDE` 覆盖（仅 development，生产拒绝启动）；**覆盖时 env 透传由覆盖命令自己负责**（见 §12.9） |
 | 双向转发 | 由 SDK 的 server↔client 直连能力完成（**不手写帧解析**）；门户只负责建连、注册、回收 |
 | 背压 | stdio 管道与 HTTP 流**按 stream 处理**，**不整包缓冲**；对超大响应设门户级上限并**明确报错**（避免大响应击穿内存） |
 | 会话注册表 | `sessionId → { userId, handle, child, transport, startedAt, lastActivityAt, clientInfo }` |
@@ -466,6 +466,7 @@ admin_portal/
 | `PORTAL_SESSION_IDLE_TIMEOUT` / `PORTAL_SESSION_MAX_DURATION` | 空闲超时 / 单会话最长时长 | 是 |
 | `PORTAL_MAX_CONCURRENCY_PER_KEY` / `PORTAL_MAX_CONCURRENCY_GLOBAL` | 并发上限 | 是 |
 | `PORTAL_RESPONSE_MAX_BYTES` | 单响应上限（背压保护） | 是 |
+| `PORTAL_LAUNCH_OVERRIDE` | **开发期命令覆盖**（2026-09-23 随 `3.1` 落地）：覆盖 launch 模板的「二进制那一段」（可给多段，如 `docker -H <uri> exec -i <容器> <二进制>`），模板 argv 的其余部分照旧接在其后。**仅 `PORTAL_ENV=development` 生效；production 下出现即拒绝启动**（与自签 JWT / 开发登录入口同构，见 [`adr/ADR-015`](../adr/ADR-015-dev-login-entry-config-gated-registration.md)）。存在的理由：本机是 macOS，执行不了镜像内的 linux 二进制。**它的语义边界**：只覆盖 `command`/`args`；**env 透传由覆盖命令自己负责** —— 例如借壳 `docker exec` 时必须显式 `-e AI_MEMORY_DB -e AI_MEMORY_AGENT_ID …`，否则模板注入的四项 env 进不了容器：`memory_store` 照样成功，但数据落到**共享主库**、身份退回上游默认值（即隔离静默失效，实测踩过） | 否 |
 | `DASHSCOPE_API_KEY` | 门户专用 MaaS key（与主 key 同 workspace，§3.4 前置 2） | 是 |
 | `PORTAL_I18N_DEFAULT` | 默认语言（`zh-CN`） | 否 |
 

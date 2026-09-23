@@ -16,10 +16,11 @@ PORTAL_TEST := memory.agent-mate.ai/scripts/portal-test.sh
 PORTAL_E2E := memory.agent-mate.ai/scripts/portal-e2e.sh
 PORTAL_TUNNEL := memory.agent-mate.ai/scripts/tunnel-dev.sh
 PORTAL_COVERAGE := memory.agent-mate.ai/scripts/portal-coverage.sh
+PORTAL_MCP_PROBE := memory.agent-mate.ai/scripts/portal-mcp-probe.sh
 # 本机快速路径的环境文件（回环 Host + PORTAL_TEST_JWT_EMAIL），已 gitignore。
 PORTAL_LOCAL_ENV := memory.agent-mate.ai/admin_portal/.env.local
 
-.PHONY: help upstream pin pin-update preflight preflight-test backup restore-drill secret-check doc-links attestation-paths maintain-user-dbs hooks-install up down portal-up portal-down portal-dev portal-test portal-e2e portal-tunnel portal-coverage
+.PHONY: help upstream pin pin-update preflight preflight-test backup restore-drill secret-check doc-links attestation-paths maintain-user-dbs hooks-install up down portal-up portal-down portal-dev portal-test portal-e2e portal-tunnel portal-coverage portal-mcp-probe
 
 help:
 	@grep -E '^[a-zA-Z0-9_-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*## "} {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
@@ -106,6 +107,9 @@ portal-e2e: ## 门户端到端（离线自签 JWT；追加 ARGS=--online 走隧�
 
 portal-tunnel: ## Cloudflare 隧道就绪检查与配置清单（只读，不改任何配置）
 	bash $(PORTAL_TUNNEL) $(ARGS)
+
+portal-mcp-probe: ## 接入面真上游端到端探针（Sprint 4 `3.1`；用容器里的 ai-memory 验 /mcp 全链路）
+	bash $(PORTAL_MCP_PROBE) $(ARGS)
 
 portal-coverage: ## 门户覆盖率（v8；阈值低于即失败；产物入 gitignored 的 admin_portal/coverage/）
 	bash $(PORTAL_COVERAGE) $(ARGS)

@@ -63,6 +63,13 @@ export interface PortalConfig {
   readonly defaultLocale: Locale;
   readonly access: AccessAuthConfig;
   readonly testJwt: TestJwtConfig;
+  /**
+   * 开发期命令覆盖（`PORTAL_LAUNCH_OVERRIDE`）；`null` = 不覆盖（按内建模板执行）。
+   * **生产环境下恒为 `null`** —— 出现该键即拒绝启动。
+   */
+  readonly launchOverride: string | null;
+  /** 门户专用 MaaS key（spawn 上游会话时注入子进程）；未配置时为 `null`。 */
+  readonly upstreamApiKey: string | null;
 }
 
 const RawEnvSchema = z.object({
@@ -89,6 +96,15 @@ const RawEnvSchema = z.object({
   PORTAL_USERS_ROOT: z.string().min(1).optional(),
   PORTAL_STATIC_ROOT: z.string().min(1).optional(),
   PORTAL_VIEWS_ROOT: z.string().min(1).optional(),
+  // 开发期**命令覆盖**（接入批次 PSP-W2 起）：覆盖 launch 模板的「二进制那一段」，
+  // 使门户能在 macOS 上以 docker exec 借壳执行 linux 上游二进制（本机跑不了它）。
+  // **仅 development 生效**：production 下出现该键即拒绝启动（见下方语义校验），
+  // 与自签 JWT / 开发登录入口的门控完全同构（配置门控 + 生产拒绝）。
+  PORTAL_LAUNCH_OVERRIDE: z.string().min(1).optional(),
+  // 门户**专用**的 MaaS key：spawn 上游会话时注入子进程（上游据此读 LLM / embeddings）。
+  // 与主 key 同 workspace / 同模型权限 —— 否则 embeddings 模型或维度不一致会**静默降级**
+  //（见 knowledge/web-portal/portal-launch-mechanism.md E4）。
+  DASHSCOPE_API_KEY: z.string().min(1).optional(),
 });
 
 function formatIssues(error: z.ZodError): string {
@@ -163,6 +179,18 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): PortalConfig {
     }
   }
 
+  // 开发期命令覆盖：只允许 development，且不接受空白值（避免「看似配了、实际没生效」）。
+  const rawOverride = raw.PORTAL_LAUNCH_OVERRIDE;
+  const launchOverride = rawOverride === undefined ? null : rawOverride.trim();
+  if (launchOverride !== null && launchOverride.length === 0) {
+    throw new Error('PORTAL_LAUNCH_OVERRIDE 不能为空白字符串（要么不设，要么给完整命令前缀）');
+  }
+  if (isProduction && launchOverride !== null) {
+    throw new Error(
+      'production 环境禁止 PORTAL_LAUNCH_OVERRIDE：模板必须按内建常量执行（该键仅用于本机开发借壳）',
+    );
+  }
+
   const teamDomain = raw.PORTAL_ACCESS_TEAM_DOMAIN;
   const accessAud = raw.PORTAL_ACCESS_AUD;
   if (isProduction && (!teamDomain || !accessAud)) {
@@ -198,5 +226,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): PortalConfig {
     defaultLocale: raw.PORTAL_I18N_DEFAULT,
     access,
     testJwt,
+    launchOverride,
+    upstreamApiKey: raw.DASHSCOPE_API_KEY ?? null,
   };
 }
