@@ -16,10 +16,12 @@
 
 import { randomUUID } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { z } from 'zod';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import {
   CallToolRequestSchema,
+  CancelledNotificationSchema,
   GetPromptRequestSchema,
   ListPromptsRequestSchema,
   ListToolsRequestSchema,
@@ -84,6 +86,36 @@ export async function createBridgeTransport(
   server.setRequestHandler(GetPromptRequestSchema, async (req) =>
     upstream.client.getPrompt(req.params, requestOptions),
   );
+
+  // ---- 未显式注册的请求与通知：原样转发给上游（`3.8` 的「整行转发」）----
+  //
+  // **为什么是「赋值」而不是「构造参数」**（`3.10` 探针实测，结论见 `mcp-design.md` §5.6.2 实证块）：
+  // `Protocol` 的构造函数只把 options 存进 `this._options`，**从不**把 fallback 提升为实例属性，
+  // 而 `_onrequest` / `_onnotification` 读的正是实例属性 ⇒ 写成 `new Server(info, { fallbackRequestHandler })`
+  // 会**静默失效**：请求侧被 SDK 合成 `Method not found`、通知侧直接 `return`（连错误都不报）。
+  //
+  // **为什么要过一层断言**：SDK 只在 `ProtocolOptions` 里声明了这两个字段，`Protocol` 类**没有**
+  // 对应属性声明（类型与运行时不一致）⇒ 直赋无法通过类型检查。此处收窄断言并留注，不静默忽略。
+  const bridge = server as unknown as {
+    fallbackRequestHandler?: (request: never) => Promise<never>;
+    fallbackNotificationHandler?: (notification: never) => Promise<void>;
+  };
+
+  // 未注册的**请求**：交给上游，结果与错误都保持上游的形状。
+  // 宽松 schema `z.unknown()` 是「不校验」在类型上的表达（`Protocol.request` 的 schema 形参是
+  // `AnySchema` 而非 `AnyObjectSchema`）—— 上游结果的形状由上游决定，桥不替它把关。
+  bridge.fallbackRequestHandler = async (request) =>
+    upstream.client.request(request, z.unknown(), requestOptions) as never;
+
+  // 未注册的**通知**：`cancelled` 必须**显式注册**才能转发 —— SDK 在 `Protocol` 构造函数里就内置
+  // 注册了 `cancelled` → `_oncancel` 与 `progress` → `_onprogress`，它们**永远落不到** fallback。
+  // 不覆盖它，客户端取消后上游会继续跑完（「取消」形同无效）。
+  server.setNotificationHandler(CancelledNotificationSchema, async (notification) => {
+    await upstream.client.notification(notification);
+  });
+  bridge.fallbackNotificationHandler = async (notification) => {
+    await upstream.client.notification(notification);
+  };
 
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: () => randomUUID(),

@@ -21,7 +21,12 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
   CallToolRequestSchema,
+  CancelledNotificationSchema,
+  CompleteRequestSchema,
+  ErrorCode,
   ListToolsRequestSchema,
+  ListResourcesRequestSchema,
+  McpError,
 } from '@modelcontextprotocol/sdk/types.js';
 
 /** core 档 8 项（与 `mcp-design.md` §8.3 一致）。 */
@@ -50,6 +55,8 @@ function argValue(name) {
 
 const envDumpPath = argValue('--env-dump');
 const closedMarkerPath = argValue('--closed-marker');
+/** `--notify-log=PATH`：把到达本进程的通知追加写到该文件（`3.8` 的通知转发观测点）。 */
+const notifyLogPath = argValue('--notify-log');
 
 /**
  * `--fail-before-initialize`：启动即退出。
@@ -98,8 +105,64 @@ const memories = [];
 
 const server = new Server(
   { name: 'fake-upstream', version: '0.0.0' },
-  { capabilities: { tools: {} } },
+  {
+    // `3.8` 新增 `resources` / `completions` 两项：下面两个 handler 的注册会被
+    // `setRequestHandler` 的能力断言检查 —— 字段名写错（如把 `completions` 写成 `completion`）
+    // 会当场抛「Server does not support completions」（`3.10` 探针首跑就踩过这个）。
+    capabilities: { tools: {}, resources: {}, completions: {} },
+  },
 );
+
+/**
+ * 观测点（`3.8` 新增）：到达本进程的**未注册通知**留痕。
+ *
+ * **必须用赋值、不能用构造参数**（`3.10` 探针实测）：`Protocol` 的构造函数只把 options 存进
+ * `this._options`、从不把 fallback 提升为实例属性 ⇒ 传构造参数会**静默丢弃**通知（连错误都不报，
+ * 测试只会看到「上游没收到」）。落文件路径走 argv（本夹具的观测体例）。
+ */
+/** 把到达本进程的通知追加写进 `--notify-log` 指定的文件（`3.8` 的通知转发观测点）。 */
+function recordNotification(notification) {
+  if (!notifyLogPath) return;
+  try {
+    fs.appendFileSync(notifyLogPath, `${JSON.stringify(notification)}\n`);
+  } catch {
+    /* 测试可观测性失败不影响协议行为 */
+  }
+}
+
+server.fallbackNotificationHandler = async (notification) => {
+  recordNotification(notification);
+};
+
+// **上游侧同样要「显式注册」才能看到取消通知**：SDK 在 `Protocol` 构造函数里内置消费了
+// `cancelled` / `progress`，它们**永远落不到** fallback —— 这条结论在**每一跳**都成立，
+// 上游也不例外（`3.10` 探针实测）。集成测试首版用「落文件」判 `cancelled` 是否到达，
+// 就因为这个得到**假阴性**（桥确实转发成功，只是上游没记录）。
+server.setNotificationHandler(CancelledNotificationSchema, async (notification) => {
+  recordNotification(notification);
+});
+
+/**
+ * 观测点（`3.8` 新增）：「**上游支持、但桥未显式注册**」的请求。
+ *
+ * 返回**非标准形状**（`resources` 不是数组）并附标记字段，两层信息一次拿到：
+ * `_upstream` 在 ⇒ 结果确实来自上游；非标准形状能穿过 ⇒ 桥用的是宽松 schema（不校验）。
+ * 桥只显式注册了 `tools/*` 与 `prompts/*`，故这条走的是桥的 fallback。
+ */
+server.setRequestHandler(ListResourcesRequestSchema, async () => ({
+  resources: 'NOT-AN-STANDARD-SHAPE',
+  _upstream: 'fake-upstream',
+}));
+
+/**
+ * 观测点（`3.8` 新增）：「**上游不支持**」的方法 —— 用**自定义 message** 抛 `-32601`。
+ *
+ * 客户端收到 `FROM_FAKE_UPSTREAM` ⇒ 这个错误**来自上游**（经桥转发）；
+ * 收到 SDK 的固定文案 `Method not found` ⇒ 错误由桥 / SDK 合成（即桥没转发）。
+ */
+server.setRequestHandler(CompleteRequestSchema, async () => {
+  throw new McpError(ErrorCode.MethodNotFound, 'FROM_FAKE_UPSTREAM');
+});
 
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
   tools: TOOL_NAMES.map((name) => ({

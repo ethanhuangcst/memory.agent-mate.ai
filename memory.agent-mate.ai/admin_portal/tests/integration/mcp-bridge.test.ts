@@ -28,6 +28,7 @@ import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type Database from 'better-sqlite3';
 import type { FastifyInstance } from 'fastify';
+import { z } from 'zod';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { loadConfig, type PortalConfig } from '../../src/config';
@@ -45,6 +46,8 @@ const FIXTURE = path.resolve(import.meta.dirname, '..', 'fixtures', 'fake-upstre
 let tmpRoot: string;
 let envDumpDir: string;
 let closedMarker: string;
+/** `3.8`：夹具把「到达上游的通知」追加写到该文件 —— 通知转发的判据（stdin/落文件留痕）。 */
+let notifyLog: string;
 let app: FastifyInstance;
 let db: Database.Database;
 let port: number;
@@ -57,13 +60,14 @@ let tokenDisabledUser: string;
 
 /** 通过桥的 spawn 覆盖把夹具变成「上游」（观测参数走 argv，见夹具注释）。 */
 function overrideCommand(): string {
-  return `node ${FIXTURE} --env-dump=${path.join(envDumpDir, 'env')} --closed-marker=${closedMarker}`;
+  return `node ${FIXTURE} --env-dump=${path.join(envDumpDir, 'env')} --closed-marker=${closedMarker} --notify-log=${notifyLog}`;
 }
 
 beforeAll(async () => {
   tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'portal-bridge-it-'));
   envDumpDir = path.join(tmpRoot, 'envdump');
   closedMarker = path.join(tmpRoot, 'closed.marker');
+  notifyLog = path.join(tmpRoot, 'notifications.log');
   fs.mkdirSync(envDumpDir, { recursive: true });
 
   cfg = loadConfig({
@@ -123,7 +127,12 @@ function mcpUrl(host: string): URL {
 
 /** 起一个走真实 HTTP 的 MCP 客户端。 */
 async function connect(token: string, host = '127.0.0.1'): Promise<Client> {
-  const client = new Client({ name: 'it-client', version: '0.0.0' }, { capabilities: {} });
+  // 声明 `roots.listChanged`：`3.8` 的通知转发用例要发 `notifications/roots/list_changed`，
+  // 而发送侧会走 `assertNotificationCapability`（不声明则抛错、通知根本发不出去）。
+  const client = new Client(
+    { name: 'it-client', version: '0.0.0' },
+    { capabilities: { roots: { listChanged: true } } },
+  );
   const transport = new StreamableHTTPClientTransport(mcpUrl(host), {
     requestInit: { headers: { authorization: `Bearer ${token}` } },
   });
@@ -408,4 +417,107 @@ describe('会话回收（纪律 2：失败与收尾都不留子进程）', () =>
     }
     expect(fs.existsSync(closedMarker), '上游子进程未在会话终止后退出').toBe(true);
   }, 30_000);
+});
+
+/**
+ * `3.8` 的三条端到端用例（`mcp-test.md` §4-F 的 `TC-M-L1-15` / `TC-M-L1-16` / `TC-M-L1-17`）。
+ *
+ * 判据真源：[`web-design.md`](../../../specs/web-portal/web-design.md) §12.5 的「转发阶段失败的分类定档」
+ * 与 [`mcp-design.md`](../../../specs/mcp/mcp-design.md) §5.6.2 的 `3.10` 实证块。
+ */
+describe('整行转发与失败诊断（`3.8`：TC-M-L1-15 / 16 / 17）', () => {
+  it('TC-M-L1-15：未注册的请求原样转发 —— 拿到上游结果（含非标准形状），而非桥合成的 Method not found', async () => {
+    const client = await connect(tokenAlice);
+    try {
+      // `resources/list` 桥**未显式注册**（桥只注册 tools/* 与 prompts/*）⇒ 走 fallback 交给上游。
+      // 客户端用宽松 schema 取回（不校验）⇒ 夹具故意返回的**非标准形状**能穿过来。
+      const result = (await client.request({ method: 'resources/list', params: {} }, z.unknown())) as {
+        resources?: unknown;
+        _upstream?: string;
+      };
+
+      expect(result._upstream, '结果未来自上游 ⇒ fallback 没生效').toBe('fake-upstream');
+      expect(result.resources, '非标准形状被拦下 ⇒ 桥在替上游校验结果').toBe(
+        'NOT-AN-STANDARD-SHAPE',
+      );
+    } finally {
+      await client.close();
+    }
+  }, 30_000);
+
+  it('TC-M-L1-15（补）：上游不支持的方法 —— 错误来自上游且 code 保留，不是桥合成的 Method not found', async () => {
+    const client = await connect(tokenAlice);
+    try {
+      // 夹具对该方法抛 `McpError(-32601, 'FROM_FAKE_UPSTREAM')`。若桥**没**转发，客户端会收到
+      // SDK 的固定文案 `Method not found` —— 这正是 `3.8` 之前的行为。
+      let caught: unknown;
+      try {
+        await client.request(
+          {
+            method: 'completion/complete',
+            params: { ref: { type: 'ref/prompt', name: 'x' }, argument: { name: 'a', value: 'b' } },
+          },
+          z.unknown(),
+        );
+      } catch (error) {
+        caught = error;
+      }
+
+      expect((caught as { code?: number })?.code, '上游错误码未被原样保留').toBe(-32601);
+      // `message` 用「包含」而非相等：SDK 每转换一次 error response 就加一层
+      // `MCP error <code>: ` 前缀（`3.10` 探针实测 3 层），上游原文被包在里面。
+      expect(String((caught as { message?: string })?.message)).toContain('FROM_FAKE_UPSTREAM');
+    } finally {
+      await client.close();
+    }
+  }, 30_000);
+
+  it('TC-M-L1-16：未注册的通知抵达上游 —— 含必须显式注册的取消通知', async () => {
+    const client = await connect(tokenAlice);
+    try {
+      const read = (): string => (fs.existsSync(notifyLog) ? fs.readFileSync(notifyLog, 'utf8') : '');
+      const before = read();
+
+      // ① 服务端**无内置 handler** 的标准通知 ⇒ 走桥的 `fallbackNotificationHandler`。
+      // 注意：`jsonrpc: '2.0'` 由 SDK 内部补，业务侧不传（`ClientNotification` 联合类型里没有该字段）。
+      await client.notification({ method: 'notifications/roots/list_changed' });
+      // ② `notifications/cancelled` ⇒ SDK 在 `Protocol` 构造函数里就内置消费了它，
+      //    **永远落不到 fallback** ⇒ 桥必须**显式注册**才能转发（见 §5.6.2 实证块）。
+      await client.notification({
+        method: 'notifications/cancelled',
+        params: { requestId: 1, reason: 'IT-CANCEL' },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 600));
+
+      const after = read();
+      expect(after.length, '通知没有穿过 stdio 抵达上游').toBeGreaterThan(before.length);
+      expect(after, '未注册通知（fallback 通道）未转发').toContain('roots/list_changed');
+      expect(after, '取消通知未转发 ⇒ 桥漏了显式注册').toContain('IT-CANCEL');
+    } finally {
+      await client.close();
+    }
+  }, 30_000);
+
+  it('TC-M-L1-17：转发失败不误报 —— 正常转发不产生 mcp_upstream_error 审计行', async () => {
+    // 分类的**精度**（`-32001` → 504 · `-32000` → 503 · 其余 → 502 `upstream_error`）由
+    // `tests/unit/bridge-failure.test.ts` 覆盖：真实的「转发阶段抛异常」路径很难稳定构造
+    //（SDK 的 5 个 throw 点都是内部状态错误，需要制造定时窗口）。
+    // 本用例测它的**另一面**：正常转发**不得**产生失败审计行（否则「失败可诊断」会退化成噪音）。
+    const before = listAudit(db, { limit: 1000, offset: 0 }).length;
+
+    const client = await connect(tokenAlice);
+    try {
+      await client.request({ method: 'resources/list', params: {} }, z.unknown());
+    } finally {
+      await client.close();
+    }
+
+    const after = listAudit(db, { limit: 1000, offset: 0 });
+    expect(after.length, '正常转发不应新增审计行').toBe(before);
+    expect(
+      after.some((row) => row.action === 'mcp_upstream_error'),
+      '正常路径产生了失败审计行 ⇒ 误报',
+    ).toBe(false);
+  }, 30_000);
+
 });

@@ -274,6 +274,13 @@ aimem-ssh ALL=(root) NOPASSWD: /usr/bin/docker exec -i ai-memory-mcp ai-memory m
 > | **`cancelled` 与 `progress` 在每一跳都被 SDK 内置消费** | SDK 在 `Protocol` 构造函数里就注册了这两个通知的 handler ⇒ 它们**永远落不到** `fallbackNotificationHandler`。要转发取消**必须显式 `setNotificationHandler(CancelledNotificationSchema, …)`**（实测覆盖后能抵达上游进程的 stdin） |
 > | **转发通知的 client 必须声明对应能力** | `Client.notification()` 会走 `assertNotificationCapability`：`roots/list_changed` 要求 `capabilities.roots.listChanged`，否则抛错并被 `_onnotification` 的 `.catch(...)` 交给 `onerror` **静默吞掉**（首轮实测：桥收到了通知、转发却无声失败）。`cancelled` / `progress` 属 `always allowed`，不受此限 |
 > | **转发阶段能捞到的异常全是内部状态错误** | `webStandardStreamableHttp.js` 的 `throw` 点仅 5 处（`Transport already started` · `Stateless transport cannot be reused across requests` · `Cannot send a response on a standalone SSE stream` · `No connection established for request ID`）⇒ **无一是上游业务错误** ⇒ 分类口径见 [`../web-portal/web-design.md`](../web-portal/web-design.md) §12.5 的「转发阶段失败的分类定档」 |
+> **`3.8` 实现轮补充（2026-09-23）**：把上表落地时的三条实作约束 ——
+>
+> | 落地 | 说明 |
+> |---|---|
+> | **类型层面也要过一层断言** | SDK 只在 `ProtocolOptions` 里声明了两个 fallback，`Protocol` 类**没有**对应属性（类型与运行时不一致）⇒ 实现里收窄断言后再赋值（`transport.ts`），并在注释里写明「为什么不是构造参数」。 |
+> | **上游 client 要声明「它打算转发的通知」所需的能力** | 桥的 `Client` 原先 `capabilities: {}` ⇒ 转发 `notifications/roots/list_changed` 会被 `assertNotificationCapability` 拦下、错误再被 `onerror` **静默吞掉**（症状是「通知没被转发」）。现声明 `roots.listChanged`；`cancelled` / `progress` 属 always allowed，不需声明。 |
+> | **`cancelled` 在每一跳都被内置消费 ⇒ 判据不能用「落文件」** | 集成测试与夹具都踩过：桥确实转发成功，但**上游**同样内置消费它、于是它的 fallback 不记录 ⇒ **假阴性**。夹具现**显式注册**该通知的 recorder；判据以「上游进程收到」为准。 |
 
 **部署顺序依赖**：`ai-memory-mcp` 先起（创建命名卷 `ai_memory_data`），门户以 `external: true` 引用。
 

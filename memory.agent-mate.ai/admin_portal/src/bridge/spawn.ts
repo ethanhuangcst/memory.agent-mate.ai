@@ -100,7 +100,15 @@ export async function spawnUpstream(options: SpawnUpstreamOptions): Promise<Upst
     stderrBuffer = lines.slice(-40).join('\n');
   });
 
-  const client = new Client({ name: 'portal-bridge', version: '0.1.0' }, { capabilities: {} });
+  // **能力声明不是可选项**（`3.10` 探针实测，见 §5.6.2 实证块）：`Client.notification()` 会走
+  // `assertNotificationCapability` —— 桥要替客户端转发 `notifications/roots/list_changed`，
+  // 上游 client 就必须声明 `capabilities.roots.listChanged`，否则**抛错**、且该错会被
+  // `_onnotification` 的 `.catch(...)` 交给 `onerror` **静默吞掉**（症状是「通知没被转发」）。
+  // `cancelled` / `progress` 属 `always allowed`，不受此限 ⇒ 本批只需声明 roots 这一项。
+  const client = new Client(
+    { name: 'portal-bridge', version: '0.1.0' },
+    { capabilities: { roots: { listChanged: true } } },
+  );
 
   try {
     await client.connect(
@@ -108,7 +116,15 @@ export async function spawnUpstream(options: SpawnUpstreamOptions): Promise<Upst
       requestTimeoutMs === undefined ? undefined : { timeout: requestTimeoutMs },
     );
   } catch (error) {
-    // 起不来时不能让半成品留下：尽力回收一次再抛出（调用方据此回 503）。
+    // 起不来时不能让半成品留下（调用方据此回 503）。
+    // **`3.8` 的「回收对齐」**：`client` 与 `transport` **两者**都要关 —— 只关 transport 会留下
+    // client 侧已注册的处理器与连接状态。顺序与成功路径的 `close()` 保持一致：先关客户端
+    // （含 stdio 传输）再关传输本身；两步都尽力而为，任一失败都不掩盖原始错误。
+    try {
+      await client.close();
+    } catch {
+      /* 回收失败不掩盖原始错误 */
+    }
     try {
       await transport.close();
     } catch {

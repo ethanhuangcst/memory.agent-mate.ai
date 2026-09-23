@@ -27,6 +27,12 @@ export const AUDIT_ACTIONS = [
   // 注意：「会话开始」的审计行（含解析出的库路径）属审计视图批次（RID D4 / Sprint 6），
   // 不在本批范围，故此处**只登记拒绝类**，避免与本批之外的动作语义混淆。
   'mcp_session_rejected',
+  /**
+   * 转发阶段失败（`3.8` 新增）—— 与「会话被拒」**分开**记：
+   * 「上游起不来」与「转发阶段出错」是两类故障，混在一个动作里排障时无从下手
+   * （见 `web-design.md` §12.5 的纪律 ④）。
+   */
+  'mcp_upstream_error',
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

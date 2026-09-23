@@ -18,6 +18,7 @@
 
 import type Database from 'better-sqlite3';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 import { parseBearerToken } from '../shared/tokens';
 import { insertAudit } from '../web/db/repo/audit';
 import { touchKeyLastUsed } from '../web/db/repo/keys';
@@ -48,10 +49,35 @@ export const BRIDGE_ERROR_CODES = {
   spawnAssertionFailed: 'spawn_assertion_failed',
   upstreamUnavailable: 'upstream_unavailable',
   upstreamTimeout: 'upstream_timeout',
+  /** 转发阶段的其他异常（SDK / 桥的内部状态错误）—— `3.8` 新增，见 §12.5。 */
+  upstreamError: 'upstream_error',
   quotaExceeded: 'QUOTA_EXCEEDED',
 } as const;
 
 export type BridgeErrorCode = (typeof BRIDGE_ERROR_CODES)[keyof typeof BRIDGE_ERROR_CODES];
+
+/**
+ * 转发阶段失败可能落到的三个码 —— `classifyRelayFailure` 的值域。
+ *
+ * 刻意收窄为三值（而不是整个 `BridgeErrorCode`）：文案表因此能写成**完整**映射、取用时无需
+ * 兜底分支 —— 那种「不会发生但必须写」的分支，正是覆盖率最容易掉的地方（本仓 `statements`
+ * 仅剩 0.08 余量）。
+ */
+export type RelayFailureCode =
+  (typeof BRIDGE_ERROR_CODES)['upstreamTimeout' | 'upstreamUnavailable' | 'upstreamError'];
+
+/**
+ * 转发阶段失败的对外文案（按分类给可读说明）。
+ *
+ * 纪律 1 的落地：只给「场景名 + 可读说明」，**不含**内部路径 / 堆栈 / 上游 stderr 原文。
+ */
+const RELAY_FAILURE_MESSAGES: Record<RelayFailureCode, string> = {
+  [BRIDGE_ERROR_CODES.upstreamTimeout]: 'Upstream MCP server did not respond in time.',
+  [BRIDGE_ERROR_CODES.upstreamUnavailable]:
+    'Upstream MCP server is unavailable; the session was closed.',
+  [BRIDGE_ERROR_CODES.upstreamError]:
+    'The bridge failed while relaying the request to the upstream server.',
+};
 
 /** 统一错误应答（纪律 1：只给错误码与可读说明）。 */
 export function sendBridgeError(
@@ -61,6 +87,30 @@ export function sendBridgeError(
   message: string,
 ): FastifyReply {
   return reply.code(status).type('application/json; charset=utf-8').send({ error: code, message });
+}
+
+/**
+ * 转发阶段异常的分类 —— `web-design.md` §12.5 的「转发阶段失败的分类定档」在代码里的投影。
+ *
+ * **依据（`3.10` 探针实测）**：本函数**能拿到**的异常全是**传输层的内部状态错误**
+ * （`webStandardStreamableHttp.js` 的 5 个 `throw` 点：`Transport already started` ·
+ * `Stateless transport cannot be reused across requests` · `Cannot send a response on a
+ * standalone SSE stream` · `No connection established for request ID`），**没有一个是上游业务错误** ——
+ * 上游业务错误的 `code` / `message` / `data` 由 SDK 自动透传回客户端（`shared/protocol.js`
+ * 的 `_onrequest` 兜底分支），根本不会进 `relay` 的 `catch`。
+ *
+ * 因此这里只做三分类，且**不再**把任何异常伪装成 `upstream_timeout` —— 那会把排障引向
+ * 「上游太慢」，而真相往往是「桥自己出了状态错」。
+ */
+export function classifyRelayFailure(error: unknown): { status: number; code: RelayFailureCode } {
+  const code = (error as { code?: unknown } | null | undefined)?.code;
+  if (code === ErrorCode.RequestTimeout) {
+    return { status: 504, code: BRIDGE_ERROR_CODES.upstreamTimeout };
+  }
+  if (code === ErrorCode.ConnectionClosed) {
+    return { status: 503, code: BRIDGE_ERROR_CODES.upstreamUnavailable };
+  }
+  return { status: 502, code: BRIDGE_ERROR_CODES.upstreamError };
 }
 
 export interface McpBridgeDeps {
@@ -94,13 +144,43 @@ export function registerMcpBridgeRoutes(app: FastifyInstance, deps: McpBridgeDep
     }
     const { user, key } = verified;
 
-    const auditRejected = (reason: string, extra: Record<string, unknown> = {}): void => {
+    /** 桥的失败审计出口（纪律 ③ 与 ④ 共用一个出口；`detail` 只放归因信息，不含机密）。 */
+    const auditFailure = (
+      action: 'mcp_session_rejected' | 'mcp_upstream_error',
+      reason: string,
+      extra: Record<string, unknown> = {},
+    ): void => {
       insertAudit(db, {
         actor: `token:${key.key_prefix}`,
-        action: 'mcp_session_rejected',
+        action,
         target: user.handle,
         detail: { reason, ...extra },
         sourceIp: request.ip,
+      });
+    };
+    const auditRejected = (reason: string, extra: Record<string, unknown> = {}): void =>
+      auditFailure('mcp_session_rejected', reason, extra);
+
+    /**
+     * 转发阶段失败：**一行日志 + 一行审计**（§12.5 纪律 ④，`3.8` 新增）。
+     *
+     * `3.8` 之前这里是空的 `catch {}` —— 线上真出现转发异常时**没有任何线索**。
+     * 动作名与「会话被拒」分开（`mcp_upstream_error`）：「上游起不来」与「转发阶段出错」
+     * 是两类故障，混在一起会让排障无从下手。
+     */
+    const onRelayFailure = (failure: { status: number; code: RelayFailureCode }): void => {
+      request.log.error(
+        {
+          event: 'mcp_relay_failed',
+          code: failure.code,
+          status: failure.status,
+          handle: user.handle,
+        },
+        'mcp_relay_failed',
+      );
+      auditFailure('mcp_upstream_error', failure.code, {
+        stage: 'relay',
+        status: failure.status,
       });
     };
 
@@ -121,7 +201,7 @@ export function registerMcpBridgeRoutes(app: FastifyInstance, deps: McpBridgeDep
         return;
       }
       existing.lastActivityAt = Date.now();
-      await relay(existing, request, reply, registry, { timeoutMs });
+      await relay(existing, request, reply, registry, { timeoutMs, onRelayFailure });
       return;
     }
 
@@ -180,7 +260,11 @@ export function registerMcpBridgeRoutes(app: FastifyInstance, deps: McpBridgeDep
       lastActivityAt: Date.now(),
     };
 
-    await relay(session, request, reply, registry, { register: true, timeoutMs });
+    await relay(session, request, reply, registry, {
+      register: true,
+      timeoutMs,
+      onRelayFailure,
+    });
   });
 }
 
@@ -202,7 +286,15 @@ async function relay(
   request: FastifyRequest,
   reply: FastifyReply,
   registry: SessionRegistry,
-  opts: { readonly register?: boolean; readonly timeoutMs?: number } = {},
+  opts: {
+    readonly register?: boolean;
+    readonly timeoutMs?: number;
+    /**
+     * 转发阶段失败时的回调 —— 由调用方决定怎么记（本仓：一行日志 + 一行审计）。
+     * `relay` 只负责**分类**与**写响应**；它拿不到 `auditRejected` 那个闭包，故不在此处碰 `db`。
+     */
+    readonly onRelayFailure?: (failure: { status: number; code: RelayFailureCode }) => void;
+  } = {},
 ): Promise<void> {
   reply.hijack(); // 交给 SDK 直接写 Node 的 ServerResponse（SSE 等流式响应需要）
 
@@ -212,15 +304,22 @@ async function relay(
     // 上游超时由 `createBridgeTransport` 的 `requestTimeoutMs` 加在**上游请求**上，
     // 以 MCP 层错误返回（见 `transport.ts` 的说明）。
     await session.transport.handleRequest(request.raw, reply.raw, request.body);
-  } catch {
-    // 转发阶段的同步异常：销毁会话（含上游），避免半死连接继续占用子进程（纪律 2）。
+  } catch (error) {
+    // 转发阶段的异常：销毁会话（含上游），避免半死连接继续占用子进程（纪律 2）。
     await registry.close(session);
+
+    // `3.8` 的「失败可诊断」：按来源分类（§12.5 的三层口径），不再一律报 `upstream_timeout`
+    // —— 那会把「桥自己出了状态错」误导成「上游太慢」。
+    const failure = classifyRelayFailure(error);
+    opts.onRelayFailure?.(failure);
+
     if (!reply.raw.headersSent) {
-      reply.raw.writeHead(504, { 'content-type': 'application/json; charset=utf-8' });
+      // 响应头**未**发出 ⇒ 可以用状态码表达（分类见 §12.5）。
+      reply.raw.writeHead(failure.status, { 'content-type': 'application/json; charset=utf-8' });
       reply.raw.end(
         JSON.stringify({
-          error: BRIDGE_ERROR_CODES.upstreamTimeout,
-          message: 'Upstream MCP server did not respond in time.',
+          error: failure.code,
+          message: RELAY_FAILURE_MESSAGES[failure.code],
         }),
       );
     } else if (!reply.raw.writableEnded) {

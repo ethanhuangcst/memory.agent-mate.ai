@@ -218,6 +218,10 @@
 | TC-M-L1-16 | **未注册的通知原样转发（含取消）** | ① 服务端无内置 handler 的通知经 fallback 抵达上游；② **`notifications/cancelled` 必须显式注册才能转发** —— SDK 在其构造函数里就内置消费了 `cancelled` / `progress`，**fallback 收不到它们**；判据以**上游进程的 stdin 留痕**为准，**不以**「上游是否处理它」为准（上游同样会内置消费） | `MS3 AC-M3.1` | Sprint 4 `3.8` |
 | TC-M-L1-17 | **转发阶段的失败分类与诊断** | ① 上游业务错误（`-32601` / `-32602` 等）**由 SDK 自动透传**且 `code` **原样保留**（`message` 会被逐层加 `MCP error <code>: ` 前缀，层数 = 经过的 SDK 客户端数）；② 转发阶段的内部异常按来源分类（`-32001` → **504** · `-32000` → **503** · 其余 → **502 `upstream_error`**）；③ **每一类都留一行日志 + 一行审计**（动作 `mcp_upstream_error`），错误体不含内部路径 / 堆栈 / 上游 stderr 原文；④ 上游握手失败时 `client` 与 `transport` **两者**都被关闭（不留半成品） | `MS1 AC-M1.2` · [`../web-portal/web-design.md`](../web-portal/web-design.md) §12.5 的「转发阶段失败的分类定档」 | Sprint 4 `3.8` |
 
+> **`3.8` 的自动化落点（2026-09-23）**：`TC-M-L1-15` → `admin_portal/tests/integration/mcp-bridge.test.ts` 的两条（上游支持的未注册请求拿到**上游结果**、含非标准形状；上游不支持的方法拿到**上游的** `-32601` 且 `code` 保留）；`TC-M-L1-16` → 同一文件的「未注册的通知抵达上游」（含 `cancelled`）；`TC-M-L1-17` → `tests/unit/bridge-failure.test.ts`（三分类的**精度**）+ `tests/integration/mcp-bridge-relay-failure.test.ts`（**端到端**：注入假传输**确定地**触发 `relay` 的失败分支，验证 504 / 503 / 502、审计动作 `mcp_upstream_error`、以及「响应头已发 ⇒ 只能结束流」）。
+> **为什么 `TC-M-L1-17` 要注入假传输**：SDK 的 5 个 `throw` 点全是「不该发生」的内部状态错误，正常的协议输入会被 SDK **优雅处理**（实测：发一个无 `method` 的响应消息 ⇒ SDK 回 **202** 而不抛错）⇒ 不注入就无法确定地覆盖该分支；而「转发失败」正是本行的核心判据，不能只靠单测。
+> **上游侧同样要「显式注册」才能观测到取消通知**：夹具（`tests/fixtures/fake-upstream.mjs`）如果只用 `fallbackNotificationHandler` 记录，会因 SDK 内置消费 `cancelled` 而**漏记**（首版集成测试正是这样得到假阴性的）—— 夹具现已显式注册该通知的 recorder。
+
 > **与 `web-test.md` 的分工**：`TC-P-*` 是**门户侧**用例（页面 / 账号 / 令牌 / 审计 / 启动自检 / 容器加固），`TC-M-*` 是**跨进程与上游契约**用例。`TC-M-L1-03` / `TC-M-L1-04` 与门户侧 `TC-P-L1-07` / `TC-P-L3-05` 断言**同一隔离行为但视角不同**（前者断言契约判据，后者断言门户集成路径），**不视为重复**。
 
 ---
