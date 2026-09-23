@@ -77,14 +77,15 @@ describe('runSelfCheck：本批可验的项', () => {
     expect(pick(results, 'views_root').status).toBe('pass');
     expect(pick(results, 'static_root').status).toBe('pass');
 
-    // §3.4 其余三项属 PSP-W2：必须是 deferred，绝不能被当成 pass
+    // §3.4 其余三项归属 §4.3「web-portal:启动自检」：必须是 deferred，绝不能被当成 pass
+    // （接入批次 `3.1` 交付后这三项仍 deferred —— 归属行未变，故断言随之改指 `4.3`，避免文案指回已交付批次）
     for (const name of [
       'embeddings_reachable_1024',
       'binary_version_matches_lock',
       'launch_template_assertions',
     ]) {
       expect(pick(results, name).status).toBe('deferred');
-      expect(pick(results, name).detail).toContain('PSP-W2');
+      expect(pick(results, name).detail).toContain('4.3');
     }
 
     expect(hasBlockingFailure(results)).toBe(false);

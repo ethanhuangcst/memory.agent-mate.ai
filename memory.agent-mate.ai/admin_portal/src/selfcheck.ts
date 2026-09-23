@@ -50,11 +50,13 @@ export function runSelfCheck(cfg: PortalConfig): SelfCheckResult[] {
   results.push(checkDirReadable('views_root', cfg.viewsRoot));
   results.push(checkDirReadable('static_root', cfg.staticRoot));
 
-  // 6-8. §3.4 的其余三项 —— 属 PSP-W2 接入批次，显式登记为未启用（不伪装通过）
-  const bridgeBatch = '随 PSP-W2「端到端接入」启用（本批不 spawn 上游子进程）';
-  results.push({ name: 'embeddings_reachable_1024', status: 'deferred', detail: bridgeBatch });
-  results.push({ name: 'binary_version_matches_lock', status: 'deferred', detail: bridgeBatch });
-  results.push({ name: 'launch_template_assertions', status: 'deferred', detail: bridgeBatch });
+  // 6-8. §3.4 的其余三项 —— 归属 Sprint 4 `4.3`「web-portal:启动自检」（判据与镜像侧落地都在那一行）。
+  //      接入批次（`3.1`）只保证「起得来上游子进程」，不替自检定判据 ⇒ 仍显式登记为未启用（不伪装通过）。
+  const selfcheckBatch =
+    '待 §4.3「web-portal:启动自检」落地（`3.1` 已能 spawn 上游，三项自检的判据与镜像侧验收属 `4.3`）';
+  results.push({ name: 'embeddings_reachable_1024', status: 'deferred', detail: selfcheckBatch });
+  results.push({ name: 'binary_version_matches_lock', status: 'deferred', detail: selfcheckBatch });
+  results.push({ name: 'launch_template_assertions', status: 'deferred', detail: selfcheckBatch });
 
   return results;
 }
