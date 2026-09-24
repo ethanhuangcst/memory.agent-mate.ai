@@ -6,6 +6,8 @@
  *  - 集成测试用**假上游** ⇒ 完全离线、可重复，验的是**桥的归属校验与 spawn 计数**；
  *  - 本执行体用**真上游**（容器里的 ai-memory）⇒ 验的是 `AC4.5` / `AC4.6` 那两条
  *    **指向容器内**的判据：**一个会话一个真进程**，以及**别人的库/临时文件不出现**。
+ *  - 另含 `3.7`「跨用户隔离」的四条判据（`TC-M-L1-23·1`–`·4`）：**经同一门户实例**的双向互不可见、
+ *    灵敏度对照、按 id 直取不可见、两侧审计行各记自己的解析后库路径（判据形状由 `3.15` 探针实测钉死）。
  *
  * 判据形状由 `3.12` 探针（`probes/session-isolation-probe/`）实测钉死，含两处反直觉点：
  *  ① `/proc/<pid>/environ` **同 uid 读得到、`-u 0` 读不到** ⇒ 判据不借 root；
@@ -185,6 +187,8 @@ function main(): Promise<number> {
         token: issued.plaintext,
         sessionId: (transport as unknown as { sessionId?: string }).sessionId ?? '',
         toolCount: tools.tools.length,
+        /** 工具名清单 —— `3.7` 的「按 id 直取」判据要**从清单里取** `memory_get`，不硬编码猜测。 */
+        tools: tools.tools.map((tool) => tool.name),
       };
     };
     const closeSession = async (session: {
@@ -232,13 +236,31 @@ function main(): Promise<number> {
     );
 
     // ---------------------------------------------------------------- ② 无他人痕迹
+    //
+    // **标记提升为外层变量**（原先是循环局部）：`3.7` 的跨用户判据要**复用同一批标记**去召回 ——
+    // 若为此再写一次，同一会话就会在库里留下两条，判据语义随之漂移。故这里只写一次、两个用途共用。
+    const markerA = `SESSION-PROBE-${HANDLE_A}-${Date.now()}`;
+    const markerB = `SESSION-PROBE-${HANDLE_B}-${Date.now()}`;
+    /** A 的记忆 id —— `3.7` 的「按 id 直取」判据要拿它去给 B 取。 */
+    let memoryIdA = '';
     for (const session of [a, b]) {
-      const marker = `SESSION-PROBE-${session.handle}-${Date.now()}`;
+      const marker = session.handle === HANDLE_A ? markerA : markerB;
       const stored = await session.client.callTool({
         name: 'memory_store',
         arguments: { title: `会话隔离探针 ${marker}`, content: `${marker} 经门户 /mcp 写入真上游` },
       });
-      if (stored.isError) info(`${session.handle} memory_store isError=true（继续判文件足迹）`);
+      if (stored.isError) {
+        info(`${session.handle} memory_store isError=true（继续判文件足迹）`);
+        continue;
+      }
+      if (session.handle === HANDLE_A) {
+        const raw = (stored.content as { type: string; text?: string }[] | undefined)?.[0]?.text ?? '';
+        try {
+          memoryIdA = (JSON.parse(raw) as { id?: string }).id ?? '';
+        } catch {
+          memoryIdA = '';
+        }
+      }
     }
     const snap1 = snapshot();
     const added = [...snap1.keys()].filter((key) => !snap0.has(key)).sort();
@@ -270,6 +292,88 @@ function main(): Promise<number> {
     } else {
       info(`跳过旁观者对照：容器内没有 ${bystanderDir}（该断言的基准不存在，如实登记而非伪装通过）`);
     }
+
+    // ---------------------------------------------------------------- ⑤ `3.7` 跨用户隔离（`TC-M-L1-23`）
+    //
+    // **两条硬约束**（`3.14` / `3.15` 探针实测钉死；改本段前先读这两条）：
+    //  ① 召回类判据一律按「**回包里有没有那个标记**」判，**禁止**按 `memory_recall` 的 `count` 判 ——
+    //     它是**语义混合检索**，`count` = **返回条数**（从未写入的标记同样会返回相关命中 ⇒ `count:0`
+    //     **永不出现**；库里多一条记忆就 `+1`）⇒ 按 `count` 写的断言**必然假失败**。
+    //  ② 每条**否定型**判据必须配一条「**必须为正向**」的灵敏度对照 —— 否则「B 的检索环境坏掉」
+    //     也会让「不含」通过（**假绿**）。
+    //
+    // **判据必须「经门户」**：本段用的是**同一个门户实例**上的两条令牌；`scripts/iso-probe.sh`
+    // （Sprint 3）的**上游级**证据（显式 env 直连上游）是补充，**不能替代**它 —— 「令牌 → handle →
+    // 库路径」这一步恰恰在门户（`RID R1` / `R2` 的靶心）。
+    const recallText = async (session: { client: Client }, marker: string): Promise<string> =>
+      JSON.stringify(
+        (await session.client.callTool({ name: 'memory_recall', arguments: { context: marker } }))
+          .content ?? '',
+      );
+
+    const bRecallA = await recallText(b, markerA);
+    const aRecallB = await recallText(a, markerB);
+    check(
+      'TC-M-L1-23·1',
+      !bRecallA.includes(markerA) && !aRecallB.includes(markerB),
+      '**经同一门户实例双向互不可见**：B 召回 A 的标记、A 召回 B 的标记 ⇒ 回包**均不含**',
+      `B←A: ${bRecallA.slice(0, 60)} | A←B: ${aRecallB.slice(0, 60)}`,
+    );
+
+    // 灵敏度对照（硬约束 ②）：两侧各自召回**自己**写的，必须命中。
+    const aRecallOwn = await recallText(a, markerA);
+    const bRecallOwn = await recallText(b, markerB);
+    check(
+      'TC-M-L1-23·2',
+      aRecallOwn.includes(markerA) && bRecallOwn.includes(markerB),
+      '**灵敏度对照（必须为正向）**：两侧各自都能召回**自己**写的 ⇒ 上一条不是「检索环境坏掉」造成的**假绿**',
+      `A←A: ${aRecallOwn.slice(0, 40)} | B←B: ${bRecallOwn.slice(0, 40)}`,
+    );
+
+    // 按 id 直取（`TC-M-L1-04`）：工具名从 `open()` 回传的清单里取，不硬编码。
+    const getTool = a.tools.find((name) => name === 'memory_get');
+    if (!getTool || !memoryIdA) {
+      info(
+        `跳过「按 id 直取」判据：${
+          getTool ? 'A 的写入回包未给出记忆 id' : '上游未提供 memory_get 工具'
+        }（如实登记而非伪装通过）`,
+      );
+    } else {
+      const got = await b.client.callTool({ name: getTool, arguments: { id: memoryIdA } });
+      const gotText = JSON.stringify(got.content ?? '');
+      check(
+        'TC-M-L1-23·3',
+        !gotText.includes(markerA),
+        '**按 id 直取不可见**：B 用 A 的记忆 id 调 `memory_get` ⇒ 回包**不含** A 的内容',
+        `id=${memoryIdA.slice(0, 12)}… | ${gotText.slice(0, 60)}`,
+      );
+    }
+
+    // 端到端取证：两侧会话的审计行各记**自己**的**解析后**库路径（`AC4.3` 的机制由 `3.4` 交付）。
+    const openedRows = db
+      .prepare(
+        `SELECT target, detail_json FROM audit WHERE action = 'mcp_session_opened' ORDER BY id DESC LIMIT 20`,
+      )
+      .all() as { target: string; detail_json: string }[];
+    const dbPathOf = (handle: string): string => {
+      const row = openedRows.find((entry) => entry.target === handle);
+      if (!row) return '';
+      try {
+        return (JSON.parse(row.detail_json) as { dbPath?: string }).dbPath ?? '';
+      } catch {
+        return '';
+      }
+    };
+    const pathA = dbPathOf(HANDLE_A);
+    const pathB = dbPathOf(HANDLE_B);
+    check(
+      'TC-M-L1-23·4',
+      pathA === `/data/users/${HANDLE_A}/ai-memory.db` &&
+        pathB === `/data/users/${HANDLE_B}/ai-memory.db` &&
+        pathA !== pathB,
+      '两侧会话的审计行（`mcp_session_opened`）各记**自己**的解析后库路径且互不相同',
+      `A=${pathA || '(缺)'} · B=${pathB || '(缺)'} · 命中 ${openedRows.length} 行`,
+    );
 
     // ---------------------------------------------------------------- ③ 收尾与禁池化
     await closeSession(a);

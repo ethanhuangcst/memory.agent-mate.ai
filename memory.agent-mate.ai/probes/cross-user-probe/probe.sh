@@ -48,13 +48,15 @@ PORTAL_PID=""
 log() { printf '%s\n' "$*"; }
 
 cleanup() {
+  local rc=$?
+  #  **退出码必须在**第一行**就抓**：`$?` 会被**下一条命令**覆盖 —— 原来把它放在 `if` 之后，
+  #  而 `if` 的条件为假时其自身退出码就是 0 ⇒ `rc` 恒为 0 ⇒ 10 / 20 / 30 全被吞掉（门禁在 CI 里永不红）。
   # 只在**主 shell** 里清理：子 shell 会继承 EXIT trap，若在子 shell 里执行清理，会在主流程还没
-  # 跑完时就把临时目录与测试用户目录删掉（实测踩过）。**必须用 `if`** —— 写成 `[ ... ] && return`
-  # 时条件为假会让该语句退出码为 1，下一行 `local rc=$?` 就读成 1（实测踩过）。
+  # 跑完时就把临时目录与测试用户目录删掉（实测踩过）。**子 shell 保护用 `if`**（别写成 `[ ... ] && return`）
+  # （上面 `if` 里那条 `return 0` 是**子 shell** 保护；退出码见更上面那两行。）
   if [ "${BASH_SUBSHELL:-0}" -ne 0 ]; then
     return 0
   fi
-  local rc=$?
   if [ -n "$PORTAL_PID" ] && kill -0 "$PORTAL_PID" 2>/dev/null; then
     kill "$PORTAL_PID" 2>/dev/null || true
     wait "$PORTAL_PID" 2>/dev/null || true
