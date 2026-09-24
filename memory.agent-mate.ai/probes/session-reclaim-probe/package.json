@@ -1,0 +1,12 @@
+{
+  "name": "session-reclaim-probe",
+  "private": true,
+  "type": "module",
+  "description": "3.13 探针：为 Sprint 4 3.4「mcp:会话回收」定档判据（自包含，不入制品）",
+  "scripts": {
+    "probe": "node probe.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.30.0"
+  }
+}

@@ -320,6 +320,18 @@ aimem-ssh ALL=(root) NOPASSWD: /usr/bin/docker exec -i ai-memory-mcp ai-memory m
 >
 > **由上述结论导出的判据口径（`3.3` 直接照用）**：① 数进程用 **cmdline 精确前缀 + 容器名参数化** ⇒ 本机借壳（门户在宿主 + `docker exec`）与生产 β′（门户在容器内直接 spawn）**同一套判据**；② 判「谁的进程」用**同 uid** 读 `environ`；③ 判「他人痕迹」用 `find -printf` **快照差分** + **共享审计日志豁免** + **旁观者用户库零变化**；④ 收尾**必须复验**（端口释放 + 容器内归零）。跑法见 [`../mcp/mcp-test.md`](../mcp/mcp-test.md) §4-G，用例为同文件 §4-F 的 `TC-M-L1-21` / `TC-M-L1-22` / `TC-M-L3-05`。
 
+> **`3.13` 探针补充的事实（2026-09-24，为 `3.4` 定档；探针与原始输出见 [`../../probes/session-reclaim-probe/`](../../probes/session-reclaim-probe/)）**：回答「`AC3.4` 的『子进程已退出 + 不残留**僵尸进程**或**占用中的库文件句柄**』**怎么判才算判死**」，以及 SDK 的 `pid` 字段在两种拓扑下**指向谁**，**8/8 断言 PASS、退出码 `0`、两次复跑一致**。
+>
+> | 结论 | 实测与依据 |
+> |---|---|
+> | **`StdioClientTransport.pid` 在借壳下指向宿主的 `docker` 客户端，不是上游进程** | 实测 `pid=7484`（宿主的 `docker -H … exec -i -e AI_MEMORY_DB=…`）vs 容器内真上游 `19936`；`pid` **连接后**才有值、`close()` 后回 `null`。⇒ [`../web-portal/web-design.md`](../web-portal/web-design.md) §12.5 声明的会话记录字段 `child` 必须按「**门户侧被 spawn 的那个进程**」定义，**不得**当「上游进程 pid」用；生产 β′（门户容器内直接 spawn）下才等于上游二进制进程 |
+> | **「不残留占用中的库文件句柄」有直接判据** | 扫 `/proc/<pid>/fd` 找指向 `/data/users/<handle>/ai-memory.db*` 的符号链接：会话**中**该会话进程持有 **4** 个（`db` / `-shm` / `-wal` / `.deferred-audit.journal`），**收尾后 0 个** ⇒ 判据**双向都被实测过**（正向 4 个 / 负向 0 个），不是「无则通过」型 |
+> | **「不残留僵尸进程」的判据必须按 `comm` 认名** | 僵尸的 `/proc/<pid>/cmdline` **是空的**（进程已死）⇒ 按 cmdline 前缀计数**永远抓不到僵尸**；只能扫 `/proc/<pid>/stat` 的 `state=Z` 并按该行 `comm`（第 2 字段，需先剥掉到最后一个 `)`，因为它可能含空格）认名。**边界如实登记**：本机环境未产生过僵尸 ⇒ 该判据只证「可读且当前为空」，**未证「能检出僵尸」** |
+> | **SDK 不提供任何空闲机制** | `shared/protocol.js` 只有**每请求**超时（`DEFAULT_REQUEST_TIMEOUT_MSEC`）与 ping 自动 pong ⇒ 「空闲超时 / 单会话最长时长」必须**自己起计时器**；取值归 `4.1` |
+> | **回收的五类触发里，代码只实现了两条** | 客户端断开 / HTTP 流结束（`transport.onclose` 级联 `upstream.close()` ✅）；**空闲超时 · 单会话最长时长 · 吊销事件**（❌ 未实现）⇒ `3.4` 的实质工作 |
+>
+> **由上述结论导出的判据口径（`3.4` 直接照用）**：① 「归零」按**三层**判 —— 进程数回落基线 · 无库句柄持有者 · 无僵尸；② 观测一律在**容器内**（同 uid 读 `/proc`，**不借 `-u 0`**；`-u 0` 只用于建/删测试用户目录）；③ 吊销回收**只动属于本令牌的会话**（`3.3` 的不可侵扰纪律）。契约与用例落点见 [`../web-portal/web-design.md`](../web-portal/web-design.md) §12.5 的「会话回收的实现口径」与 [`../web-portal/web-test.md`](../web-portal/web-test.md) §2 的 `3.4` 落点。
+
 **部署顺序依赖**：`ai-memory-mcp` 先起（创建命名卷 `ai_memory_data`），门户以 `external: true` 引用。
 
 #### 5.6.3 启动机制 β′ 与制品契约
