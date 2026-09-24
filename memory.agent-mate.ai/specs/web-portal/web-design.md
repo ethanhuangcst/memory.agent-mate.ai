@@ -444,6 +444,7 @@ admin_portal/
 | **spawn 失败**（二进制缺失 / 权限 / 上游启动即退） | **503** | `upstream_unavailable` | 必写审计行 · 错误体只含场景名，**不含上游 stderr 原文** |
 | **上游超时** | **视时点而定**（见下方实测机制） | `upstream_timeout` / MCP 层错误 | **不能用单一状态码表达** —— 实测分三支（握手期 503 · 转发期 MCP 层错误 · 转发阶段同步异常 504） |
 | **转发阶段的其他异常**（SDK / 桥的**内部状态错误**，非上游业务错误） | **502** | `upstream_error` | **新增行（2026-09-23 `3.10` 探针定档）** · 必写审计行 + 日志 · **`504` 只留给超时** —— 把内部错误报成「上游超时」会把排障引向错误方向（实测这些异常的来源只有：`Transport already started` / `Stateless transport cannot be reused` / `Cannot send a response on a standalone SSE stream` / `No connection established for request ID`） |
+| **门户自建会话限流**（`4.1`：每 key / 全局并发上限被撞到） | **429** | `SESSION_LIMIT_EXCEEDED` | **门户自建**的护栏（不排队：**建会话之前**就拒绝 ⇒ 不新增子进程）；体里附 `scope`（`per_key` / `global`）· `limit` · `current`。与下一行**复用同一状态码、不同 `error` 串**区分来源 |
 | **配额超限**（上游返回配额错误） | **429** | `QUOTA_EXCEEDED` | **透传上游客口**（取值见 [`../knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md`](../knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md)）· 门户**不自建**计数器（`AC7.1`） |
 | **客户端断开** | 无响应（连接已断） | — | 仅回收子进程并注销会话（`AC3.4`） |
 
@@ -511,10 +512,10 @@ admin_portal/
 
 | 项 | 取值来源 | 超限行为 |
 |---|---|---|
-| 每 key 并发上限 | 配置项 | **明确拒绝**（不排队致死，T5 / TC-P-L3-06） |
-| 全局并发上限 | 配置项 | 同上 |
-| 空闲超时 | 配置项 | 回收会话与子进程 |
-| 单会话最长时长 | 配置项 | 同上 |
+| 每 key 并发上限 | `PORTAL_MAX_CONCURRENCY_PER_KEY`（`4.1` 已实现） | **明确拒绝**（不排队致死，T5 / TC-P-L3-06）：`429` + `SESSION_LIMIT_EXCEEDED` + `scope=per_key`；**建会话之前**拒绝 ⇒ 不新增子进程 |
+| 全局并发上限 | `PORTAL_MAX_CONCURRENCY_GLOBAL`（`4.1` 已实现） | 同上，`scope=global` |
+| 空闲超时 | `PORTAL_SESSION_IDLE_TIMEOUT`（`3.4` 机制，`4.1` 定值） | 回收会话与子进程 |
+| 单会话最长时长 | `PORTAL_SESSION_MAX_DURATION`（同上） | 同上 |
 
 > 上游 `[limits]` 的**四类强制行为**（写入量 / 存储字节 / 链接 / 向量容量）在 MCP 面生效，**其余两键是 HTTP 面专属**（stdio 不经过）——真源与实测结论见 [`../mcp/mcp-design.md`](../mcp/mcp-design.md) §5.4 / §9 L，以及 [`../mcp/mcp-stories.md`](../mcp/mcp-stories.md) `MS7`。
 
@@ -534,9 +535,9 @@ admin_portal/
 | `PORTAL_ADMIN_HOST` / `PORTAL_MCP_HOST` | 两个面各自的 Host（面隔离判据） | 是 |
 | `PORTAL_DB_PATH` | 门户库文件路径（**必须不在 `/data` 下**） | 是 |
 | ~~`PORTAL_LAUNCH_TEMPLATE`~~ | **已内建为代码常量**（`src/bridge/launch-template.ts`），**不再作为 env 键**（2026-09-23 定档）：模板是「门户对上游的唯一知识」，改它等于升级适配 ⇒ 与代码同版本控制；由**启动自检**断言其与 [`../mcp/mcp-design.md`](../mcp/mcp-design.md) §5.6.4 **逐字一致**（`TC-M-L0-01`） | 否（已内建） |
-| `PORTAL_SESSION_IDLE_TIMEOUT` / `PORTAL_SESSION_MAX_DURATION` | 空闲超时 / 单会话最长时长 | 是 |
-| `PORTAL_MAX_CONCURRENCY_PER_KEY` / `PORTAL_MAX_CONCURRENCY_GLOBAL` | 并发上限 | 是 |
-| `PORTAL_RESPONSE_MAX_BYTES` | 单响应上限（背压保护） | 是 |
+| `PORTAL_SESSION_IDLE_TIMEOUT` / `PORTAL_SESSION_MAX_DURATION` | 空闲超时 / 单会话最长时长（毫秒；**`4.1` 定值：15 min / 24 h**，生产取值见 [`../../deploy/portal.compose.yml`](../../deploy/portal.compose.yml)） | 是 |
+| `PORTAL_MAX_CONCURRENCY_PER_KEY` / `PORTAL_MAX_CONCURRENCY_GLOBAL` | 并发上限（**`4.1` 已实现**：**先判后起**、超限 `429` + `SESSION_LIMIT_EXCEEDED`；**未提供 = 不启用该护栏**；取值依据见 [`../../probes/session-limit-probe/README.md`](../../probes/session-limit-probe/README.md)：每会话 ~27 MiB、4 路并发每会话仍 ~0.75 s） | 是 |
+| `PORTAL_RESPONSE_MAX_BYTES` | 单响应上限（背压保护）—— **`4.1` 如实降级登记：本轮未实现**（`4.1` 的验收条件是四个**并发/超时**上限，**不含**响应体量；且它要动转发热路径、而 `route.ts` 的覆盖率余量极薄）⇒ 归 **Sprint 6 容量行** | **否**（未实现前不得写成必填） |
 | `PORTAL_LAUNCH_OVERRIDE` | **开发期命令覆盖**（2026-09-23 随 `3.1` 落地）：覆盖 launch 模板的「二进制那一段」（可给多段，如 `docker -H <uri> exec -i <容器> <二进制>`），模板 argv 的其余部分照旧接在其后。**仅 `PORTAL_ENV=development` 生效；production 下出现即拒绝启动**（与自签 JWT / 开发登录入口同构，见 [`adr/ADR-015`](../adr/ADR-015-dev-login-entry-config-gated-registration.md)）。存在的理由：本机是 macOS，执行不了镜像内的 linux 二进制。**它的语义边界**：只覆盖 `command`/`args`；**env 透传由覆盖命令自己负责** —— 例如借壳 `docker exec` 时必须显式 `-e AI_MEMORY_DB -e AI_MEMORY_AGENT_ID …`，否则模板注入的四项 env 进不了容器：`memory_store` 照样成功，但数据落到**共享主库**、身份退回上游默认值（即隔离静默失效，实测踩过） | 否 |
 | `DASHSCOPE_API_KEY` | 门户专用 MaaS key（与主 key 同 workspace，§3.4 前置 2） | 是 |
 | `PORTAL_I18N_DEFAULT` | 默认语言（`zh-CN`） | 否 |

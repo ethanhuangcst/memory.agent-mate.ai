@@ -26,6 +26,7 @@ import { getUserById } from '../web/db/repo/users';
 import { verifyToken } from '../web/services/keys';
 import type { PortalConfig } from '../config';
 import { SessionRegistry, type BridgeSession, type ReapLimits } from './session';
+import { decideSessionLimit } from './limits';
 import { spawnUpstream } from './spawn';
 import { createBridgeTransport } from './transport';
 // 断言失败的原因枚举与客户端文案都由 `user-db-path.ts` 持有（该模块拥有「断言」这件事的全部词汇），
@@ -72,6 +73,17 @@ const UNAUTHORIZED_MESSAGE =
   'Authentication required: a valid bearer token is needed to open an MCP session.';
 
 /** 失败面错误码 —— `web-design.md` §12.5 映射表在代码里的投影。 */
+/**
+ * `4.1`：门户**自建**会话限流的对外文案。
+ *
+ * **为什么复用 `429` 却另给 `error` 串**：`429` 在 §12.5 里已给了「**上游配额超限**」
+ * （`QUOTA_EXCEEDED`，**透传上游客口**）。门户自建限流复用**同一状态码**（HTTP 语义一致：
+ * too many requests），但用**不同的 `error` 串**（`SESSION_LIMIT_EXCEEDED`）标明**来源是门户** ——
+ * 客户端不必靠状态码猜「这次撞的是上游配额还是门户护栏」。
+ */
+const SESSION_LIMIT_MESSAGE =
+  '会话数已达上限（门户自建的并发护栏）：请先结束其它会话或稍后重试。';
+
 export const BRIDGE_ERROR_CODES = {
   unauthorized: 'unauthorized',
   wrongFace: 'wrong_face',
@@ -81,6 +93,8 @@ export const BRIDGE_ERROR_CODES = {
   /** 转发阶段的其他异常（SDK / 桥的内部状态错误）—— `3.8` 新增，见 §12.5。 */
   upstreamError: 'upstream_error',
   quotaExceeded: 'QUOTA_EXCEEDED',
+  /** `4.1`：**门户自建**的会话并发上限被撞到（与上一条的「上游配额」用**不同 `error` 串**区分）。 */
+  sessionLimitExceeded: 'SESSION_LIMIT_EXCEEDED',
 } as const;
 
 export type BridgeErrorCode = (typeof BRIDGE_ERROR_CODES)[keyof typeof BRIDGE_ERROR_CODES];
@@ -114,8 +128,16 @@ export function sendBridgeError(
   status: number,
   code: BridgeErrorCode,
   message: string,
+  /**
+   * `4.1` 新增（**可选**，向后兼容）：附带的**结构化字段**（如限流的 `scope` / `limit` / `current`）。
+   * 只允许数字与字符串 —— 本函数是**对外**出口，不能把内部对象（令牌、库路径）带出去。
+   */
+  extra?: Record<string, string | number>,
 ): FastifyReply {
-  return reply.code(status).type('application/json; charset=utf-8').send({ error: code, message });
+  return reply
+    .code(status)
+    .type('application/json; charset=utf-8')
+    .send({ error: code, message, ...extra });
 }
 
 /**
@@ -304,6 +326,44 @@ export function registerMcpBridgeRoutes(app: FastifyInstance, deps: McpBridgeDep
       existing.lastActivityAt = Date.now();
       await relay(existing, request, reply, registry, { onRelayFailure });
       return;
+    }
+
+    // ---- `4.1`：门户自建的**并发护栏** —— **先判后起**（超限时**不 spawn**）----
+    //
+    // 计数由 `registry` **现算**（不维护第二套计数器 ⇒ 不会漏释放）；判定在 `limits.ts` 的**纯函数**里
+    // （多分支不进装配层，理由见该文件头）。两个限额都未配置 ⇒ 恒放行（未配置即不启用）。
+    //
+    // **判据口径（`3.17` 探针导出）**：「**不排队致死**」= **HTTP 码 + 响应时间 + 不新增子进程**三项同断 ——
+    // 本处**在建会话之前**拒绝，故响应里既没有排队等待，也没有新起的上游进程。
+    {
+      // 先剔掉「传输已关闭、条目还在」的会话：客户端 `DELETE` 到下一次 reap 之间，它们仍会被算进
+      // 在册数（那是**容量泄漏**，会把用户挡在自己的旧会话上）。这一步是**懒清理**，确定性且幂等。
+      await registry.pruneClosed();
+      const current = registry.countAll();
+      const decision = decideSessionLimit(current, registry.countByKey(key.id), {
+        perKey: cfg.maxConcurrencyPerKey,
+        global: cfg.maxConcurrencyGlobal,
+      });
+      if (decision) {
+        insertAudit(db, {
+          actor: `token:${key.key_prefix}`,
+          action: 'mcp_session_rejected',
+          target: user.handle,
+          detail: {
+            reason: 'session_limit_exceeded',
+            scope: decision.scope,
+            limit: decision.limit,
+            current,
+          },
+          sourceIp: request.ip,
+        });
+        sendBridgeError(reply, 429, BRIDGE_ERROR_CODES.sessionLimitExceeded, SESSION_LIMIT_MESSAGE, {
+          scope: decision.scope,
+          limit: decision.limit,
+          current,
+        });
+        return;
+      }
     }
 
     // ---- 第 3 步：新建会话：spawn 上游 → 建传输桥 → 转发（转发后才登记）----

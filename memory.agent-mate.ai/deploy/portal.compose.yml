@@ -46,9 +46,15 @@ services:
       PORTAL_VIEWS_ROOT: /app/src/web/views
       PORTAL_STATIC_ROOT: /app/assets
 
-      # ── 会话：空闲超时 / 单会话最长时长（毫秒；`4.1` 定值，本处给保守初值）──────────
-      PORTAL_SESSION_IDLE_TIMEOUT: "900000"
-      PORTAL_SESSION_MAX_DURATION: "86400000"
+      # ── 会话：空闲超时 / 单会话最长时长（毫秒；`4.1` 定值）──────────────────────────
+      PORTAL_SESSION_IDLE_TIMEOUT: "900000" # 15 min
+      PORTAL_SESSION_MAX_DURATION: "86400000" # 24 h
+
+      # ── `4.1` 会话并发护栏：**先判后起**，超限回 `429` + `SESSION_LIMIT_EXCEEDED` ────────
+      # 取值依据（`3.17` 探针实测）：每会话约 **27 MiB**、4 路并发下每会话仍 ~0.75 s、
+      # **容器无内存上限** ⇒ 门户侧是唯一约束。1–5 人规模取保守值；**去掉任一键 = 不启用该项**。
+      PORTAL_MAX_CONCURRENCY_PER_KEY: "2"
+      PORTAL_MAX_CONCURRENCY_GLOBAL: "4"
 
       # ── 身份：由 Cloudflare Access 认定（门户不自建账号；§12.4 与 web-design §6）──────
       PORTAL_ACCESS_TEAM_DOMAIN: ${PORTAL_ACCESS_TEAM_DOMAIN:?set PORTAL_ACCESS_TEAM_DOMAIN in portal.env}

@@ -80,6 +80,15 @@ export interface PortalConfig {
   readonly sessionIdleTimeoutMs: number | undefined;
   /** 会话**最长时长**（毫秒）；`undefined` = 不启用该触发（`3.4`）。口径同 `sessionIdleTimeoutMs`。 */
   readonly sessionMaxDurationMs: number | undefined;
+  /**
+   * `4.1`：**每令牌（每 key）并发会话上限**；`undefined` = **不启用**该护栏。
+   *
+   * **取值归属**：本行（`4.1`）。依据见 `probes/session-limit-probe/`（实测每会话约 27 MiB、
+   * 并发 4 路下每会话仍 ~0.75 s）—— 生产取值由 `deploy/portal.compose.yml` 的 `environment` 给出。
+   */
+  readonly maxConcurrencyPerKey: number | undefined;
+  /** `4.1`：**全局并发会话上限**（该门户实例内所有令牌合计）；`undefined` = 不启用。口径同上。 */
+  readonly maxConcurrencyGlobal: number | undefined;
 }
 
 const RawEnvSchema = z.object({
@@ -120,6 +129,10 @@ const RawEnvSchema = z.object({
   // 不写死默认值（否则等于替 `4.1` 定了值）。
   PORTAL_SESSION_IDLE_TIMEOUT: z.coerce.number().int().positive().optional(),
   PORTAL_SESSION_MAX_DURATION: z.coerce.number().int().positive().optional(),
+  // `4.1` 的两个**并发上限**：正整数；**未提供 = 不启用该项护栏**（不写死默认值 ——
+  // 否则等于替生产环境定值；生产取值由 `deploy/portal.compose.yml` 给出）。
+  PORTAL_MAX_CONCURRENCY_PER_KEY: z.coerce.number().int().positive().optional(),
+  PORTAL_MAX_CONCURRENCY_GLOBAL: z.coerce.number().int().positive().optional(),
 });
 
 function formatIssues(error: z.ZodError): string {
@@ -245,5 +258,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): PortalConfig {
     upstreamApiKey: raw.DASHSCOPE_API_KEY ?? null,
     sessionIdleTimeoutMs: raw.PORTAL_SESSION_IDLE_TIMEOUT,
     sessionMaxDurationMs: raw.PORTAL_SESSION_MAX_DURATION,
+    maxConcurrencyPerKey: raw.PORTAL_MAX_CONCURRENCY_PER_KEY,
+    maxConcurrencyGlobal: raw.PORTAL_MAX_CONCURRENCY_GLOBAL,
   };
 }

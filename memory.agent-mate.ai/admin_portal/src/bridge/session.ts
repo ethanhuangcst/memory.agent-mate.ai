@@ -77,6 +77,41 @@ export class SessionRegistry {
     return this.byId.get(id);
   }
 
+  /**
+   * `4.1`：当前**在册会话数**（全局并发上限的判据）。
+   *
+   * **现算、不维护第二套计数器**：本注册表已是「在册会话」的唯一真相源（`3.3` / `3.4` 保证登记与
+   * 回收都只经它）⇒ 计数不会因为「某条回收路径忘了减一」而永久漂移。
+   */
+  countAll(): number {
+    return this.byId.size;
+  }
+
+  /** `4.1`：当前**该令牌**在册会话数（每 key 并发上限的判据）。口径同 `countAll()`。 */
+  countByKey(keyId: number): number {
+    let n = 0;
+    for (const session of this.byId.values()) {
+      if (session.keyId === keyId) n += 1;
+    }
+    return n;
+  }
+
+  /**
+   * `4.1`：**剔除「传输已关闭」的会话**（它们该走了、只是条目还没摘）并返回剔除个数。
+   *
+   * **为什么需要它**：条目只在三种时机被摘 —— `reap`（空闲/最长时长到期）· 该会话**自己的**下一次
+   * 请求（「自己的终态」那一支）· 登记失败。客户端 `DELETE` 之后到上述任一时机之间，条目仍算「在册」；
+   * 对**并发上限**而言，那就是一份**容量泄漏**：用户会被自己的旧会话挡住，直到空闲回收才放行。
+   *
+   * 故在建会话**之前**先做一次懒清理：**确定性**（不依赖后台定时器是否会跑）· **幂等**（`close()` 对
+   * 已关闭会话是安全的：先删条目、再尽力关传输与上游）· **不引入第二套生命周期**（仍只经 `close()`）。
+   */
+  async pruneClosed(): Promise<number> {
+    const closed = [...this.byId.values()].filter((session) => session.transport.isClosed());
+    for (const session of closed) await this.close(session);
+    return closed.length;
+  }
+
   /** 注销并**不**负责关闭上游（关闭由调用方在拿到对象后执行，便于记录失败）。 */
   remove(id: string): BridgeSession | undefined {
     const session = this.byId.get(id);
