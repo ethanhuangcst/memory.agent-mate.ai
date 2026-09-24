@@ -215,21 +215,34 @@ export function registerMcpBridgeRoutes(app: FastifyInstance, deps: McpBridgeDep
     };
 
     // ---- 第 2 步：复用已有会话（要求同一把令牌，防止跨用户接管会话）----
+    //
+    // **两支必须分开**（`3.3` 修正；契约见 `web-design.md` §12.5「会话归属校验的不可侵扰」）：
+    // `3.12` 探针在真上游上实测过合并成一支的后果 —— 客户端带**甲的令牌** + **乙的 `sessionId`**
+    // 发一次请求时，`registry.remove()` 会把**乙**的会话从注册表里摘掉 ⇒ ① 乙随后用**自己的**
+    // 令牌 + 原 `sessionId` **立刻 401**；② 乙的上游子进程**失去唯一引用**、没有任何路径去
+    // `close()` 它 ⇒ **孤儿**（门户进程退出才消失）。⇒ 「本请求无权」与「那个会话该不该回收」
+    // 是两件事：**拒绝越权，不得顺手伤到第三方**。
     const incomingSessionId = headerSessionId(request);
     if (incomingSessionId) {
       const existing = registry.get(incomingSessionId);
-      if (
-        !existing ||
-        existing.keyId !== key.id ||
-        existing.handle !== user.handle ||
-        // 传输层已关闭（客户端结束过会话）⇒ 该 sessionId 已失效，顺手清掉注册表条目。
-        existing.transport.isClosed()
-      ) {
-        if (existing) registry.remove(existing.id);
-        // 与「令牌不存在」同形处理：不泄露会话是否存在。
+
+      // 支 1：该会话不存在，或**不属于本令牌** ⇒ **只拒不动**（既不 `remove` 也不 `close`）。
+      // 与「令牌不存在」同形处理：不泄露会话是否存在（不给探测者区分信号）。
+      if (!existing || existing.keyId !== key.id || existing.handle !== user.handle) {
         sendBridgeError(reply, 401, BRIDGE_ERROR_CODES.unauthorized, UNAUTHORIZED_MESSAGE);
         return;
       }
+
+      // 支 2：是**该会话自己的**终态（客户端结束过会话 ⇒ 传输已关闭）⇒ 幂等回收后仍回 401。
+      // 这里必须用 `close()` 而不是 `remove()`：`SessionRegistry.close()` 会依序关传输与上游
+      // （两步都不抛出；底层传输的 `close()` 实测幂等），而 `remove()` 只摘条目、**留下没人收的
+      // 子进程**（正是上面实测到的孤儿）。
+      if (existing.transport.isClosed()) {
+        await registry.close(existing);
+        sendBridgeError(reply, 401, BRIDGE_ERROR_CODES.unauthorized, UNAUTHORIZED_MESSAGE);
+        return;
+      }
+
       existing.lastActivityAt = Date.now();
       await relay(existing, request, reply, registry, { onRelayFailure });
       return;
