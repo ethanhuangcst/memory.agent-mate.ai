@@ -132,6 +132,7 @@
 | TC-P-L3-07 | 配额生效 | 改上游 `[limits]` 后超限写入**被拒**；`max_inflight_requests` 对 stdio 是否生效**已实测并登记结论** |
 | TC-P-L3-08 | 备份边界 | 备份脚本遍历用户库时**不含**门户库；门户库单独备份；含 sha256 校验 |
 | TC-P-L3-09 | 无残留 | 会话开始前后 `/data/users/` 下**不出现**其他用户的库或临时文件 |
+| TC-P-L3-10 | 响应体量上限（背压护栏） | 单响应超过 `PORTAL_RESPONSE_MAX_BYTES` 时**明确处置**：头未发出 ⇒ `502` + `RESPONSE_TOO_LARGE`；头已发出 ⇒ 截断流；两种路径**都留审计**（`mcp_response_capped`）。**`4.5` 已交付（2026-09-24）**：离线用例两条（超限留痕 + **灵敏度对照**：未配置上限时同一请求必须**完整**返回）· 探针 [`../../probes/response-size-probe/`](../../probes/response-size-probe/) 给出取值依据（单条 ≈ 65 KiB ⇒ 4 MiB） |
 
 ---
 

@@ -309,6 +309,34 @@
 
 **一处如实登记的偶发**：`mcp-bridge-session-reclaim` 的 `afterAll` 曾出现一次 `ENOTEMPTY`（夹具子进程仍在写 `--env-dump` 文件时删临时目录）—— 复跑即过，属**该用例 teardown 的既有竞态**，与本行改动无关（本行不改它的任何判据）。
 
+### 删除 `sdd-scrum-practices.md`（过程体例文档移出本项目范围）
+
+**为什么**：用户指示（2026-09-24）—— 该文档已从本项目范围移除，不再由本仓维护。
+
+**做了什么**：
+
+- **删除** `specs/sdd-scrum-practices.md`（194 行）。
+- **去链接（36 处、4 种形态）**：历史叙述**保留原文、只断开链接** —— `change-log` 的 2026-09-21/22 节 · `ADR-013` / `ADR-016` 的决议正文 · `architecture.md` 与 `sprint-backlog.md` 的变更记录 · `web-design.md` 的变更记录。按 `ADR-013` 自身口径（「ADR 按新增决议 supersede，**不回写旧 ADR 正文**」）不改写 ADR 正文。
+- **现行指称改写**（只去链接不够 —— 否则正文指向不存在的文档）：`product-backlog.md` 与 `sprint-backlog.md` 头部的「体例」指针行移除 · `architecture.md` §7「相关」表移除该行 · `sprint-backlog.md` 的批次口径（Increment）与 SBI 口径行的判据落点**改指 `ADR-016`**（其决议正文已重述 PSP 四条判据）。状态枚举（`ToDo` / `WIP` / `Implemented` / `Done`）由 `ADR-013` 决议正文承载，不随文档消失。
+
+**验证**：`make doc-links` **53 文件 / 1456 链接 / 零悬空** · `make attestation-paths` 通过 · `make secret-check` 通过 · `make preflight-test` **5 / 0** · 指向该文档的链接残留 **0 处**（`grep -rnoE ']\([^)]*sdd-scrum-practices[^)]*\)'` 为空）。
+
+**边界**：`.codebuddy/plans/` 下的历史计划快照仍含该文档名 —— `link-check.sh:59` 的 `EXCLUDE_DIRS` 已排除 `.codebuddy`，属过程资产、不参与门禁，未改动。
+
+### `4.5`「web-portal:响应背压上限」交付：把 §12.5 的背压承诺补齐（先探针定档，再实现）
+
+**为什么**：`web-design.md` §12.5 的背压承诺有两半 —— ① 「stdio 管道与 HTTP 流按 stream 处理、不整包缓冲」；② 「对超大响应设**门户级上限**并**明确报错**」。`4.1` 只落了①，②以「**如实降级：本轮未实现 ⇒ 归 Sprint 6 容量行**」登记。而「门户无上限」是否构成**真实敞口**，取决于**上游能产出多大的响应** —— 全仓没有这个数字，故先做探针。
+
+**做了什么**：
+
+- **`3.18` 探针定档取值**（[`../probes/response-size-probe/`](../probes/response-size-probe/)，**7/7 断言 PASS · 退出码 0 · 两轮复跑一致**）：**上游对 stdio 单条响应没有任何体量上限**（4 / 16 / 32 KiB ⇒ 回包 5.0 / 17.0 / 33.1 KiB **完整含标记**）；**单条内容上限 = 65536 字节**（边界轮 64 / 128 KiB ⇒ `content exceeds max size of 65536 bytes`）；索引类回包是**紧凑索引行**（约 115 字节/条，**不含正文**）；上游对**语义近重复**内容拒写（`CONFLICT: near-duplicates`）；`memory_smart_load` 的「多条 × 正文」体量**未测**（如实登记）。
+- **实现**（新模块 `src/bridge/response-cap.ts` + `route.ts` 接线）：边转发边计字节，超限即**停止转发**；头**未**发出 ⇒ `502` + **新错误码 `RESPONSE_TOO_LARGE`**；头**已**发出（SSE 中途）⇒ **截断**流；两种路径**都写审计**（`action='mcp_response_capped'`）。配置键 `PORTAL_RESPONSE_MAX_BYTES`（**未提供 = 不启用**，与 `4.1` 的并发上限同一口径），生产取值 `deploy/portal.compose.yml` **4 MiB**（≈3 倍余量）。
+- **契约同步**：`web-design.md` §12.5（背压行回写 + 失败映射表新增一行）· §12.7 上限表新增一行 · §12.9 该键状态 **否 → 是** · `web-test.md` 新增 `TC-P-L3-10`。
+
+**验证**：离线 **356 passed / 35 files**（新增单测 **6** 条 + 集成 **2** 条）· 覆盖率 **93.58 / 87.22 / 97.85 / 94.7**（阈值 92/85/96/93）· `make portal-mcp-probe` **6/6**（未配置上限 ⇒ 零回归）· `make portal-mcp-session-probe` **15/15** · `tsc --noEmit` 0 错 · `doc-links` / `attestation-paths` 通过。**灵敏度对照**（否定型判据必带）：未配置上限时同一条请求**完整**返回 ⇒ 「超限没有转发出去」不是环境问题。
+
+**一处如实登记**：「多条 × 正文」的批量体量（`memory_smart_load`）**未实测** ⇒ 4 MiB 按 `k × 65 KiB` 最坏情形估算，**未**把它写成实测结论。
+
 ---
 
 ## 2026-09-23
@@ -371,7 +399,7 @@
 
 ### DoD 复核 `3.1`：`Done` 成立；同批修正「超时口径」等四处一致性缺口
 
-**为什么**：`3.1` 已置 `Done` 并附证据段，但按仓内 `Done` 的定义（[`sdd-scrum-practices.md`](sdd-scrum-practices.md) §2.2：**本条目的全部验收条件已满足**）逐条独立复核时，发现四处「实现 / 实测 ≠ 文档」的不一致 —— 它们**不改变验收结论**，但会让后来者写错断言或误判 503。
+**为什么**：`3.1` 已置 `Done` 并附证据段，但按仓内 `Done` 的定义（`sdd-scrum-practices.md` §2.2：**本条目的全部验收条件已满足**）逐条独立复核时，发现四处「实现 / 实测 ≠ 文档」的不一致 —— 它们**不改变验收结论**，但会让后来者写错断言或误判 503。
 
 **做了什么**：
 
@@ -436,7 +464,7 @@
 
 **做了什么**：
 
-- **体例定稿**：Sprint 的 ToDo 表**行的排列顺序即执行顺序**；`#` / `N.M` 是**稳定 id**，调整顺序时**只移动行、不改编号**（否则跨文档引用与锚点会失效）。落入 [`sdd-scrum-practices.md`](./sdd-scrum-practices.md) §2.1，四个 Sprint 的表前说明同批改写。
+- **体例定稿**：Sprint 的 ToDo 表**行的排列顺序即执行顺序**；`#` / `N.M` 是**稳定 id**，调整顺序时**只移动行、不改编号**（否则跨文档引用与锚点会失效）。落入 `sdd-scrum-practices.md` §2.1，四个 Sprint 的表前说明同批改写。
 - **据此重排**：Sprint 4 把 `3.5` 探针提到最前（执行第一行）、已交付历史行收在表末；Sprint 5 把外部凭据行移到在线链路探针**之前**（探针验证的是「凭据配置已生效」）。顺带修掉 Sprint 4 表格里一处旧的**表格断裂**（`#2` 与 `#5` 之间多一个空行，导致历史行不在同一张表里）。
 - **`3.5` mcp:桥可行性探针 Done**：按 [`ADR-017`](./adr/ADR-017-complexity-probe-before-real-build.md) 新建可丢弃探针 [`../probes/mcp-bridge-probe/`](../probes/mcp-bridge-probe/)（**不入制品**），回答「门户侧能否用官方 SDK 把 HTTP(Streamable) 请求经 stdio 转发给已启动的上游子进程并取回完整回包」。
 
@@ -455,7 +483,7 @@
 - **Sprint 6** → 「门户运营闭环与对外口径定稿」：承接原 Sprint 4 移出的运营、容量、界面与文档收口项，以及原 Sprint 5 的 MCP 侧收尾；其中原 Sprint 4 `4.8` 与原 Sprint 6 `#10`（同一件事的「判据面」与「实测面」）**合并为一行**。
 - **Sprint 7** 不变（升级治理）。
 - **同步面**：RID Registry 与覆盖对照表逐行改指（R1–R3 / D1–D6）· [`product-backlog.md`](./product-backlog.md) 的 31 条 `Sprint` 投影与 5 处关联列链接文字 · [`web-portal/web-stories.md`](./web-portal/web-stories.md) 故事索引 14 行 · [`mcp/mcp-stories.md`](./mcp/mcp-stories.md) / [`mcp/mcp-test.md`](./mcp/mcp-test.md) / [`mcp/mcp-design.md`](./mcp/mcp-design.md) 的落点列与前瞻句 · [`deployment.md`](./deployment.md) · [`architecture.md`](./architecture.md) · [`web-portal/web-design.md`](./web-portal/web-design.md) · [`web-portal/web-test.md`](./web-portal/web-test.md) · [`web-portal/portal-identity-plan.md`](./web-portal/portal-identity-plan.md) · [`web-portal/issues-log.md`](./web-portal/issues-log.md) · [`adr/ADR-009`](./adr/ADR-009-per-user-db-isolation-over-single-db-agent-id.md) · [`adr/ADR-008`](./adr/ADR-008-local-baseline-reuses-production-compose.md) · [`../scripts/limits-probe.sh`](../scripts/limits-probe.sh) 与 [`../scripts/maintain-user-dbs.sh`](../scripts/maintain-user-dbs.sh) 的注释。5 个稳定锚点 id 全部保留、只随行迁移，并显式声明「**id 前缀不等于当前 Sprint 号**」（`s4-audit-view` / `s4-identity-docs` 现落在 Sprint 6）。
-- **历史不改**：Sprint 1–3 的回顾正文、各文档变更记录流水、`knowledge/*` 证据、[`sdd-scrum-practices.md`](./sdd-scrum-practices.md) 的体例举例按原样保留（该口径与「活跃引用必改」在上一轮 Replan 中已定型）。
+- **历史不改**：Sprint 1–3 的回顾正文、各文档变更记录流水、`knowledge/*` 证据、`sdd-scrum-practices.md` 的体例举例按原样保留（该口径与「活跃引用必改」在上一轮 Replan 中已定型）。
 
 **验证**：`make doc-links` → **45 个 Markdown / 1190 条相对链接 / 零悬空**（首次跑曾抓出变更记录里一处通配符链接 `ADR-008-*.md`，已改为纯文本）· 原型断言 **159/159** · `sprint-backlog.md` 内 5 个锚点 id **各定义 1 处** · RID 覆盖对照表 **R1–R3 / D1–D6 每行 4/4 列非空** · 全仓 grep 指向旧落点的**活跃引用为 0**（已排除变更记录与历史叙述）· `product-backlog.md` 的 31 条投影与 `sprint-backlog.md` 逐条核对一致。
 
@@ -487,15 +515,15 @@
 
 ### `sprint-plan.md` → `sprint-backlog.md` 改名（文件名与仓内口径对齐）
 
-**为什么**：文件名与仓内口径不一致 —— [`sdd-scrum-practices.md`](sdd-scrum-practices.md) 早已把该文件的内容称作「**Sprint Backlog**」（§4 单一真源表的「Sprint 排期与执行状态」行、§5 文档清单），而 `specs/` 内其余文件也都是内容名风格（`product-backlog.md` / `sdd-scrum-practices.md` / `web-design.md`）。用户要求文件名跟上该口径。
+**为什么**：文件名与仓内口径不一致 —— `sdd-scrum-practices.md` 早已把该文件的内容称作「**Sprint Backlog**」（§4 单一真源表的「Sprint 排期与执行状态」行、§5 文档清单），而 `specs/` 内其余文件也都是内容名风格（`product-backlog.md` / `sdd-scrum-practices.md` / `web-design.md`）。用户要求文件名跟上该口径。
 
 **做了什么**：
 
 - **`git mv`**：`specs/sprint-plan.md` → [`sprint-backlog.md`](sprint-backlog.md)（保留 rename 形态与 `git log --follow` 历史）；H1 同步为 `# sprint-backlog — memory.agent-mate.ai 产品化`。
 - **全量同步引用**：按仓内既有改名口径（先例：2026-09-21 的 `sprint_plan.md` → `sprint-plan.md`；更早的 `hk_vps_4/` → `memory.agent-mate.ai/`）同步 **17 个文件** —— specs 内 14 份 + 脚本 3 个。
-- **三类分别处理，防止误改**：① **链接式**（含 **15 处深链接** `sprint-backlog.md#<anchor>`，锚点 id 原样保留）；② **正文提及**（含两处 `related_spec:` front-matter —— [`sdd-scrum-practices.md`](sdd-scrum-practices.md) 与 [`knowledge/docs/spec-doc-conventions.md`](knowledge/docs/spec-doc-conventions.md)；以及 [`sdd-scrum-practices.md`](sdd-scrum-practices.md) 的 §4 单一真源表 / §5 文档清单、[`adr/ADR-010`](adr/ADR-010-specs-single-source-and-doc-structure.md) 的文档结构表）；③ **旧名映射**（刻意不改）。
+- **三类分别处理，防止误改**：① **链接式**（含 **15 处深链接** `sprint-backlog.md#<anchor>`，锚点 id 原样保留）；② **正文提及**（含两处 `related_spec:` front-matter —— `sdd-scrum-practices.md` 与 [`knowledge/docs/spec-doc-conventions.md`](knowledge/docs/spec-doc-conventions.md)；以及 `sdd-scrum-practices.md` 的 §4 单一真源表 / §5 文档清单、[`adr/ADR-010`](adr/ADR-010-specs-single-source-and-doc-structure.md) 的文档结构表）；③ **旧名映射**（刻意不改）。
 - **脚本**：[`../scripts/attestation-paths-check.sh`](../scripts/attestation-paths-check.sh) 的 `SCAN` 数组硬编码路径同步（不改会让该护栏直接失败）；[`../scripts/iso-probe.sh`](../scripts/iso-probe.sh) 与 [`../scripts/link-check.sh`](../scripts/link-check.sh) 的注释指称同步。
-- **旧名残留收口**：旧名只作为**映射**保留在两处 —— ① **改名记录**（本文件 2026-09-21 节与本次小节 · [`architecture.md`](architecture.md) / [`sdd-scrum-practices.md`](sdd-scrum-practices.md) / [`sprint-backlog.md`](sprint-backlog.md) 各自变更记录）；② **改名口径说明**（[`knowledge/docs/spec-doc-conventions.md`](knowledge/docs/spec-doc-conventions.md) 新增的 guidance 条，需指名写出改名链才能被复核）。其余位置一律已改指新名。`.codebuddy/plans/` 下 18 份历史计划虽含该串，但该目录已被 `.gitignore` 忽略（`git ls-files` 0 条）⇒ 不在仓库内，不改。
+- **旧名残留收口**：旧名只作为**映射**保留在两处 —— ① **改名记录**（本文件 2026-09-21 节与本次小节 · [`architecture.md`](architecture.md) / `sdd-scrum-practices.md` / [`sprint-backlog.md`](sprint-backlog.md) 各自变更记录）；② **改名口径说明**（[`knowledge/docs/spec-doc-conventions.md`](knowledge/docs/spec-doc-conventions.md) 新增的 guidance 条，需指名写出改名链才能被复核）。其余位置一律已改指新名。`.codebuddy/plans/` 下 18 份历史计划虽含该串，但该目录已被 `.gitignore` 忽略（`git ls-files` 0 条）⇒ 不在仓库内，不改。
 
 **验证**：`make doc-links` 36 文件 / **1029 相对链接 / 0 悬空**（计数为本条写出时刻的快照；同节其它条目内的计数为其自身批次快照，故数值不同） · `make attestation-paths` 五路径通过（`$SPECS/sprint-backlog.md` 已同步）· `make secret-check` 干净 · `git diff --check` 干净 · `git status` 呈 `R` rename 形态 · 全仓 `grep sprint-plan` 残留逐条核为改名记录。
 
@@ -533,7 +561,7 @@
 - **Sprint 5 → 「完成 MCP 本地收尾，并与 web-portal 本地联调通过」**：`#1` MCP 侧设计包（正文落新建的 [`mcp/mcp-stories.md`](mcp/mcp-stories.md)）· `#2` `PSP-M1「接入面与口径定档」`（上游 HTTP 面不对外 + 定制口径门禁 + 部署文档一致性）· `#3` `PSP-M2「本地全链路联通」`（门户 → HTTP MCP → 子进程 stdio → 用户库全链路，作为 Sprint 6 集成验收的输入）· `#4` `PSP-M3「工具可达性」`（承接 Sprint 4 的实测结论，决定是否需要新 ADR）。
 - **Sprint 6 = 用户提案的第 6 与第 7 个 Sprint 合并**（「本地集成 + 上线准备」+「生产上线与备份闭环」）：上线准备与真上线同处一个 Sprint（消除伪交接），外部前置（SSH 密钥 / OSS 桶 / DNS / CF Access）以**阻塞**行显式跟踪而非单开 Sprint；新增「本地完整集成验收」「上线准备包」「用户规模上限定值」三条。
 - **Sprint 7 = 升级治理闭环**（**重排前**仓库的 Sprint 6 内容下移，并补入原 Sprint 4 #9 的「门户镜像随上游重建」）。
-- **连带同步**：`product-backlog.md` 的 `Sprint` 投影列 **31 条逐条重算**（#18 → 7；#9 / #14 / #26 / #29 → 6；#21–#25 → 7；#30 / #31 → 5）；**6 个对外锚点 id 全部保留并指向新位置**（`s3-*` ×2 / `s4-*` ×2 / `s5-*` ×2），跨文档链接零断裂；`mcp-design` / `mcp-test` / `web-stories` / `web-test` / `deployment` / `architecture` / `ADR-008` / `ADR-009` 的现行 Sprint 引用共约 **46 处**改指（历史变更记录按「历史叙述不等于引用」保留原号）；PSP 体例写入 [`sdd-scrum-practices.md`](sdd-scrum-practices.md) §2.4。
+- **连带同步**：`product-backlog.md` 的 `Sprint` 投影列 **31 条逐条重算**（#18 → 7；#9 / #14 / #26 / #29 → 6；#21–#25 → 7；#30 / #31 → 5）；**6 个对外锚点 id 全部保留并指向新位置**（`s3-*` ×2 / `s4-*` ×2 / `s5-*` ×2），跨文档链接零断裂；`mcp-design` / `mcp-test` / `web-stories` / `web-test` / `deployment` / `architecture` / `ADR-008` / `ADR-009` 的现行 Sprint 引用共约 **46 处**改指（历史变更记录按「历史叙述不等于引用」保留原号）；PSP 体例写入 `sdd-scrum-practices.md` §2.4。
 - **登记落点**：本项作为**独立过程治理项登记为 Sprint 3 `#8`（`Done`）**（同 `#7` 的追溯方式）；Sprint 3 的 `#6` 已由用户同日收口并置「已结束」，本次未迁移其条目。可复用教训按「写入实际交付该工作的 Sprint」落在 Sprint 4 `Retrospective`。
 
 **验证**：`make doc-links` 34 文件 / **0 悬空** · `make secret-check` 干净 · `make attestation-paths` 五路径通过 · `git diff --check` 干净。人工核对：31 条投影与映射表**逐条一致**（脚本比对通过）；全仓现行行旧编号零残留（仅历史变更记录与回顾中的当时叙述保留旧号）；每张被改表竖线计数 = 列数 + 1。
@@ -569,12 +597,12 @@
 
 ### `sprint_plan.md` → `sprint-plan.md` 改名 + Sprint 回顾体例收口（含 Sprint 4 归属校正）
 
-**为什么**：① 文件名用下划线，与仓内其余 spec（`product-backlog.md` / `sdd-scrum-practices.md` / `web-design.md`）的连字符风格不一致；② Sprint 回顾章节此前是**逐条累加**式的（同一 Sprint 里出现「主块 + 多个补记子标题」），越到后期越难看出当前结论；③ 上一批（门户故事引用收口）被记在 Sprint 3，但它实际是 **Sprint 4 #0「web-portal 设计」** 的第一个增量 —— 按 [`sdd-scrum-practices.md`](sdd-scrum-practices.md) §2.3「写入**实际交付该工作的 Sprint**」，应归 Sprint 4。
+**为什么**：① 文件名用下划线，与仓内其余 spec（`product-backlog.md` / `sdd-scrum-practices.md` / `web-design.md`）的连字符风格不一致；② Sprint 回顾章节此前是**逐条累加**式的（同一 Sprint 里出现「主块 + 多个补记子标题」），越到后期越难看出当前结论；③ 上一批（门户故事引用收口）被记在 Sprint 3，但它实际是 **Sprint 4 #0「web-portal 设计」** 的第一个增量 —— 按 `sdd-scrum-practices.md` §2.3「写入**实际交付该工作的 Sprint**」，应归 Sprint 4。
 
 **做了什么**：
 
-- **改名**：`git mv memory.agent-mate.ai/specs/sprint_plan.md → sprint-plan.md`，按仓内既有改名口径（先例：`hk_vps_4/` → `memory.agent-mate.ai/` 的「引用 227 处 → 0」）全量同步引用，共 **16 个文件** —— specs 内 13 份（[`architecture.md`](architecture.md) · [`change-log.md`](change-log.md) · [`product-backlog.md`](product-backlog.md) · [`sdd-scrum-practices.md`](sdd-scrum-practices.md) · [`web-portal/web-stories.md`](web-portal/web-stories.md) · [`mcp/mcp-test.md`](mcp/mcp-test.md) · [`adr/ADR-006`](adr/ADR-006-public-repo-ip-placeholder-deidentification.md) / [`ADR-010`](adr/ADR-010-specs-single-source-and-doc-structure.md) / [`ADR-011`](adr/ADR-011-doc-style-text-over-icons.md) / [`ADR-013`](adr/ADR-013-sdd-scrum-process-doc-boundaries.md) · [`knowledge/docs/spec-doc-conventions.md`](knowledge/docs/spec-doc-conventions.md)（含 front-matter `related_spec`）· [`knowledge/git-tooling/gotchas.md`](knowledge/git-tooling/gotchas.md) · 本文件）与脚本 3 个（[`../scripts/iso-probe.sh`](../scripts/iso-probe.sh) 注释 · [`../scripts/link-check.sh`](../scripts/link-check.sh) 注释 · [`../scripts/attestation-paths-check.sh`](../scripts/attestation-paths-check.sh) 的 `$SPECS` 文档清单）。旧名残留由 20+ 处降到 **0 处**，只在改名记录里保留旧→新映射。
-- **回顾体例收口**：[`sdd-scrum-practices.md`](sdd-scrum-practices.md) §2.3 新增约束 —— `Retrospective` 只有「做得好」「学到」「下轮改进」三组，同一 Sprint 内的多次回顾**合并进这三组**，不新增「补记」类子标题；并据此把 Sprint 3 已有的三段回顾（主块 + 门户故事引用补记 + #5 维护定档补记）**合并为一组**。
+- **改名**：`git mv memory.agent-mate.ai/specs/sprint_plan.md → sprint-plan.md`，按仓内既有改名口径（先例：`hk_vps_4/` → `memory.agent-mate.ai/` 的「引用 227 处 → 0」）全量同步引用，共 **16 个文件** —— specs 内 13 份（[`architecture.md`](architecture.md) · [`change-log.md`](change-log.md) · [`product-backlog.md`](product-backlog.md) · `sdd-scrum-practices.md` · [`web-portal/web-stories.md`](web-portal/web-stories.md) · [`mcp/mcp-test.md`](mcp/mcp-test.md) · [`adr/ADR-006`](adr/ADR-006-public-repo-ip-placeholder-deidentification.md) / [`ADR-010`](adr/ADR-010-specs-single-source-and-doc-structure.md) / [`ADR-011`](adr/ADR-011-doc-style-text-over-icons.md) / [`ADR-013`](adr/ADR-013-sdd-scrum-process-doc-boundaries.md) · [`knowledge/docs/spec-doc-conventions.md`](knowledge/docs/spec-doc-conventions.md)（含 front-matter `related_spec`）· [`knowledge/git-tooling/gotchas.md`](knowledge/git-tooling/gotchas.md) · 本文件）与脚本 3 个（[`../scripts/iso-probe.sh`](../scripts/iso-probe.sh) 注释 · [`../scripts/link-check.sh`](../scripts/link-check.sh) 注释 · [`../scripts/attestation-paths-check.sh`](../scripts/attestation-paths-check.sh) 的 `$SPECS` 文档清单）。旧名残留由 20+ 处降到 **0 处**，只在改名记录里保留旧→新映射。
+- **回顾体例收口**：`sdd-scrum-practices.md` §2.3 新增约束 —— `Retrospective` 只有「做得好」「学到」「下轮改进」三组，同一 Sprint 内的多次回顾**合并进这三组**，不新增「补记」类子标题；并据此把 Sprint 3 已有的三段回顾（主块 + 门户故事引用补记 + #5 维护定档补记）**合并为一组**。
 - **归属校正**：门户故事引用收口的回顾由 Sprint 3 迁至 **Sprint 4**；Sprint 4 #0「web-portal 设计」的 `关联文档` 由纯文本清单改为可点击链接，并补「首个增量已落盘、待整体批准」的说明 —— 状态仍为 `ToDo`，因为其验收条件是「用户批准验收」整份门户设计，不因一个增量而关闭。
 
 **验证**：`make doc-links` 33 文件 / **0 悬空**（改名后路径全部可解析）· `make attestation-paths` 五路径通过（`$SPECS/sprint-plan.md` 已同步）· `make secret-check` 干净 · `git diff --check` 干净 · 全仓 `grep sprint_plan` **0 残留**。
@@ -636,7 +664,7 @@
 
 **为什么**：RID 的解决方案虽已下沉 Product Backlog，但原链接只定位到文件顶部，Sprint 落点也是不可点击文本，无法沿 `Product Backlog → Sprint Backlog → design/test` 核对实施链；`retrospective` 技能也只要求 ADR / knowledge 沉淀，未强制回写实际交付 Sprint。
 
-**做了什么**：为 RID 涉及的 Product Backlog 与 Sprint Backlog 条目增加稳定锚点；RID 表和覆盖矩阵改为条目级可点击链路；Product Backlog 的 `关联` 列回链具体 Sprint 执行项与设计/测试依据。更新 [`sdd-scrum-practices.md`](sdd-scrum-practices.md)，规定完整追踪链与稳定锚点，并规定每次 retrospective 必须写入实际交付 Sprint 的 `Retrospective`，ADR / knowledge 仅在有持久价值时追加。
+**做了什么**：为 RID 涉及的 Product Backlog 与 Sprint Backlog 条目增加稳定锚点；RID 表和覆盖矩阵改为条目级可点击链路；Product Backlog 的 `关联` 列回链具体 Sprint 执行项与设计/测试依据。更新 `sdd-scrum-practices.md`，规定完整追踪链与稳定锚点，并规定每次 retrospective 必须写入实际交付 Sprint 的 `Retrospective`，ADR / knowledge 仅在有持久价值时追加。
 
 **验证**：核对 5 个 Product Backlog 锚点、6 个 Sprint 锚点均有定义和双向引用；RID 8 行覆盖矩阵无空项；Markdown 诊断无新增问题；链接回归见本次验证记录。
 
@@ -648,7 +676,7 @@
 
 **做了什么**：
 
-- 新增 [`sdd-scrum-practices.md`](sdd-scrum-practices.md) 与 [`ADR-013`](adr/ADR-013-sdd-scrum-process-doc-boundaries.md)，固定 RID Registry、Sprint Backlog、Product Backlog 的列定义、四态语义和单一真源边界。
+- 新增 `sdd-scrum-practices.md` 与 [`ADR-013`](adr/ADR-013-sdd-scrum-process-doc-boundaries.md)，固定 RID Registry、Sprint Backlog、Product Backlog 的列定义、四态语义和单一真源边界。
 - RID 表只保留 R1–R3 与 D1–D5；V1–V4 从 RID 行移除，但作为稳定判据名保留，定义归位到 [`mcp/mcp-design.md`](mcp/mcp-design.md) §6.2 与 Product Backlog #11 的验收条件。新增 8 行覆盖对照，逐条给出 Backlog、验收条件与 Sprint 落点，无空项。
 - 6 张 Sprint ToDo 表新增「说明」列，状态只写 `ToDo` / `WIP` / `Implemented` / `Done`；长说明压缩为摘要并指向过程文档。三项原本仅存在于旧状态列的事实在本小节保留：Sprint 2「Qwen key」已从本地 secrets 回填 gitignored `.env.local` 并通过 `qwen-verify.sh` / `doctor`；临时文件 `tmp_user_key_option1.md` 经用户决定直接删除且确认不含真实密钥；Sprint 3「部署文档与事实一致性」已完成旧编号传播机械扫描，完整字段核对仍未完成。
 - Product Backlog 状态只写四态枚举；#4 / #11 / #14 / #26 的验收条件分别承载 D1、V1–V4、D3、D5，#17 校正为 `[limits]` 七键与本地行为探针已落地。`architecture.md` §6 改为薄索引。
@@ -1008,4 +1036,4 @@
 | 2026-09-23 | **`PSP-W1` 计划收尾（`online-e2e` 项）+ 文档口径纠正**：① **结掉 2026-09-22 登记的那条 fail-loud 工具缺陷**（当日现象：真身份实例占用 8788 ⇒ E2E 自启的回环实例绑定失败 ⇒ 浏览器打到配置为真域名的实例 ⇒ 面隔离 **403** 的**误导性失败**）：修后端口被占用时打印**占用进程**并以**退出码 30** 拒绝启动，空闲端口照常全绿；② 在线套件的「明确跳过」语义**实测**通过（`scripts/portal-e2e.sh --online` ⇒ **40** + SKIP 文案）；同时量到 `make portal-e2e` 会把非零码**折叠为 2** ⇒「跳过」与「失败」在 make 层面不可分，机器调用方须直接调用脚本（脚本头已写明）；③ `web-test.md` 回填实测：离线测试 **261 项**、覆盖率 语句 **92.78** / 分支 **85.90** / 函数 **97.76** / 行 **94.26**（阈值 92/85/96/93，门禁绿灯；语句边距 +0.78 偏薄）；④ 在线套件**真链路运行**登记为「**未测**」（缺 Service Token 与隧道地址两项环境变量，需持有者执行），与「不通」分开登记（链路本身已于 2026-09-22 由 `tunnel-dev.sh --verify` 验过）。 |
 | 2026-09-23 | **脱敏：Cloudflare Access 团队域不再入仓**：`change-log` / `issues-log` / `web-login-plan` 共 **1** 处曾写入真实团队域，已统一替换为 `<team-domain>.cloudflareaccess.com`。依据：`web-login-plan.md` 自身边界「**不写密钥与真实值**（真值只存在于本机被忽略的 `admin_portal/.env`）」。**AUD 未泄漏** —— 文档只按名引用 `.env` 的 AUD，未写其值。**保留项**：`me@ethanhuang.com` 是**产品对外的公开联系地址**（公开说明页与原型中本就在用、且早已提交）⇒ 不属脱敏范围。发现的机制：提交前的敏感值兜底扫描（本次新增做法，已并入提交清单）。 |
 | 2026-09-23 | **删除用户列表说明文案 + 状态标签折行修复（Issue 9）**：① 表头说明「每位用户一个独立数据库。路径用等宽字体，便于逐字符核对。」整体删除（四语言词条同步移除，键数 **261 → 260** 且四语言一致），并删除承载它的 `<caption>`、给 `<table>` 补 `aria-label`（避免表格失去无障碍名称）；② **Issue 9**：状态列仅 **57px** 而「已吊销」需约 **64px**（49 文本 + 7 状态点 + 7.65 间距）⇒ 中文默认允许任意字符间断行，标签被折成「已吊 / 销」两行（实测 `.status` h=**50** / line-height 25.2）⇒ `.status { white-space: nowrap }`（两份 CSS 同步、sha256 一致），并新增 E2E 断言 `assert_status_single_line()` —— 既有护栏只查**溢出**，而折行不产生溢出故长期漏检；③ **`SBI-V1` 完成**（七条门禁全绿 + 真实邮箱 `me@ethanhuang.com` 人手截图；2026-09-22 那次测试身份的验收随之失效）。证据：261 测试 / 原型 159 / 离线 E2E 全通过。 |
-| 2026-09-23 | **Sprint 计划体例改造：PSP 批次细化为 Increment（规则由用户逐条定稿）**：① **体例**（[`sdd-scrum-practices.md`](sdd-scrum-practices.md) §2.1）：待办表列名 `事项` → **`Increment`**（`类别` / `模块` 保留）；命名必须为 **`范围:名词`**，范围词表限定 `web-portal` / `mcp` / `deploy` / `backup`，且**范围按契约归属**判定（不按代码位置、不按接收方角色 —— 例：会话桥实现于 `admin_portal/src/bridge/` 但契约真源在 [`mcp/mcp-design.md`](mcp/mcp-design.md) §5.6 ⇒ `mcp:会话桥`）；每行必须是一个**可交付的增量**，粒度以「一个功能」为起点、按 §2.4 的 SBI 判据过大时拆到**子功能**；**验收条件必须二值判定**（只有满足/不满足），格式为「条件名称 + 判定依据」。② **拆分**：Sprint 4 原 `#3`（`PSP-W2`）→ `3.1`–`3.6`、原 `#4`（`PSP-W3`）→ `4.1`–`4.10`；Sprint 5 原 `#2`/`#3`/`#4`（`PSP-M1/M2/M3`）→ `2.1`–`2.2` / `3.1`–`3.2` / `4.1`；[`web-portal/portal-identity-plan.md`](web-portal/portal-identity-plan.md) §8 的剩余 SBI 排入（`D1`–`D5`、`P2`、`P3` → Sprint 4 `#7`–`#13`；`V2P`、`V2` → Sprint 5 `#5`–`#6`）。③ **两处未决项按证据落定**：容量 `S7` 按 AC 拆为 `3.5`（会话限流）/ `3.6`（配额透传）/ `4.7`–`4.9`（磁盘方案、规模上限、限流结论）—— 依据是 [`web-portal/web-design.md`](web-portal/web-design.md) §7「上游无『会话』概念 ⇒ 会话级限流必须门户自建」，故依赖会话桥者排在桥之后；Sprint 4 `#3` 与 Sprint 5 `#3` 的判据重叠按「**桥本身（Sprint 4 交付 `3.1`–`3.4`）/ 两端合跑 + 跨用户隔离 + 拒绝路径（Sprint 5 `3.x`）**」划界，重叠消除。④ **引用同步**：`web-stories.md` 14 行故事落点按新编号重算；`product-backlog.md` 关联列改指新编号；`web-test.md` 的 `D1` 落点改指 `3.2`；`issues-log.md` 的批次标题改名；**四个被外部引用的锚点**（`s4-mcp-session-bridge` / `s4-audit-view` / `s5-access-surfaces` / `s5-production-acceptance`）保留、27 处引用未断。⑤ **历史不改**：`#1` / `#2` / `#5` / `#6`（已 `Done`）与 ADR、change-log 流水、回顾正文中的旧批次名一律保留（[`ADR-016`](adr/ADR-016-sbi-delivery-granularity.md) 第 3 条「既有批次不重排」）。**编号基准**：重排前 `#3`/`#4` 指 `PSP-W2`/`PSP-W3`、Sprint 5 `#2`/`#3`/`#4` 指 `PSP-M1`/`M2`/`M3`；重排后 **`3.x` / `4.x` 表示由原 `#3` / `#4` 拆出的子项**，Sprint 5 的 `2.x` / `3.x` / `4.1` 同理。证据：`make doc-links` 无悬空（45 文件 / **1155** 相对链接）；拆分后表格列数与锚点完整性均校验通过。 |
+| 2026-09-23 | **Sprint 计划体例改造：PSP 批次细化为 Increment（规则由用户逐条定稿）**：① **体例**（`sdd-scrum-practices.md` §2.1）：待办表列名 `事项` → **`Increment`**（`类别` / `模块` 保留）；命名必须为 **`范围:名词`**，范围词表限定 `web-portal` / `mcp` / `deploy` / `backup`，且**范围按契约归属**判定（不按代码位置、不按接收方角色 —— 例：会话桥实现于 `admin_portal/src/bridge/` 但契约真源在 [`mcp/mcp-design.md`](mcp/mcp-design.md) §5.6 ⇒ `mcp:会话桥`）；每行必须是一个**可交付的增量**，粒度以「一个功能」为起点、按 §2.4 的 SBI 判据过大时拆到**子功能**；**验收条件必须二值判定**（只有满足/不满足），格式为「条件名称 + 判定依据」。② **拆分**：Sprint 4 原 `#3`（`PSP-W2`）→ `3.1`–`3.6`、原 `#4`（`PSP-W3`）→ `4.1`–`4.10`；Sprint 5 原 `#2`/`#3`/`#4`（`PSP-M1/M2/M3`）→ `2.1`–`2.2` / `3.1`–`3.2` / `4.1`；[`web-portal/portal-identity-plan.md`](web-portal/portal-identity-plan.md) §8 的剩余 SBI 排入（`D1`–`D5`、`P2`、`P3` → Sprint 4 `#7`–`#13`；`V2P`、`V2` → Sprint 5 `#5`–`#6`）。③ **两处未决项按证据落定**：容量 `S7` 按 AC 拆为 `3.5`（会话限流）/ `3.6`（配额透传）/ `4.7`–`4.9`（磁盘方案、规模上限、限流结论）—— 依据是 [`web-portal/web-design.md`](web-portal/web-design.md) §7「上游无『会话』概念 ⇒ 会话级限流必须门户自建」，故依赖会话桥者排在桥之后；Sprint 4 `#3` 与 Sprint 5 `#3` 的判据重叠按「**桥本身（Sprint 4 交付 `3.1`–`3.4`）/ 两端合跑 + 跨用户隔离 + 拒绝路径（Sprint 5 `3.x`）**」划界，重叠消除。④ **引用同步**：`web-stories.md` 14 行故事落点按新编号重算；`product-backlog.md` 关联列改指新编号；`web-test.md` 的 `D1` 落点改指 `3.2`；`issues-log.md` 的批次标题改名；**四个被外部引用的锚点**（`s4-mcp-session-bridge` / `s4-audit-view` / `s5-access-surfaces` / `s5-production-acceptance`）保留、27 处引用未断。⑤ **历史不改**：`#1` / `#2` / `#5` / `#6`（已 `Done`）与 ADR、change-log 流水、回顾正文中的旧批次名一律保留（[`ADR-016`](adr/ADR-016-sbi-delivery-granularity.md) 第 3 条「既有批次不重排」）。**编号基准**：重排前 `#3`/`#4` 指 `PSP-W2`/`PSP-W3`、Sprint 5 `#2`/`#3`/`#4` 指 `PSP-M1`/`M2`/`M3`；重排后 **`3.x` / `4.x` 表示由原 `#3` / `#4` 拆出的子项**，Sprint 5 的 `2.x` / `3.x` / `4.1` 同理。证据：`make doc-links` 无悬空（45 文件 / **1155** 相对链接）；拆分后表格列数与锚点完整性均校验通过。 |

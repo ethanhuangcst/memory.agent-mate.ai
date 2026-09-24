@@ -43,6 +43,7 @@ export const AUDIT_ACTIONS = [
    * 排期口径见 `sprint-backlog.md` 的 `3.4` 行与 Sprint 6 备忘记载。
    */
   'mcp_session_opened',
+  'mcp_response_capped',
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

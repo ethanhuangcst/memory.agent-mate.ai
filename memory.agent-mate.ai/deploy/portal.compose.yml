@@ -54,6 +54,10 @@ services:
       # 取值依据（`3.17` 探针实测）：每会话约 **27 MiB**、4 路并发下每会话仍 ~0.75 s、
       # **容器无内存上限** ⇒ 门户侧是唯一约束。1–5 人规模取保守值；**去掉任一键 = 不启用该项**。
       PORTAL_MAX_CONCURRENCY_PER_KEY: "2"
+      # **单响应字节上限**（背压护栏，`web-design.md` §12.9）：4 MiB。
+      # 取值依据：`probes/response-size-probe/`（`3.18`）实测「上游对 stdio 单条响应无上限、
+      # 单条内容上限 64 KiB ⇒ 单响应 ≈ 65 KiB；批量按 k × 65 KiB 估算」⇒ 4 MiB 约 3 倍余量。
+      PORTAL_RESPONSE_MAX_BYTES: "4194304"
       PORTAL_MAX_CONCURRENCY_GLOBAL: "4"
 
       # ── 身份：由 Cloudflare Access 认定（门户不自建账号；§12.4 与 web-design §6）──────

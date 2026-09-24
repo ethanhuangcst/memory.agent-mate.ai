@@ -89,6 +89,14 @@ export interface PortalConfig {
   readonly maxConcurrencyPerKey: number | undefined;
   /** `4.1`：**全局并发会话上限**（该门户实例内所有令牌合计）；`undefined` = 不启用。口径同上。 */
   readonly maxConcurrencyGlobal: number | undefined;
+  /**
+   * **单响应字节上限**（背压护栏）；`undefined` = 不启用该护栏（口径同上面两个并发上限）。
+   *
+   * 取值依据（`3.18` 探针实测）：上游对 stdio 单条响应**没有**上限，但**单条内容上限 64 KiB**
+   * ⇒ 单响应 ≈ 65 KiB；若某工具一次批量返回正文，量级按 `k × 65 KiB` 估算 ⇒ 生产取 **4 MiB**
+   * （对已知最坏情形约 3 倍余量，同时把单响应内存占用钉死在上界）。
+   */
+  readonly responseMaxBytes: number | undefined;
 }
 
 const RawEnvSchema = z.object({
@@ -133,6 +141,9 @@ const RawEnvSchema = z.object({
   // 否则等于替生产环境定值；生产取值由 `deploy/portal.compose.yml` 给出）。
   PORTAL_MAX_CONCURRENCY_PER_KEY: z.coerce.number().int().positive().optional(),
   PORTAL_MAX_CONCURRENCY_GLOBAL: z.coerce.number().int().positive().optional(),
+  // **单响应字节上限**（背压护栏）：正整数；**未提供 = 不启用该护栏**（同上，本层不写死默认值 ——
+  // 生产取值由 `deploy/portal.compose.yml` 给出；取值依据见 `../../probes/response-size-probe/README.md`）。
+  PORTAL_RESPONSE_MAX_BYTES: z.coerce.number().int().positive().optional(),
 });
 
 function formatIssues(error: z.ZodError): string {
@@ -260,5 +271,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): PortalConfig {
     sessionMaxDurationMs: raw.PORTAL_SESSION_MAX_DURATION,
     maxConcurrencyPerKey: raw.PORTAL_MAX_CONCURRENCY_PER_KEY,
     maxConcurrencyGlobal: raw.PORTAL_MAX_CONCURRENCY_GLOBAL,
+    responseMaxBytes: raw.PORTAL_RESPONSE_MAX_BYTES,
   };
 }

@@ -28,6 +28,7 @@ import type { PortalConfig } from '../config';
 import { SessionRegistry, type BridgeSession, type ReapLimits } from './session';
 import { decideSessionLimit } from './limits';
 import { spawnUpstream } from './spawn';
+import { capResponseBytes, type ResponseCapInfo } from './response-cap';
 import { createBridgeTransport } from './transport';
 // 断言失败的原因枚举与客户端文案都由 `user-db-path.ts` 持有（该模块拥有「断言」这件事的全部词汇），
 // 本模块只负责把它写成一个 500 响应 + 一行审计。
@@ -84,6 +85,9 @@ const UNAUTHORIZED_MESSAGE =
 const SESSION_LIMIT_MESSAGE =
   '会话数已达上限（门户自建的并发护栏）：请先结束其它会话或稍后重试。';
 
+const RESPONSE_TOO_LARGE_MESSAGE =
+  '单条响应超过门户上限（背压护栏）：请缩小请求范围（减少条数或缩短内容）后重试。';
+
 export const BRIDGE_ERROR_CODES = {
   unauthorized: 'unauthorized',
   wrongFace: 'wrong_face',
@@ -95,6 +99,11 @@ export const BRIDGE_ERROR_CODES = {
   quotaExceeded: 'QUOTA_EXCEEDED',
   /** `4.1`：**门户自建**的会话并发上限被撞到（与上一条的「上游配额」用**不同 `error` 串**区分）。 */
   sessionLimitExceeded: 'SESSION_LIMIT_EXCEEDED',
+  /**
+   * `4.5`：**门户自建**的单响应字节上限被撞到（背压护栏 —— `web-design.md` §12.5「背压」的第②半；
+   * 与上一条同构：都是门户策略，故用大写串与上游配额区分）。
+   */
+  responseTooLarge: 'RESPONSE_TOO_LARGE',
 } as const;
 
 export type BridgeErrorCode = (typeof BRIDGE_ERROR_CODES)[keyof typeof BRIDGE_ERROR_CODES];
@@ -302,6 +311,20 @@ export function registerMcpBridgeRoutes(app: FastifyInstance, deps: McpBridgeDep
     // 令牌 + 原 `sessionId` **立刻 401**；② 乙的上游子进程**失去唯一引用**、没有任何路径去
     // `close()` 它 ⇒ **孤儿**（门户进程退出才消失）。⇒ 「本请求无权」与「那个会话该不该回收」
     // 是两件事：**拒绝越权，不得顺手伤到第三方**。
+  /**
+   * `4.5`：响应超限时的留痕（**审计**）—— 与 `onRelayFailure` 同因：`relay` 不碰 `db`，
+   * 报错应答与截断由 `relay` 里的背压包装负责。
+   */
+  const onResponseCapped = ({ sentBytes, headersSent, maxBytes }: ResponseCapInfo): void => {
+    insertAudit(db, {
+      actor: `token:${key.key_prefix}`,
+      action: 'mcp_response_capped',
+      target: user.handle,
+      detail: { reason: 'response_too_large', sentBytes, maxBytes, headersSent },
+      sourceIp: request.ip,
+    });
+  };
+
     const incomingSessionId = headerSessionId(request);
     if (incomingSessionId) {
       const existing = registry.get(incomingSessionId);
@@ -324,7 +347,11 @@ export function registerMcpBridgeRoutes(app: FastifyInstance, deps: McpBridgeDep
       }
 
       existing.lastActivityAt = Date.now();
-      await relay(existing, request, reply, registry, { onRelayFailure });
+      await relay(existing, request, reply, registry, {
+        onRelayFailure,
+        responseMaxBytes: cfg.responseMaxBytes,
+        onResponseCapped,
+      });
       return;
     }
 
@@ -446,6 +473,8 @@ export function registerMcpBridgeRoutes(app: FastifyInstance, deps: McpBridgeDep
     await relay(session, request, reply, registry, {
       register: true,
       onRelayFailure,
+      responseMaxBytes: cfg.responseMaxBytes,
+      onResponseCapped,
     });
 
     // ---- `3.4`：`AC4.3`「每次会话断言并记录实际使用的库路径」----
@@ -509,16 +538,40 @@ async function relay(
      * `relay` 只负责**分类**与**写响应**；它拿不到 `auditRejected` 那个闭包，故不在此处碰 `db`。
      */
     readonly onRelayFailure?: (failure: { status: number; code: RelayFailureCode }) => void;
+    /** `4.5`：**单响应字节上限**（背压护栏）；`undefined` = 不启用（见 `response-cap.ts`）。 */
+    readonly responseMaxBytes?: number | undefined;
+    /** `4.5`：响应超限时的回调（本仓：一行审计）—— 同 `onRelayFailure`：`relay` 不碰 `db`。 */
+    readonly onResponseCapped?: (info: ResponseCapInfo) => void;
   } = {},
 ): Promise<void> {
   reply.hijack(); // 交给 SDK 直接写 Node 的 ServerResponse（SSE 等流式响应需要）
+
+  /**
+   * `4.5` 背压包装：边转发边计字节 —— 超限即**停止转发**；头**未**发出时回 `502` +
+   * `RESPONSE_TOO_LARGE`，头**已**发出（SSE 中途）时只能**截断**流（由包装自己结束）。
+   */
+  const capped = capResponseBytes(reply.raw, opts.responseMaxBytes, (info) => {
+    opts.onResponseCapped?.(info);
+    if (!info.headersSent) {
+      reply.raw.statusCode = 502;
+      reply.raw.setHeader('content-type', 'application/json; charset=utf-8');
+      reply.raw.end(
+        JSON.stringify({
+          error: BRIDGE_ERROR_CODES.responseTooLarge,
+          message: RESPONSE_TOO_LARGE_MESSAGE,
+          limit: info.maxBytes,
+          sent: info.sentBytes,
+        }),
+      );
+    }
+  });
 
   try {
     // 注意：**不在此处包超时**。`StreamableHTTPServerTransport.handleRequest` 把响应交给
     // 异步流后立即返回 ⇒ 用 `Promise.race` 包它做超时是无效的（实测：客户端仍会等到上游响应）。
     // 上游超时由 `createBridgeTransport` 的 `upstreamRequestTimeoutMs` 加在**上游请求**上，
     // 以 MCP 层错误返回（见 `transport.ts` 的说明）。
-    await session.transport.handleRequest(request.raw, reply.raw, request.body);
+    await session.transport.handleRequest(request.raw, capped, request.body);
   } catch (error) {
     // 转发阶段的异常：销毁会话（含上游），避免半死连接继续占用子进程（纪律 2）。
     await registry.close(session);
