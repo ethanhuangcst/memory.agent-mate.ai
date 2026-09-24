@@ -363,9 +363,25 @@ launch:
 **强制不变量（fail-closed）**：
 
 1. `handle` 必须匹配 `^[a-z0-9_-]{1,32}$`，且**只**来自门户数据库，**绝不**取自请求
-2. 替换后断言 `AI_MEMORY_DB` 非空、以 `/data/users/` 开头、且包含该 `handle` —— 否则**拒绝启动会话**（防门户侧静默失败点 S4，即 [`../architecture.md`](../architecture.md) §6 的 R1；判据 §6.1 D1 / §6.2 V1）
+2. 替换后断言 `AI_MEMORY_DB` **在 `path.posix.normalize` 归一化之后**非空、以 `/data/users/` 开头、且包含该 `handle` —— 否则**拒绝启动会话**（防门户侧静默失败点 S4，即 [`../architecture.md`](../architecture.md) §6 的 R1；判据 §6.1 D1 / §6.2 V1）。**必须在归一化后判定**（判定写在归一化之前等于没判，实测见下方附表），且**拒绝必须发生在 spawn 之前**（子进程一个都不许起）
 3. `AI_MEMORY_AGENT_ID` 必须由 `handle` 派生（不接受客户端传入值）
 4. 子进程**不得跨用户复用**（禁止会话池）
+
+> **`3.2` 开工前置实测（2026-09-24）：字面三项断言会放过**全部**已知坏输入，故必须在归一化后判定。** 下表左右两半分别是「字面路径」与「`path.posix.normalize` 后」的同一组三项判定 —— 只有右半能拦住人：
+>
+> | 非法 `handle` | 渲染出的 `AI_MEMORY_DB` | 字面：非空 / `startsWith('/data/users/')` / 含 handle | 归一化后路径 | 归一化：`startsWith` / 含 handle | 只看字面的后果 |
+> |---|---|---|---|---|---|
+> | `alice/../bob` | `/data/users/alice/../bob/ai-memory.db` | **全过** | `/data/users/bob/ai-memory.db` | 过 / **不过** | **静默串到 bob 的库** —— 正是 `AC4.7` 那一类，字面断言完全看不见 |
+> | `../../x` | `/data/users/../../x/ai-memory.db` | **全过** | `/x/ai-memory.db` | **不过** / 不过 | 越出 users root，落到任意路径 |
+> | `../bob` | `/data/users/../bob/ai-memory.db` | **全过** | `/data/bob/ai-memory.db` | **不过** / 不过 | 落到 users root 之外 |
+> | `""` | `/data/users//ai-memory.db` | **全过** | `/data/users/ai-memory.db` | 过 / 过（`''` 是任何字符串的子串） | **归一化也拦不住** ⇒ 由下条「不变量 1 的 spawn 侧复述」拦下（**2026-09-24 修订**） |
+> | `-alice` · `alice` | 正常路径 | 全过 | 不变 | 过 / 过 | 无（`-alice` 合法，`HANDLE_PATTERN` 本就允许 `-`） |
+>
+> **不变量 1 的 spawn 侧复述：采用「复用真源」而不是「另立规则」**（2026-09-24 修订）：`3.2` 的断言里调用 [`../../admin_portal/src/shared/handle.ts`](../../admin_portal/src/shared/handle.ts) 的 `validateHandle(handle)` —— 与用户创建路径**同一个真源**，失败即拒绝（原因 `invalid_handle`）。**为什么值得加**：`users` 表的 `INSERT` 只有**一条**路径（`web/db/repo/users.ts` 的 `insertUser`，**不做**校验），`validateHandle` 只在**服务层** `createUser` 里被调用 ⇒ 任何绕过服务层的写入（repo 层直接插行、将来的迁移/导入）都会留下不合规 handle；而一旦 `handle=''` 到了 spawn，`AI_MEMORY_DB` 归一化后是 `/data/users/ai-memory.db`、其父目录 `/data/users` **存在** ⇒ 上游会**静默新建空库**（[`../knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md`](../knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md) 第 ⑦ 条）⇒ users 根下出现一个**共享库**，隔离静默失效 —— 正是 `D1`（阻塞级）要拦的形态。**代价仅为一条可被单测覆盖的分支**（判定在导出的纯函数里，单测可直接传 `''` 击中它），且实测 `validateHandle('-alice').ok === true` ⇒ **不会误拒**既有合法 handle（实测 `-alice` 本就合法）。**判定顺序是「先 handle、后路径」**（handle 不合法即报 `invalid_handle`，连路径运算都不做）—— 于是 `alice/../bob` 这类输入归 **`invalid_handle`**（根因在 handle 本身，比「路径不匹配」更精确），而 `handle_mismatch` 留给「handle 合法、但路径指向别人」这一支（模板被改错时的形态）。两支因此各有一个**互斥且可分别触发**的入口。
+>
+> **修订经过（如实留档）**：本节初稿（同日早些时候）写的是「**不变量 1 的 spawn 侧复述本次明确不做**」，理由是「可达性已被服务层与 `userDirectory()` 双重封死 ⇒ 再补就是不可达分支、只会稀释覆盖率」。**该理由部分不成立** —— 「不可达」只对**生产 / 集成路径**成立，对**覆盖率**不成立：判定若放在导出的纯函数里，单测可直接覆盖它（与 `empty` 那一支同理）。用户据实拍板改为「**加**」（并指定复用 `validateHandle`），故成本由「不可达分支」降为「一行 + 一支可覆盖的单测」。
+>
+> **能走到 HTTP 层的坏输入只有 `alice/../bob` 这一类**（`userDirectory` 放行，但归一化后指向**他人**库）⇒ 它正是 `AC4.7` / `TC-M-L3-02` 端到端用例的触发手段；`""` 与「越界」两类只能由**纯函数单测**覆盖（落点见 [`../mcp/mcp-test.md`](../mcp/mcp-test.md) §4-F 的 `TC-M-L3-02`）。
 
 > **本模板是 attestation 口径的承载路径之一**：静态护栏 `make attestation-paths` 的**断言 C** 核对本节含 `AI_MEMORY_REQUIRE_AGENT_ATTESTATION: "0"`，**断言 B** 核对 SSH 用户行 `-e` 子句含 `=0` 且与 [`../deployment.md`](../deployment.md) §4.3 逐字一致。**改模板必须复跑该门禁**。
 

@@ -27,6 +27,9 @@ import type { PortalConfig } from '../config';
 import { SessionRegistry, type BridgeSession } from './session';
 import { spawnUpstream } from './spawn';
 import { createBridgeTransport } from './transport';
+// 断言失败的原因枚举与客户端文案都由 `user-db-path.ts` 持有（该模块拥有「断言」这件事的全部词汇），
+// 本模块只负责把它写成一个 500 响应 + 一行审计。
+import { SPAWN_ASSERTION_MESSAGE } from './user-db-path';
 
 export const MCP_PATH = '/mcp';
 
@@ -243,6 +246,24 @@ export function registerMcpBridgeRoutes(app: FastifyInstance, deps: McpBridgeDep
         logger: request.log,
       });
     } catch (error) {
+      // ---- `3.2`：**spawn 前置断言失败**与「上游起不来」是两类故障，必须分开 ----
+      //
+      // 分流依据是错误上挂的 `reason`：本仓**没有错误子类**、也**不在 `catch` 里用 `instanceof`**
+      // （与 `classifyRelayFailure` 读 `error.code` 同构）。若不分开，一条「库路径不可信」会被报成
+      // 「上游不可用」——把排障方向直接引到上游去，而真相是门户自己要拦。
+      const assertReason = (error as { reason?: unknown } | null | undefined)?.reason;
+      if (typeof assertReason === 'string') {
+        // §12.5：断言失败归 **500** + 必写审计行；`detail` **只记原因枚举**、**不记路径**
+        // （路径里可能含**他人 handle**）。日志同一口径 —— 排障要的是「哪一条断言」，不是路径。
+        request.log.error(
+          { event: 'mcp_spawn_assertion_failed', reason: assertReason, handle: user.handle },
+          'mcp_spawn_assertion_failed',
+        );
+        auditRejected(assertReason, { stage: 'spawn_assertion' });
+        sendBridgeError(reply, 500, BRIDGE_ERROR_CODES.spawnAssertionFailed, SPAWN_ASSERTION_MESSAGE);
+        return;
+      }
+
       // 纪律 3：上游不可用必写审计行（detail 只留消息，不含 env 值 / 上游 stderr 原文）。
       auditRejected('upstream_unavailable', {
         stage: 'spawn',

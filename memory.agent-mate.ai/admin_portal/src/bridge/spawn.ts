@@ -24,6 +24,7 @@ import {
   LAUNCH_HOME,
   renderLaunch,
 } from './launch-template';
+import { checkUserDbPath, spawnAssertionError } from './user-db-path';
 
 /** 注入子进程的环境变量**白名单**（键名即上游契约的一部分，改动须对照 §5.6.4）。 */
 const ENV_ALLOWLIST = ['PATH'] as const;
@@ -76,9 +77,19 @@ export async function spawnUpstream(options: SpawnUpstreamOptions): Promise<Upst
 
   const rendered = renderLaunch(handle, launchOverride);
 
-  // TODO(3.2): 在此处插入 fail-closed 路径断言 —— 断言 rendered.env.AI_MEMORY_DB
-  //   非空 · 以 `/data/users/` 开头 · 含当前 handle，不满足即拒绝启动会话且不 spawn。
-  //   归属：Sprint 4 `3.2`「mcp:spawn 前置断言」（模板不变量 2 / RID D1 / 判据 V1）。
+  // ---- fail-closed 前置断言：必须在 **spawn 之前**（`3.2`；模板不变量 1 / 2）----
+  //
+  // 不通过即抛（错误上挂 `reason`），由 `route.ts` 分流成 **500 `spawn_assertion_failed`**。
+  // **位置要求**：必须在下方「握手失败的回收 try」**之外** —— 那段 `catch` 会去关 `client` /
+  // `transport`，而断言失败时两者都还没构造出来。
+  //
+  // 判定口径（含「为什么必须归一化后判」的实测表、以及「为什么不单独断言 `AI_MEMORY_KEY_DIR`」）
+  // 见 `user-db-path.ts` 的文件头；契约真源是 `specs/mcp/mcp-design.md` §5.6.4 不变量 1 / 2 与
+  // `specs/web-portal/web-design.md` §12.5 的「spawn 前断言失败」行。
+  const pathCheck = checkUserDbPath(rendered.env.AI_MEMORY_DB, handle);
+  if (!pathCheck.ok) {
+    throw spawnAssertionError(pathCheck.reason);
+  }
 
   // 最小 env 白名单 + 模板 env + 统一 HOME。**不传 process.env 全量**（见文件头说明）。
   const env: Record<string, string> = {};

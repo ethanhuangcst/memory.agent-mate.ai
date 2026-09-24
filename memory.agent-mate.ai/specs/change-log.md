@@ -39,6 +39,47 @@
 
 **一处要如实体认的事**：真上游 core 档声明的能力恰好是 `{prompts, tools}` —— **等于网关原来的硬编码值**，所以本行对当前部署的**可观测变化只有 `serverInfo`**（`portal-bridge 0.1.0` → `ai-memory 0.10.0`）。这不削减本行的价值（契约正确 + 换档位自动跟随 + 镜像漂移可见），但意味着**验收断言只能写「等于上游声明的值」，不能写「能力发生了变化」**。
 
+### `3.2` 开发准备：把「路径断言」从「照字面判」纠正为「按归一化判」
+
+**为什么**：`3.2` 的验收条件是「库路径为空 / 不在 `/data/users/` 内 / 与 handle 不匹配时拒绝建立会话，且**不 spawn 子进程**」。三条判据的**字面**版本看起来完备，但 `AI_MEMORY_DB` 的渲染只是字符串替换（模板常量 `/data/users/{handle}/ai-memory.db`，`renderLaunch` 不做任何校验）—— 于是「含该 handle」这句话在**未归一化**的路径上几乎恒真。
+
+**实测（本轮，纯计算，未改产品代码）**：
+
+| 非法 `handle` | 渲染出的 `AI_MEMORY_DB` | 字面三项 | 归一化后 | 归一化三项 | 只看字面的后果 |
+|---|---|---|---|---|---|
+| `alice/../bob` | `/data/users/alice/../bob/ai-memory.db` | **三过** | `/data/users/bob/ai-memory.db` | 过 / **不过** | **静默串到他人库**（`AC4.7` 那一类） |
+| `../../x` | `/data/users/../../x/ai-memory.db` | **三过** | `/x/ai-memory.db` | **不过** | 越出 users root |
+| `../bob` | `/data/users/../bob/ai-memory.db` | **三过** | `/data/bob/ai-memory.db` | **不过** | 落到 users root 之外 |
+| `""` | `/data/users//ai-memory.db` | **三过** | `/data/users/ai-memory.db` | 过 / 过 | **归一化也拦不住** ⇒ 见下 |
+
+**做了什么**（仍只做开发准备）：
+
+- **定档「必须在 `path.posix.normalize` 之后判定」**，落 [`mcp/mcp-design.md`](mcp/mcp-design.md) §5.6.4 不变量 2 并附上表。
+- **明确不做**不变量 1（`handle` 匹配 `HANDLE_PATTERN`）的 spawn 侧复述：空的 / 越界的 `handle` 在**签发链路**上已被 `shared/handle.ts` 的 `userDirectory()` 拦死（`path.resolve` 后 `path.dirname` 必须等于 usersRoot，否则抛错 ⇒ `issueKey` 返回 `directory-failed`，**令牌签不出来**）⇒ 再补一条就是**不可达分支**，只会稀释覆盖率（本仓 `statements` 余量本就薄）。**这是有理由的不做，不是遗漏。**
+- **审计与文案口径**（[`web-portal/web-design.md`](web-portal/web-design.md) §12.5）：审计**只记原因枚举**（`empty` / `outside_users_root` / `handle_mismatch`）+ `stage`，**不记路径** —— 路径里可能含**他人 handle**，写进本用户的审计行等于把他人身份落进可检索的审计面；客户端文案用**同一句**覆盖「缺失或不匹配」，同时满足 `AC4.4` 与 `AC4.7`。
+- **端到端可达性查明**：能走到 HTTP 层的坏输入**只有** `alice/../bob` 这一类（`userDirectory` 放行、归一化后指向他人库）⇒ 它正是 `AC4.7` / `TC-M-L3-02` 端到端用例的触发手段（测试里用 repo 层 `insertUser` 绕过 `createUser` 的 `validateHandle`）；`""` 与「越界」两类只能由**纯函数单测**覆盖。落点已登记 [`mcp/mcp-test.md`](mcp/mcp-test.md) §4-F。
+
+**未做（等审核）**：`3.2` 的产品代码一行未动；判定函数的形状与落点见计划。
+
+**顺带修一处上一轮引入的文档缺陷**：[`sprint-backlog.md`](sprint-backlog.md) 变更记录表是**追加序**，而上一轮追加 `3.9` 交付行时用了「替换」而非「追加」，把 `2026-09-20 初版：登记 4 项 ToDo 与 4 项待提供输入` 那一行**覆盖**掉了，并且插在表头。该条目已还原、错位行已移到表尾，并在同表登记了这条修复。
+
+**决策修订（用户拍板后）**：开发准备稿里我写的是「不变量 1 的 spawn 侧复述**不做**」，理由是「不可达分支只会稀释覆盖率」。用户追问后复核发现**该理由部分不成立** —— 「不可达」只对**生产 / 集成路径**成立，对**覆盖率**不成立（判定若放在导出的纯函数里，单测可直接覆盖它）。据此改为**加上**：复用真源 `validateHandle`，代价降为「一行 + 一支可覆盖的单测」，收益是 `handle=''` 这类绕过服务层的写入不会让库静默落到 `/data/users/` 根下变成一个**共享库**。已同步：§5.6.4 不变量 1 那段（含修订留档）· §12.5 原因枚举增 `invalid_handle` · §4-F 落点由四支改五支 · `sprint-backlog` 的 `3.2` 行措辞。
+
+### `3.2`「mcp:spawn 前置断言」交付：把「路径是否可信」变成 spawn 前的硬门
+
+**为什么**：RID `D1`（**阻塞级**）的落地行 —— 上游被以**错误的库路径**启动时，失败形态恰恰是「**功能正常**」：漏设 `AI_MEMORY_DB` 会让所有用户静默共用主库，指向他人库则**静默串号**，两者都不报错。门户若不在起子进程之前拦下，就没有第二道防线。
+
+**做了什么**：
+
+- **新增 `src/bridge/user-db-path.ts`**：`checkUserDbPath(dbPath, handle)` 返回判别式结果（四项原因 `empty` / `outside_users_root` / `handle_mismatch` / `invalid_handle`），外加把 `reason` 挂到**裸 `Error`** 上的小工具（本仓零错误子类、零 `catch` 内 `instanceof` 分流 ⇒ 与 `classifyRelayFailure` 读 `error.code` 同构）。判定顺序是**先 `validateHandle`、再 `path.posix.normalize` 后判三项** —— 字面判定会放过全部已知坏输入（实测：`alice/../bob` 的字面路径三项全过、归一化后指向**他人**库）。
+- **`spawn.ts`**：在 `renderLaunch(...)` 之后、构造 `StdioClientTransport` **之前**调用断言 ⇒ 拒绝时**子进程一个都不起**。
+- **`route.ts`**：spawn 的 `catch` 按 `error.reason` 分流 —— 断言失败归 **500 `spawn_assertion_failed`** + 审计（`stage: 'spawn_assertion'`，**只记原因枚举、不记路径**）+ 一行 `request.log`；其余仍 **503**。顺带消费了此前是**死常量**的 `BRIDGE_ERROR_CODES.spawnAssertionFailed`。
+- **测试**：单测 **6 支**（五支判定 + 错误契约）与端到端 **1 条**；新增 `tests/fixtures/marker-command.mjs` —— **执行即留痕**的标记脚本，用来断言**否定命题**「上游未被 spawn」（判据强于 `--env-dump`：后者无法区分「没起」与「起了但在 dump 前退出」）。
+
+**验证**：离线 **319 passed / 29 files** · 覆盖率 **93.18 / 86.02 / 97.68 / 94.47**（阈值 92/85/96/93，**比改前更高**；新模块 `user-db-path.ts` 四项 **100%**）· `make portal-mcp-probe`（真上游）**退出码 0**（新增断言不误伤正常会话）· `make doc-links` 48 文件零悬空 · `npx tsc --noEmit` 无错 · `read_lints` 0 诊断。
+
+**一处如实说明**：加上「复用 `validateHandle`」后，`alice/../bob` 这类输入会**先在 handle 关被拦**、归 `invalid_handle`（而非 `handle_mismatch`）—— 这是**更精确的根因**；`handle_mismatch` 因此留给「handle 合法、但路径指向他人」那一支（模板被改错时的形态）。两支各有一个互斥、可分别触发的入口，且都已由单测固定住。
+
 ---
 
 ## 2026-09-23

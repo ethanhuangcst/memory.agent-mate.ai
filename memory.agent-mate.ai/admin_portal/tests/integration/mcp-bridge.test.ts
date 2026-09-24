@@ -39,9 +39,12 @@ import { createUser } from '../../src/web/services/users';
 import { listAudit } from '../../src/web/db/repo/audit';
 import { deactivateUser, issueKey, revokeKey } from '../../src/web/services/keys';
 import { listKeysForUser } from '../../src/web/services/keys';
+import { insertUser } from '../../src/web/db/repo/users';
 
 const ACTOR = 'owner@agent-mate.ai';
 const FIXTURE = path.resolve(import.meta.dirname, '..', 'fixtures', 'fake-upstream.mjs');
+/** `3.2`：执行即留痕的标记脚本 —— 用来断言**否定命题**「上游未被 spawn」（判据强于 `--env-dump`）。 */
+const MARKER_FIXTURE = path.resolve(import.meta.dirname, '..', 'fixtures', 'marker-command.mjs');
 
 let tmpRoot: string;
 let envDumpDir: string;
@@ -143,13 +146,15 @@ async function connect(token: string, host = '127.0.0.1'): Promise<Client> {
 }
 
 /**
- * 起一个「上游形态不同」的独立门户实例 —— `PORTAL_LAUNCH_OVERRIDE` 是**配置级**的，
- * 一个进程只能有一种上游形态，所以要验证另一种上游形态就得另起一个。
+ * 起一个「**启动命令不同**」的独立门户实例 —— `PORTAL_LAUNCH_OVERRIDE` 是**配置级**的，
+ * 一个进程只能有一种上游形态，所以要验证另一种形态就得另起一个。
  *
- * `3.9` 提到模块作用域：失败面、身份与超时两处 describe 都要用它。
+ * `3.9` 提到模块作用域：失败面、身份与超时几处 describe 都要用它；
+ * `3.2` 再把**命令本身**参数化 —— `TC-M-L3-02` 要用**标记脚本**当命令，
+ * 才能断言「上游**未被** spawn」这个否定命题（判据见 `MARKER_FIXTURE` 的文件头）。
  */
-async function startWithUpstream(
-  extra: string,
+async function startPortal(
+  overrideCommand: string,
   timeouts: { handshakeMs?: number; requestMs?: number } = {},
 ): Promise<{ base: string; close: () => Promise<void> }> {
   const cfgForBadUpstream = loadConfig({
@@ -158,7 +163,7 @@ async function startWithUpstream(
     PORTAL_MCP_HOST: '127.0.0.1',
     PORTAL_DB_PATH: path.join(tmpRoot, 'portal.db'),
     PORTAL_USERS_ROOT: cfg.usersRoot,
-    PORTAL_LAUNCH_OVERRIDE: `node ${FIXTURE} ${extra}`,
+    PORTAL_LAUNCH_OVERRIDE: overrideCommand,
     PORTAL_LOG_LEVEL: 'silent',
   } as NodeJS.ProcessEnv);
   // 两个超时**分开注入**（`3.9` 起分层）：`handshakeMs` 只影响 `client.connect`、
@@ -181,8 +186,23 @@ async function startWithUpstream(
   };
 }
 
-/** 裸 `fetch` 发 `initialize`（只回状态码与错误体），用于「会话根本没建起来」那类断言。 */
-async function initializeAt(base: string): Promise<{ status: number; body: { error?: string } }> {
+/** 上游 = 假上游夹具 + 额外 argv（`3.2` 之前的所有用例都走这一支）。 */
+async function startWithUpstream(
+  extra: string,
+  timeouts: { handshakeMs?: number; requestMs?: number } = {},
+): Promise<{ base: string; close: () => Promise<void> }> {
+  return startPortal(`node ${FIXTURE} ${extra}`, timeouts);
+}
+
+/**
+ * 裸 `fetch` 发 `initialize`（只回状态码与错误体），用于「会话根本没建起来」那类断言。
+ *
+ * `token` 可覆盖 —— `3.2` 的用例要拿**另一个用户**的令牌打（默认是 `alice` 的）。
+ */
+async function initializeAt(
+  base: string,
+  token: string = tokenAlice,
+): Promise<{ status: number; body: { error?: string } }> {
   const response = await fetch(`${base}/mcp`, {
     method: 'POST',
     headers: {
@@ -190,7 +210,7 @@ async function initializeAt(base: string): Promise<{ status: number; body: { err
       // MCP Streamable HTTP 要求客户端显式声明可接受的响应类型；
       // 缺它会得到 **406**（而不是会话失败）—— 这是协议层门禁，不是我们的业务分支。
       accept: 'application/json, text/event-stream',
-      authorization: `Bearer ${tokenAlice}`,
+      authorization: `Bearer ${token}`,
     },
     body: JSON.stringify({
       jsonrpc: '2.0',
@@ -671,6 +691,50 @@ describe('上游身份与能力透传、超时分层（3.9：TC-M-L1-18 / 19 / 2
       // 反证（不拽回 handler 时上游收不到）由 `probes/bridge-identity-probe/` 断言 4 给出，
       // 无法在集成层构造：网关侧「不拽回」这个状态在产品代码里不存在。
       expect(fs.readFileSync(requestLog, 'utf8')).toContain('logging/setLevel');
+    } finally {
+      await close();
+    }
+  }, 30_000);
+});
+
+describe('spawn 前置断言（3.2：TC-M-L3-02）', () => {
+  /** 能通过签发链路、但归一化后指向**他人**库的坏 handle —— 正是 `AC4.7` 那一类。 */
+  const BAD_HANDLE = 'alice/../bob';
+
+  it('库路径指向他人库 ⇒ spawn 前拒绝：500 + 审计行 + **上游未被启动**', async () => {
+    // 造一个「绕过服务层」的用户：`createUser` 会拒掉 `alice/../bob`（`validateHandle` 判 `traversal`），
+    // 所以这里走 repo 层的 `insertUser`（既有先例：tests/integration/db.test.ts）。
+    // 该 handle **能通过签发链路**（`userDirectory(<usersRoot>, 'alice/../bob')` 解析到 `<usersRoot>/bob`、
+    // 不越界）⇒ 这是一个**真的能到达 spawn** 的坏输入 —— 只靠「签发时拦 handle」是拦不住它的。
+    insertUser(db, { handle: BAD_HANDLE });
+    const issued = issueKey({ db, usersRoot: cfg.usersRoot, actor: ACTOR }, { handle: BAD_HANDLE });
+    if (!issued.ok) throw new Error(`issueKey 失败：${JSON.stringify(issued)}`);
+
+    // 上游命令换成**标记脚本**：它被执行的第一个动作就是 append 标记 ⇒
+    // 「标记文件不存在」直接等于「上游**未被** spawn」；判据强于 `--env-dump`
+    // （后者无法区分「没起」与「起了但在 dump 前退出」）。
+    const marker = path.join(tmpRoot, 'spawn-marker.log');
+    const { base, close } = await startPortal(`node ${MARKER_FIXTURE} ${marker}`);
+    try {
+      const { status, body } = await initializeAt(base, issued.plaintext);
+
+      // §12.5：断言失败归 **500** —— 不是 503（那会把排障方向引到上游去，而真相是门户要拦）。
+      expect(status).toBe(500);
+      expect(body.error).toBe('spawn_assertion_failed');
+
+      // 必写审计行；`detail` **只记原因枚举、不记路径**（路径里可能含**他人 handle**）。
+      const rejected = listAudit(db, { limit: 500, offset: 0 }).filter(
+        (row) => row.action === 'mcp_session_rejected' && row.detail_json.includes('spawn_assertion'),
+      );
+      expect(rejected.length).toBeGreaterThan(0);
+      // 原因是 `invalid_handle`：判定**先校验 handle**，而 `alice/../bob` 含 `/`
+      // ⇒ 在路径运算之前就被拦下（比归 `handle_mismatch` 更精确：根因在 handle 本身）。
+      expect(rejected[0]?.detail_json).toContain('invalid_handle');
+      expect(rejected[0]?.detail_json).not.toContain('/data/users/');
+
+      // **否定命题**：命令从未被执行 ⇒ 必然也没建库、没写任何数据
+      // （一句判据同时覆盖 `AC4.7` 的「未写入任何数据」与「不落共享主库」）。
+      expect(fs.existsSync(marker)).toBe(false);
     } finally {
       await close();
     }
