@@ -1,0 +1,91 @@
+# 门户 stack —— 部署事实文件（Sprint 4 `4.4` 入仓；步骤见 ../specs/deployment.md §12.5）
+#
+# **为什么入仓**：此前门户 stack 只有「在服务器上新写」一句话（§12.2），而门户代码真正会读
+# 21 个 `PORTAL_*` 键（admin_portal/src/config.ts 的 loadConfig）—— 键的唯一登记处只有设计文档
+# web-design.md §12.9 ⇒ 读者照 §12.2 做**无从知道要填哪些**（`3.16` 探针 `A2` 据此报红）。
+# 本文件把「门户 stack 的挂载与环境」变成**可审的真源**；非密钥键一律在这里，密钥仍在 portal.env。
+#
+# **与主 stack 的关系**：两个 stack **独立**，可单独重启；**唯一耦合点**是共享数据卷
+# `ai_memory_data`（`/data/users/<handle>/ai-memory.db` 需两边同时读写）。门户**不挂 docker socket**。
+#
+# **镜像**：按 ../specs/web-portal/web-design.md §3.2 构建（`FROM node:22-bookworm-slim` +
+# `COPY --from=ghcr.io/alphaonedev/ai-memory:<tag>`，tag 由 upstream.lock 注入）。镜像名/标签
+# 由 `PORTAL_IMAGE` 给出（**不入仓**：它是构建产物坐标，不是配置）。
+#
+# 用法（服务器 `/opt/ai-memory/` 下）：
+#   docker compose -f portal.compose.yml --env-file portal.env config   # 落地前先自检语法与插值
+#   docker compose -f portal.compose.yml --env-file portal.env up -d
+#   docker compose -f portal.compose.yml logs -f portal                 # 看启动自检是否全过（fail-closed）
+
+name: memory-agent-mate-portal
+
+services:
+  portal:
+    image: ${PORTAL_IMAGE:?set PORTAL_IMAGE in portal.env（按 web-design.md §3.2 构建的镜像坐标）}
+    container_name: memory-agent-mate-portal
+    restart: unless-stopped
+
+    # 密钥**只**走 portal.env（`chmod 600`）：当前只有门户专用 `DASHSCOPE_API_KEY`。
+    # 与主 stack 的 `.env` 分开 ⇒ 门户那把 key 可单独吊销/归因（§12.2）。
+    env_file:
+      - portal.env
+
+    environment:
+      # ── 运行环境（决定自签测试通道是否可用：production 下启用即**拒绝启动**）──────────
+      PORTAL_ENV: production
+
+      # ── 面隔离：两个面各一个 Host，按 Host 分面（web-design §12.3）──────────────────
+      PORTAL_ADMIN_HOST: ${PORTAL_ADMIN_HOST:?set PORTAL_ADMIN_HOST in portal.env}
+      PORTAL_MCP_HOST: ${PORTAL_MCP_HOST:?set PORTAL_MCP_HOST in portal.env}
+      PORTAL_PORT: "${PORTAL_PORT:-8080}"
+
+      # ── 存储：门户库**必须不在 `/data` 下**（`/data` 是上游的，且被共享卷承载）──────
+      PORTAL_DB_PATH: /srv/portal/portal.db
+      PORTAL_USERS_ROOT: /data/users
+      PORTAL_ROOT: /app
+      PORTAL_VIEWS_ROOT: /app/src/web/views
+      PORTAL_STATIC_ROOT: /app/assets
+
+      # ── 会话：空闲超时 / 单会话最长时长（毫秒；`4.1` 定值，本处给保守初值）──────────
+      PORTAL_SESSION_IDLE_TIMEOUT: "900000"
+      PORTAL_SESSION_MAX_DURATION: "86400000"
+
+      # ── 身份：由 Cloudflare Access 认定（门户不自建账号；§12.4 与 web-design §6）──────
+      PORTAL_ACCESS_TEAM_DOMAIN: ${PORTAL_ACCESS_TEAM_DOMAIN:?set PORTAL_ACCESS_TEAM_DOMAIN in portal.env}
+      PORTAL_ACCESS_AUD: ${PORTAL_ACCESS_AUD:?set PORTAL_ACCESS_AUD in portal.env}
+      # PORTAL_ACCESS_JWKS_URL: 可选 —— 默认由团队域推导；仅当 JWKS 不在标准路径时才设
+      PORTAL_ACCESS_JWKS_URL: ${PORTAL_ACCESS_JWKS_URL:-}
+
+      # ── 其它 ────────────────────────────────────────────────────────────────────
+      PORTAL_I18N_DEFAULT: zh-CN
+      PORTAL_LOG_LEVEL: info
+
+      # ── **生产不得设置**的两个族（留作注释：写了就是事故）─────────────────────────
+      # PORTAL_TEST_JWT_ENABLED / PORTAL_TEST_JWT_JWKS / PORTAL_TEST_JWT_ISS /
+      # PORTAL_TEST_JWT_AUD / PORTAL_TEST_JWT_EMAIL
+      #   自签 JWT 测试通道：仅离线自动化用，且**只允许绑定回环 Host**。
+      #   在 `PORTAL_ENV=production` 下启用即**拒绝启动**（fail-closed）。
+      # PORTAL_LAUNCH_OVERRIDE
+      #   开发期命令覆盖（覆盖 launch 模板的「二进制那一段」）；**仅 `PORTAL_ENV=dev` 生效**。
+      #   生产用 β′：镜像内自带上游二进制，直接 spawn —— 不设此键。
+
+    volumes:
+      # 与主 stack **共享**的上游数据卷（唯一耦合点；`external` ⇒ 必须先起主 stack 建好它）
+      - ai_memory_data:/data
+      # 门户自己的数据卷（门户库 + 会话临时文件），与上游数据分开
+      - portal_data:/srv/portal
+      # 上游配置（只读挂载，路径必须与 `$HOME` 推导一致，否则配置**静默落空** —— 见 §7.2 S3）
+      - ./config.toml:/data/.config/ai-memory/config.toml:ro
+
+    networks:
+      - default
+
+volumes:
+  ai_memory_data:
+    external: true # 由主 stack（../deploy/docker-compose.prod.yml）创建并拥有
+  portal_data:
+
+networks:
+  default:
+    external: true
+    name: portainer_network # 与主 stack 同网（本方案无公网 HTTP 入口，反代在同网侧）

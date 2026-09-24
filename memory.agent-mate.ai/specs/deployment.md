@@ -460,6 +460,77 @@ bash scripts/pin-update.sh <ref> [--force]          # 更新锁文件（--force 
 | **门户侧** | 管理面只在 06「Admin MCP 配置」内**说明**上述做法，**不提供**邀请 / 删除 / 重设密码控件；**零新增凭证、零 CF API 调用**（`AC10.9`） |
 | **MCP 面** | `<MCP_HOST>` **必须绕过** Cloudflare Access —— 命令行客户端无法完成浏览器 SSO，被拦会表现为「连不上」（[`web-portal/web-design.md`](./web-portal/web-design.md) §6） |
 
+### 12.5 三段外部前置的逐步指南（Sprint 4 `4.4` 交付）
+
+> **读者**：资源持有者（运维）—— 三项外部前置「都有，但需要详细的指南如何配置」。
+> **每步四件套**：**做什么 → 期望 → 验证 → 不符怎么办**；示例一律**占位符**（`<ADMIN_HOST>` / `<OSS_BUCKET>` 等），不写真实值。
+> **机检**：本节引用的**键 / 路径 / 承诺**由门禁 `make deploy-doc-audit` 把住（探针 [`../probes/deploy-guide-audit/README.md`](../probes/deploy-guide-audit/README.md)）—— 与真源漂移会**红**。
+> **边界如实登记**：控制台步骤（Cloudflare / 阿里云）**无法在本机执行**；本节保证的是「照做可得到**可验证**的结果」，故每个验证点都设计成能在**服务器或本机**跑的形态。
+
+#### 12.5.1 Cloudflare Access（管理面认证）
+
+| # | 做什么（Zero Trust 控制台） | 期望 | 验证（服务器 / 本机） | 不符怎么办 |
+|---|---|---|---|---|
+| 1 | Access → Applications → **Add self-hosted**：域名填 `<ADMIN_HOST>` | 应用建成 | `curl -s -o /dev/null -w '%{http_code}' https://<ADMIN_HOST>/` | 不是 `302` ⇒ 域名写错，或**被别的应用先匹配**（按最具体路径优先） |
+| 2 | 该应用 → Policies → **Allow**：列**已批准邮箱**，**建议 ≥ 2 个**（任一失效仍可进入，`AC10.6`） | 策略生效 | 用**非名单**邮箱访问 ⇒ `302`（被拦） | 非名单也能进 ⇒ 策略不是 Allow，或还有别的 Allow 策略/组 |
+| 3 | 登录方式：**Google（主）+ 邮箱一次性验证码（兜底）** | 两种钥匙**互不依赖** | 用名单邮箱登录成功 | 只配一种 ⇒ 主登录失效时**进不去** |
+| 4 | 会话时长：控制台先设**最大档**（疑为 1 个月） | 实际拿到该档 | 控制台可见 | **目标 3 个月**须经 API / Terraform 的 `session_duration` 实测；**不得把目标值写成既有能力**（`AC10.7`） |
+| 5 | **必须**给 `<MCP_HOST>` 建一条 **Bypass** | 命令行客户端能连 | `curl -s -o /dev/null -w '%{http_code}' https://<MCP_HOST>/` | 若也被拦 ⇒ MCP 客户端表现为「**连不上**」（命令行无法完成浏览器 SSO） |
+| 6 | 增删管理员：Applications → 该应用 → Policies → Allow → 改邮箱 | **移除后对方下次请求即失效**（无会话需吊销，`AC10.10`） | 移除后让对方重试 ⇒ `302` | 仍能进 ⇒ 该邮箱还在别的 Allow 策略/组里 |
+| 7 | **根凭证离线保存**：Cloudflare 账号 + 2FA 恢复码 | 存到**离线**介质 | 人工确认 | 无 —— **必须做**：邮箱失效时恢复链的第一环 |
+| 8 | 门户侧：管理面只**说明**做法，**不提供**邀请 / 删除 / 重设控件（`AC10.9`） | 界面上没有这些控件 | 人工确认 | 出现控件即越界 |
+
+> **本段收口验证**：`make portal-e2e ARGS=--online` ⇒ **退出码 `0`**（缺前置时它以 `40` **明确跳过** —— **不算通过**）。
+
+#### 12.5.2 SSH 密钥对与 forced command
+
+| # | 做什么 | 期望 | 验证 | 不符怎么办 |
+|---|---|---|---|---|
+| 1 | 调用者侧生成密钥对：`ssh-keygen -t ed25519 -C "<用途标签>" -f ~/.ssh/id_ed25519` | 生成 `.pub` | `ls ~/.ssh/id_ed25519.pub` | 已有密钥则**不要覆盖**：换 `-f` 新路径，并在 `~/.ssh/config` 的 `IdentityFile` 指过去 |
+| 2 | 公钥交服务器方（**带外通道**，不要明文粘贴到聊天工具） | 服务器方拿到一行公钥 | 人工确认 | — |
+| 3 | 服务器方**逐行追加**到 `/home/aimem-ssh/.ssh/authorized_keys`（`sudo vim`）：主人行 + 每用户行；模板与逐项解释见 §4.3 与 [`mcp/mcp-design.md`](./mcp/mcp-design.md) §5.2 | 属主 `aimem-ssh` · 权限 `600` | `ls -l /home/aimem-ssh/.ssh/authorized_keys` | **不要整文件重写**（一次拼错会连带整个文件失效）⇒ 只逐行追加 |
+| 4 | 每用户行的 `command=` 里**显式写档位**：用户通道 `--profile core`（8 项）· 管理员入口 `--profile admin` | 显式声明 | 人工核对 `authorized_keys` 各行 | 不写 `--profile` 时上游**默认 `core` 且不报错不告警**（实测）⇒ 必须显式写 |
+| 5 | 调用者侧写 `~/.ssh/config` 的 Host 块（见 §6.1） | 别名可用 | `ssh -G ai-memory` | 别名不生效 ⇒ `Host` 名拼错，或配置文件权限过宽 |
+| 6 | 首次连接 | 能建立连接 | `ssh ai-memory`（MCP 客户端走 stdio 时也用它） | 被拒 ⇒ 先看 `authorized_keys` 权限与属主，再看 §4.3 的强制命令 |
+| 7 | 交互 shell **不可用**（`no-pty` / `no-agent-forwarding` / `no-port-forwarding` / `no-user-rc` / `no-X11-forwarding`） | 只跑被允许的那条命令 | `ssh ai-memory bash -i` ⇒ 得到的仍是 harness（**不是**交互 shell） | 拿到交互 shell ⇒ 强制命令没生效，**立即修正**（这是保底路径的安全边界） |
+
+#### 12.5.3 对象存储私有桶与 RAM 子账号
+
+| # | 做什么（阿里云控制台 / 服务器） | 期望 | 验证 | 不符怎么办 |
+|---|---|---|---|---|
+| 1 | 建 **OSS 桶** `<OSS_BUCKET>`（region 按 §1.1 的核查结论填）· **读权限 = 私有** · **开启 SSE** | 私有 + SSE 已开 | 控制台属性页确认 | 公开读 ⇒ **立即改回**（快照含全部用户记忆） |
+| 2 | 建 **RAM 子账号**（只用于备份），只授**对该桶**的最小权限（`PutObject` / `GetObject` / `ListObjects`） | AK 只够备份用 | 控制台策略明细确认 | 授了 `*` ⇒ 收窄到桶级 |
+| 3 | AK / Secret **只落服务器侧**（如 `/opt/ai-memory/oss.env`，`chmod 600`）：**不入仓、不进聊天工具** | 仓库里没有任何值 | `make secret-check` | 一旦写进 `*.example` / specs ⇒ **立即吊销并轮换** |
+| 4 | 备份同步（脚本 Sprint 5 落地 `memory.agent-mate.ai/backup/`）：每日快照 → 同步到桶 | 见 §8 的「同步后**校验 `sha256sum` 一致**」 | 见 §8 | 校验不一致 ⇒ **按失败告警**，不要静默重传 |
+| 5 | **回读比对**（恢复演练的最小版）：从桶取回一份快照比哈希 | 一致 | `sha256sum <本地快照> <回读文件>` | 不一致 ⇒ 先查 SSE / 分片上传造成的对象差异，再查传输截断 |
+
+> **合规性复核**：三步做完后跑 `make secret-check`（密钥 / 公网 IP / 私有端点）—— 它是**上线前**与**每次改动后**的必过项。
+
+#### 12.5.4 门户 stack 的配置（`PORTAL_*` 的真源与取值）
+
+**真源**：[`../deploy/portal.compose.yml`](../deploy/portal.compose.yml)（**非密钥键全部在此**）· [`../deploy/portal.env.example`](../deploy/portal.env.example) → 落地为 `portal.env`（**只放密钥**，`chmod 600`）。
+
+| 分组 | 键 | 生产取值 / 说明 |
+|---|---|---|
+| 运行环境 | `PORTAL_ENV` | `production`（此值下**启用自签测试通道即拒绝启动**） |
+| 面隔离 | `PORTAL_ADMIN_HOST` · `PORTAL_MCP_HOST` · `PORTAL_PORT` | 两个面各自的 Host（面隔离判据的来源）；端口只对同网反代暴露 |
+| 存储 | `PORTAL_DB_PATH` · `PORTAL_USERS_ROOT` · `PORTAL_ROOT` · `PORTAL_VIEWS_ROOT` · `PORTAL_STATIC_ROOT` | 门户库**必须不在 `/data` 下**；`PORTAL_USERS_ROOT=/data/users`（与主 stack 共享卷）；后三个是**镜像内路径**，填错由启动自检**响亮失败** |
+| 会话 | `PORTAL_SESSION_IDLE_TIMEOUT` · `PORTAL_SESSION_MAX_DURATION` | 毫秒；**取值归 `4.1`**，compose 里给的是保守初值 |
+| 身份 | `PORTAL_ACCESS_TEAM_DOMAIN` · `PORTAL_ACCESS_AUD` · `PORTAL_ACCESS_JWKS_URL` | 团队域 + Access 应用的 `aud`；`JWKS_URL` **可选**（默认由团队域推导） |
+| 日志 / i18n | `PORTAL_LOG_LEVEL` · `PORTAL_I18N_DEFAULT` | `info` · `zh-CN` |
+| **生产不得设置** | `PORTAL_TEST_JWT_ENABLED` · `PORTAL_TEST_JWT_JWKS` · `PORTAL_TEST_JWT_ISS` · `PORTAL_TEST_JWT_AUD` · `PORTAL_TEST_JWT_EMAIL` | 自签 JWT 通道：仅离线自动化用，且**只允许绑定回环 Host**；写进生产即拒绝启动 |
+| **仅开发期** | `PORTAL_LAUNCH_OVERRIDE` | 覆盖 launch 模板的「二进制那一段」；生产用 β′（镜像自带上游二进制）⇒ **不设** |
+
+#### 12.5.5 收口验证（三段做完后一次跑完）
+
+| # | 做什么 | 期望 |
+|---|---|---|
+| 1 | `docker compose -f portal.compose.yml --env-file portal.env config` | 无语法 / 插值错误（**落地前先跑**） |
+| 2 | `docker compose ... up -d`，看门户日志 | 启动自检**全过**：`/data/users` 可写 · embeddings 可达且 **1024** 维 · 自身二进制版本 == [`../upstream.lock`](../upstream.lock)；任一不满足**拒绝启动**（fail-closed） |
+| 3 | `make deploy-doc-audit` | **退出码 `0`**（指南与真源不漂移） |
+| 4 | `make portal-e2e ARGS=--online` | 退出码 `0`（`40` = 前置不足，**不算通过**） |
+| 5 | `make secret-check` | 通过（无密钥 / 无公网 IP / 无私有点） |
+
 ---
 
 ## 13. 部署验收清单
@@ -488,3 +559,4 @@ bash scripts/pin-update.sh <ref> [--force]          # 更新锁文件（--force 
 | 2026-09-21 | **§4.3 强制命令定档**：主人（默认库 = **管理员入口**）行 → `--profile admin`（22 项）；用户（一用户一库）行 → `--profile core`（8 项，显式声明 —— 不传时默认也是 core 且**不报错**）；补「档位口径」注与「改档须重连」。决议与理由 [`mcp/mcp-design.md`](./mcp/mcp-design.md) §8.3；实测依据 [`../scripts/profile-probe.sh`](../scripts/profile-probe.sh)（7 档全绿）；对外用户版说明 [`mcp/mcp-capabilities.md`](./mcp/mcp-capabilities.md) |
 | 2026-09-22 | **Sprint 编号随 Replan 改指**：§5.3 生产定时器、端到端验收脚本、`/data/backups` 备份脚本目录三处的 Sprint 由旧 Sprint 5 改为 **Sprint 6** |
 | 2026-09-24 | **云资源清单落点 + 备份目标写实 + 两处指称校正**：① 新增 **§1.1 云资源准备清单**（唯一真源，7 项外部资源）；Sprint 5 `#8` 的指针由 `deploy/README.md`（该文件**并无**此清单）改指 §1.1；② §8 外迁目标由「OSS 兼容对象存储」写实为**阿里云 OSS 私有桶**，region 标 **待核查**并给出核查命令；③ §5.3 的「留 Sprint 5」改为**条目级**指称 `#10`，与该行承接的「生产定时器安装 / 日志采集 / 告警」互指（此前该生产项在任何 Sprint 都无承接条目）；④ **订正上一条（2026-09-22）**：其「改为 Sprint 6」的改指已被 2026-09-23 重排取代 —— 生产上线与备份恢复整体回到 Sprint 5，故正文三处「Sprint 5」自始正确，本次未改正文。依据与过程见 [`change-log.md`](./change-log.md) 2026-09-24 |
+| 2026-09-24 | **三段外部前置的逐步指南（Sprint 4 `4.4`）**：① 新增 **§12.5**（CF Access 8 步 · SSH 密钥对与 forced command 7 步 · 对象存储私有桶与 RAM 子账号 5 步 · 门户 `PORTAL_*` 真源表 · 收口验证 5 项），每步「**做什么 → 期望 → 验证 → 不符怎么办**」四件套、示例一律占位符；② **门户 stack 真源入仓**（同样服务于本行，文件在 [`../deploy/portal.compose.yml`](../deploy/portal.compose.yml)）：21 个 `PORTAL_*` 键从「只写在设计文档 §12.9」变为**部署真源**；③ 本节引用的键 / 路径 / 承诺由门禁 `make deploy-doc-audit` 把住（判据 `A2` 即由「红」转「绿」）。依据见 [`change-log.md`](./change-log.md) 2026-09-24 的 `4.4` 交付小节；`§1.1` / `§8` / `§12.2` 正文**未改**（本行只新增 §12.5）。 |

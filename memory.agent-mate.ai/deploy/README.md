@@ -8,6 +8,7 @@
 | `config.toml.tmpl` | 配置模板；落地时改名为 `config.toml` 并改三个必改点 |
 | `.env.prod.example` | 密钥样例；落地时改名为 `.env`（`chmod 600`） |
 | `portal.env.example` | **门户 stack** 环境文件样例（Sprint 4）；落地时改名为 `portal.env`（`chmod 600`）—— 与主 `.env` 分离，只放门户专用 MaaS key |
+| `portal.compose.yml` | **门户 stack** 的 compose（Sprint 4 `4.4` 入仓）：挂载与环境（**21 个 `PORTAL_*` 键的真源**）· 与主 stack 的共享卷 `ai_memory_data` · 独立卷 `portal_data`。步骤见 [`../specs/deployment.md`](../specs/deployment.md) §12.5 |
 
 - 入仓事实文件共 **5 个**（上表 4 个 + 本 `README.md`）。派生文件 `config.toml` / `.env` / `portal.env`（服务器侧）与 `config.local.toml` / `.env.local`（本机开发）均**永不入仓**，由 `.gitignore` 的路径无关忽略规则覆盖。
 - 合规性检查：`make secret-check`（密钥 / 公网 IP / 私有端点）。

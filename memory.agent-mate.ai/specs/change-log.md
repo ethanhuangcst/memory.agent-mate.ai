@@ -252,6 +252,24 @@
 
 **未做（等确认才动）**：`4.4` 的三段指南与 `portal.env.example` 的键清单（`A2` 的转绿项）**一行未改**；排布见计划文件。
 
+### `4.4`「deploy:上线配置指南」交付：三段逐步指南 + 门户 stack 真源入仓
+
+**交付了什么**（用户拍板：H-a **固化探针为门禁** · H-b **门户 compose 入仓**）：
+
+- **三段逐步指南**（[`deployment.md`](deployment.md) §12.5，每步「**做什么 → 期望 → 验证 → 不符怎么办**」四件套，示例一律占位符）：
+  - **§12.5.1 Cloudflare Access**（8 步）：建 self-hosted 应用 → Allow 策略（**≥2 个邮箱**，`AC10.6`）→ Google + 邮箱 OTP 双钥匙 → 会话时长（**控制台最大档；目标 3 个月须 API/Terraform 实测，不得把目标写成既有能力**，`AC10.7`）→ **`<MCP_HOST>` 必须 Bypass**（否则客户端「连不上」）→ 增删即失效（`AC10.10`）→ **根凭证离线保存** → 门户侧零控件（`AC10.9`）。验证点：未认证 **302** · 非名单仍被拦 · 收口 `make portal-e2e ARGS=--online` 退出码 `0`（**`40` 不算通过**）。
+  - **§12.5.2 SSH 密钥对与 forced command**（7 步）：`ssh-keygen -t ed25519` → 公钥**带外**传递 → `authorized_keys` **逐行追加**（不要整文件重写）→ 每用户行**显式** `--profile core` / 管理员入口 `--profile admin` → 调用者 `~/.ssh/config` → 首连 → **交互 shell 不可用**（`no-pty` 等）。验证点：`ssh -G ai-memory` · `ssh ai-memory` 能连 · `ssh ai-memory bash -i` **拿不到 shell**。
+  - **§12.5.3 对象存储私有桶与 RAM 子账号**（5 步）：建桶（**私有 + SSE**）→ RAM 子账号**最小权限**（桶级 `PutObject`/`GetObject`/`ListObjects`）→ **AK 只落服务器侧**（`chmod 600`，`make secret-check` 守护）→ 每日同步 + `sha256sum` 校验 → **回读比对**。
+  - **§12.5.4 门户 env 真源表**：把 21 个 `PORTAL_*` 按 **8 组**列出（运行环境 / 面隔离 / 存储 / 会话 / 身份 / 日志 i18n / **生产不得设置** / **仅开发期**），并写明真源 = `portal.compose.yml` + `portal.env`（只放密钥）。
+  - **§12.5.5 收口验证 5 项**：compose `config` · **启动自检全过**（`/data/users` 可写 · embeddings 1024 维 · 二进制版本 == `upstream.lock`）· `make deploy-doc-audit` · 在线套件 · `make secret-check`。
+- **门户 stack 真源入仓（H-b）**：新增 [`../deploy/portal.compose.yml`](../deploy/portal.compose.yml) —— **21 个 `PORTAL_*` 键的真源** + 共享卷 `ai_memory_data`（external，与主 stack 唯一耦合点）+ 独立卷 `portal_data` + 生产**不得设置**的测试通道键（留注释说明「写了就是事故」）；`portal.env.example` 写明「**只放密钥**」的分工；`deploy/README.md` 登记该事实文件。**镜像名不入仓**（是构建产物坐标：按 `web-design.md` §3.2 构建，由 `PORTAL_IMAGE` 给出）。
+
+**`A2` 由红转绿**：`make deploy-doc-audit` **5/5 PASS · 退出码 `0`**（首跑为 `3 PASS / 1 FAIL`）—— 这就是「**先红后绿**」的完成态。另新增 `A5`（compose **结构底线**）并把扫描面由「硬编码一个 compose」改为 **`deploy/*.yml` 全部**。
+
+**一处如实登记的边界**：本机**装不了也跑不了** `docker compose config`（无 compose 插件；`node_modules` 里无 `yaml`/`js-yaml`；PyYAML 也没有）⇒ **新 compose 的真解析只能在服务器侧做**（§12.5.5 第 1 步）；本机只做了结构底线（`A5`）与键/路径/承诺三类一致性地检。
+
+**验证**：`make deploy-doc-audit` **5/5 · 退出码 `0`** · `make doc-links` **53 文件 / 1482 链接零悬空** · `make attestation-paths` 通过 · `make secret-check` 通过 · 离线 **334 passed / 31 files**（本行不改代码）· `deployment.md` §14 变更记录已追加。
+
 ---
 
 ## 2026-09-23

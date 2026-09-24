@@ -47,6 +47,20 @@ node memory.agent-mate.ai/probes/deploy-guide-audit/probe.mjs
    ⇒ 读者照 `deployment.md` §12.2 做，**无从知道门户 stack 要填哪些键**。`4.4` 的「可照做」正缺这一块（好在 `4.3` 的启动自检 fail-closed ⇒ 会**响亮失败**而不是静默错配）。
 4. 另有一类**只作发现**：指南提到、但代码与部署真源都不认的 **12** 个键（`AI_MEMORY_AGENT_ID` / `AI_MEMORY_KEY_DIR` / `GLM_API_KEY` / `OPENAI_API_KEY` …）—— 多半是**上游 `config.toml`** 的键（文档里已有「不要写」一类说明），需人判有无陈旧。
 
+## 五项判据（`4.4` 交付后）
+
+| # | 判据 | 交付后实测 |
+|---|---|---|
+| A1 | 三侧都抽到键 | ✅ 代码 **21** · 部署 **22** · 文档 **39** |
+| A2 | 门户会读的每个 `PORTAL_*` 键都在真源或指南里登记 | ✅ **无遗漏**（真源侧 = 新入仓的 [`../../deploy/portal.compose.yml`](../../deploy/portal.compose.yml) 的 `environment`） |
+| A3 | 指南引用的仓库路径都存在 | ✅ **50/50 可达** |
+| A4 | `deployment.md` §5.4 与 `deploy/.env.prod.example` 逐键一致 | ✅ |
+| A5 | `deploy` 下 compose 的**结构底线**（无制表符缩进 · 有顶层 `name`/`services` · `image` 非空） | ✅ |
+
+> **A5 的口径与边界**：本机**装不了也跑不了** `docker compose config`（无 compose 插件；`node_modules` 里也没有 YAML 解析器，「`yaml` / `js-yaml` / PyYAML」实测都没有）⇒ 真解析**只能在服务器侧**做（[`../../specs/deployment.md`](../../specs/deployment.md) §12.5.5 第 1 步）。A5 只把「最常见的写坏方式」钉住，**不冒充解析器**。
+>
+> **扫描面**：`deploy/*.yml` **全部**（不硬编码文件名）—— 首版只扫 `docker-compose.prod.yml`，新入仓的 `portal.compose.yml` 会被漏掉。
+
 ## 由结论导出的硬约束（`4.4` 直接照用）
 
 1. **每段指南的「验证点」必须是能跑出确定性结果的命令**（例如：CF Access 段的验证点 = 未认证被拦 **302** / Service Token 直达 **200** / 在线套件退出码 `0`；SSH 段的验证点 = `ssh` 能进、但 `bash` 被 forced command 拦；对象存储段的验证点 = 回读比对 + `make secret-check` 通过 + `AK` 不入仓）。

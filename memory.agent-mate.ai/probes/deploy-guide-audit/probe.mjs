@@ -75,9 +75,18 @@ for (const file of walk(path.join(PORTAL, 'src'))) {
   }
 }
 
-// ---------------------------------------------------------------- 部署侧：compose + *.env*.example
-const composeFile = path.join(DEPLOY, 'docker-compose.prod.yml');
-const composeText = fs.existsSync(composeFile) ? fs.readFileSync(composeFile, 'utf8') : '';
+// ---------------------------------------------------------------- 部署侧：**全部** compose + *.env*.example
+//
+// **扫全部 compose，不硬编码文件名**（首版只扫 `docker-compose.prod.yml` ⇒ 新增的
+// `portal.compose.yml` 被漏掉，`A2` 便只能靠指南文本「碰巧」转绿 —— 那不是它该有的判据）。
+const composeFiles = fs
+  .readdirSync(DEPLOY)
+  .filter((name) => /\.ya?ml$/.test(name))
+  .map((name) => path.join(DEPLOY, name));
+const composeText = composeFiles
+  .filter((file) => fs.existsSync(file))
+  .map((file) => fs.readFileSync(file, 'utf8'))
+  .join('\n');
 /**
  * compose 里**定义或引用**的键都算「部署侧认得」—— **三种 YAML 形态都要抽**（漏一种就会把
  * 「真源里有」误报成「遗漏」；本探针首版正是只抽了 `KEY:` 形态，把 21 个 `PORTAL_*` 全误报成遗漏）：
@@ -118,7 +127,10 @@ for (const file of docFiles) {
 }
 
 info(`代码侧 PORTAL_* 键 ${portalKeys.size} 个 · 部署侧 ${deployKeys.size} 个 · 文档侧全大写键 ${docKeys.size} 个`);
-info(`部署侧文件：compose=${composeKeys.size} 键 · ${[...exampleKeys.entries()].map(([f, s]) => `${f}=${s.size}`).join(' · ')}`);
+info(
+  `部署侧文件：compose=${composeKeys.size} 键（扫 ${composeFiles.map((f) => path.basename(f)).join(' + ')}）` +
+    ` · ${[...exampleKeys.entries()].map(([f, s]) => `${f}=${s.size}`).join(' · ')}`,
+);
 
 check(
   'A1',
@@ -188,6 +200,30 @@ if (!prodExample) {
     `§5.4=[${[...sectionKeys].sort().join(', ')}] · 真源=[${[...prodExample].sort().join(', ')}]`,
   );
 }
+
+// Q5：compose 的**结构底线** —— 本机**没有 compose 插件、也没有 YAML 解析器**（实测：`docker compose`
+// 报 `unknown shorthand flag: 'f'`；node_modules 里无 `yaml` / `js-yaml`）⇒ 做不了真解析。
+// **真正的解析在服务器侧**由 `docker compose config` 兜底（deployment.md §12.5.5 第 1 步）；
+// 这里只把「最常见的写坏方式」钉住：制表符缩进（YAML 不允许）· 缺顶层 `services:` · 空 `image:`。
+const composeProblems = [];
+for (const file of composeFiles) {
+  const name = path.basename(file);
+  const text = fs.readFileSync(file, 'utf8');
+  if (/^\t/m.test(text)) composeProblems.push(`${name}: 用了制表符缩进（YAML 不允许）`);
+  if (!/^services:/m.test(text)) composeProblems.push(`${name}: 缺顶层 services:`);
+  if (!/^name:/m.test(text)) composeProblems.push(`${name}: 缺顶层 name:`);
+  for (const match of text.matchAll(/^\s*image:\s*(.*)$/gm)) {
+    if (match[1].trim() === '' || match[1].trim() === '""') {
+      composeProblems.push(`${name}: 有空 image:`);
+    }
+  }
+}
+check(
+  'A5',
+  composeProblems.length === 0,
+  `deploy 下的 compose 结构底线（${composeFiles.map((f) => path.basename(f)).join(' + ')}：无制表符缩进 · 有顶层 name/services · image 非空）`,
+  composeProblems.join(' | ') || '全部通过',
+);
 
 console.log(`\n  通过 ${pass.length} 项 · 失败 ${fail.length} 项`);
 process.exitCode = fail.length === 0 ? 0 : 30;
