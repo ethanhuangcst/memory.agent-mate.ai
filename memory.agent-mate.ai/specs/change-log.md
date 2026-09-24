@@ -133,6 +133,24 @@
 
 **未做（等确认才动）**：`3.4` 的产品代码（三类触发 · 判据落地 · `child` 字段 · 审计行）与那处 heredoc 修复**一行未改**；代码排布见计划文件。
 
+### `3.4`「mcp:会话回收」交付：回收从「两条事件」变成完整闭环
+
+**为什么**：`3.4` 之前，回收只有**事件驱动**的两条（客户端断开 / HTTP 流结束 ⇒ `transport.onclose` 级联 `upstream.close()`），而 [`web-portal/web-design.md`](web-portal/web-design.md) §12.5 的「回收触发」列了**五类** —— **空闲超时 · 单会话最长时长 · 吊销事件一条都没实现**；且 `AC3.4` 的「不残留**僵尸进程**或**占用中的库文件句柄**」**没有判据**（假上游既不是一个 `ai-memory` 进程、也没有用户的库文件）。同时 §12.5 声明的会话记录字段 `child`（子进程句柄 / PID）与 `AC4.3` 的「每次会话记录解析后的库路径」都**未落地**。
+
+**做了什么**：
+
+- **三类触发补齐**：`SessionRegistry.reap(now, limits)` 抽成**吃 `now` 的纯方法**（判据要能确定性复现 ⇒ 单测**不睡觉**、集成层再注入短值），`route.ts` 起**单一** `setInterval(...).unref()` ticker（`onClose` 清理；**两把限额都未配置则连 timer 都不起** —— 这是 `4.1` 「取值归我」纪律的落地）；**吊销回收**落在 401 分支上，判据取「**该会话自己的** `keyId` / `userId` 是否仍可用」⇒ 对外仍是**同形 401**，且**不违反 `3.3` 的不可侵扰**（新增回归用例：用被吊销的令牌打**别人的** `sessionId` **不得**回收别人的会话）。
+- **`AC3.4` 三条「归零」判据落地**：进程数回落基线 · **无进程持有该用户库句柄**（扫 `/proc/<pid>/fd`）· **无僵尸**（扫 `/proc/<pid>/stat` 的 `state=Z`；**僵尸的 `cmdline` 是空的** ⇒ 只能按 `comm` 认名）。真上游 e2e 的断言集**扩为 11 项**（新增 `TC-P-L1-04·1` / `·2`）。
+- **`child` → `childPid`（字段落实并更名）**：`UpstreamSession.pid`（`transport.pid` 取一次，`close()` 后回 `null`）→ `BridgeSession.childPid`；§12.5 的字段清单**按实测校正**（SDK 只暴露 PID、**不暴露 `ChildProcess` 句柄**；本机借壳下它指向**宿主的 `docker` 客户端** ⇒ 权威判据仍在容器内），并补记 `keyId` / `dbPath`、如实登记 `clientInfo` 至今未落地。
+- **`AC4.3` 机制落地 + 口径修正**：新增审计动作 **`mcp_session_opened`**（会话**登记成功后**写一行，`detail_json` 含 `dbPath` 与 `sessionId`）；`src/shared/audit.ts` 里「该审计行属审计视图批次、不在本批范围」的注释按拍板改写；**`RID D4` 处理说明**由「实现与测试落在 Sprint 6」修正为「**机制在 Sprint 4 `3.4`、审计视图在 Sprint 6**」并置 `Implemented`；**Sprint 6 `#1` 加备忘**（本行只做视图，且须覆盖该新动作）。
+- **`config.ts`**：两把已登记键（`PORTAL_SESSION_IDLE_TIMEOUT` / `PORTAL_SESSION_MAX_DURATION`）的**读取位**（正整数校验；**未提供 = 不启用该触发**，不写死默认值）。
+- **随本行修一处既有隐患**：`scripts/portal-mcp-probe.sh` 的 env heredoc **两处反引号会被当命令执行**（往 stderr 打 docker 用法信息）—— 修后复跑该门禁**零行为变化**。
+- **测试判据修正**：`mcp-bridge.test.ts` 的 `TC-M-L1-17` 原按**审计行数**判「正常转发不误报」，会被合法的 `mcp_session_opened` 打破 ⇒ 改为按**动作**筛（语义判据，且更强）。
+
+**验证**：离线 **334 passed / 31 files** · 覆盖率 **93.47 / 86.84 / 97.72 / 94.64**（阈值 92/85/96/93，**四项均高于改前**）· `make portal-mcp-session-probe` **11/11 断言 PASS** · `make portal-mcp-probe` 退出码 `0`（同时验证 heredoc 修复零行为变化）· `make doc-links` / `make attestation-paths` 通过 · `npx tsc --noEmit` 0 错。
+
+**一处如实登记的边界**：僵尸判据是「**无则通过**」型 —— 本机环境未产生过僵尸 ⇒ 该判据只证「可读且当前为空」，**未证「能检出僵尸」**（已写进探针 README 与 `3.13` 实证块）。
+
 ---
 
 ## 2026-09-23

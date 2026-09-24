@@ -63,6 +63,22 @@ export interface UpstreamSession {
   readonly commandLine: string;
   /** 上游 stderr 的最近若干行（用于失败诊断，**不回传客户端**）。 */
   stderrTail(): string;
+  /**
+   * **门户侧**被 spawn 的那个进程的 pid（`3.4`；`StdioClientTransport.pid`，未连接时为 `null`）。
+   *
+   * **语义边界（`3.13` 探针实测）**：本机借壳（`PORTAL_LAUNCH_OVERRIDE` 走 `docker exec`）下
+   * 它指向**宿主上的 `docker` 客户端**，**不是**容器里的上游进程；生产 β′（门户容器内直接
+   * spawn 二进制）下才等于上游进程。⇒ 它是「**门户侧子进程**」的标识，用于宿主侧对照与排障；
+   * 「子进程归零」的**权威判据在容器内**（`web-design.md` §12.5）。
+   */
+  readonly pid: number | null;
+  /**
+   * 本次 spawn **实际用的**库路径（`3.4`；模板渲染结果 `rendered.env.AI_MEMORY_DB`）。
+   *
+   * `AC4.3` 要的是「该会话**解析出的**库路径」⇒ 判据必须取**真正传下去的那个值**，
+   * 而不是另算一遍（另算会在模板改动时分叉）。它是路径、不含机密。
+   */
+  readonly dbPath: string;
   /** 关闭上游：先关客户端再关传输，任一失败不抛出（回收路径必须尽力而为）。 */
   close(): Promise<void>;
 }
@@ -90,6 +106,10 @@ export async function spawnUpstream(options: SpawnUpstreamOptions): Promise<Upst
   if (!pathCheck.ok) {
     throw spawnAssertionError(pathCheck.reason);
   }
+
+  // 断言已保证库路径**非空**（`checkUserDbPath` 的 `empty` 支）⇒ 这里的收窄**有依据**、不是静默
+  // 忽略：类型上 `rendered.env` 是索引签名，任何取值都是 `string | undefined`。
+  const dbPath = rendered.env.AI_MEMORY_DB as string;
 
   // 最小 env 白名单 + 模板 env + 统一 HOME。**不传 process.env 全量**（见文件头说明）。
   const env: Record<string, string> = {};
@@ -164,8 +184,14 @@ export async function spawnUpstream(options: SpawnUpstreamOptions): Promise<Upst
     throw error instanceof Error ? error : new Error(String(error));
   }
 
+  // `pid` **只在此刻取一次**：SDK 在 `close()` 时把 `_process` 置空 ⇒ 之后回读会得到 `null`
+  //（`3.13` 探针实测：连接前 `null` / 连接后可用 / `close()` 后回 `null`）。
+  const pid = transport.pid;
+
   return {
     client,
+    pid,
+    dbPath,
     commandLine: [rendered.command, ...rendered.args].join(' '),
     stderrTail: () => stderrBuffer.trim(),
     async close(): Promise<void> {

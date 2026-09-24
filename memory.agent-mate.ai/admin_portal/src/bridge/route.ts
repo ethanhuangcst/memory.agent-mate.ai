@@ -21,10 +21,11 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 import { parseBearerToken } from '../shared/tokens';
 import { insertAudit } from '../web/db/repo/audit';
-import { touchKeyLastUsed } from '../web/db/repo/keys';
+import { getKeyById, touchKeyLastUsed } from '../web/db/repo/keys';
+import { getUserById } from '../web/db/repo/users';
 import { verifyToken } from '../web/services/keys';
 import type { PortalConfig } from '../config';
-import { SessionRegistry, type BridgeSession } from './session';
+import { SessionRegistry, type BridgeSession, type ReapLimits } from './session';
 import { spawnUpstream } from './spawn';
 import { createBridgeTransport } from './transport';
 // 断言失败的原因枚举与客户端文案都由 `user-db-path.ts` 持有（该模块拥有「断言」这件事的全部词汇），
@@ -56,6 +57,15 @@ const HANDSHAKE_TIMEOUT_MS = 30_000;
  * 断言 7）。**取值归属**：同上，归 `4.1`。
  */
 const UPSTREAM_REQUEST_TIMEOUT_MS = 30_000;
+
+/**
+ * 到期扫描的**频率**（毫秒，`3.4`）。
+ *
+ * **它不是业务取值**：不决定「多久算到期」，只决定「最多晚多久发现到期」（最坏情况下会话多活
+ * 一个扫描周期）。因此**不**登记为环境键 —— `web-design.md` §12.9 的两把键是**超时值**
+ * （取值归 `4.1`）；本常量只影响回收的**及时性**，测试可注入更短的 `reapIntervalMs`。
+ */
+const REAP_INTERVAL_MS = 15_000;
 
 /** 统一 401 的文案：**不区分**「未携带 / 无效 / 已吊销 / 用户停用 / 非 `memo_` 前缀」。 */
 const UNAUTHORIZED_MESSAGE =
@@ -149,6 +159,21 @@ export interface McpBridgeDeps {
    * 生产不通过环境变量配置 —— 取值归属 `4.1`，见 `UPSTREAM_REQUEST_TIMEOUT_MS` 的说明。
    */
   readonly upstreamRequestTimeoutMs?: number;
+  /**
+   * 会话**空闲超时**（毫秒）；不传则用 `cfg.sessionIdleTimeoutMs`（未配置 ⇒ **该触发不启用**）。
+   *
+   * **仅供测试注入短值**（否则「空闲到期 ⇒ 回收」这条路径在测试里要等满真实值）；生产从
+   * `PORTAL_SESSION_IDLE_TIMEOUT` 读 —— 取值归属 `4.1`，本层不写死默认值。
+   */
+  readonly sessionIdleTimeoutMs?: number;
+  /** 会话**最长时长**（毫秒）；口径同 `sessionIdleTimeoutMs`（`PORTAL_SESSION_MAX_DURATION`）。 */
+  readonly sessionMaxDurationMs?: number;
+  /**
+   * 到期扫描的**频率**（毫秒），默认 `REAP_INTERVAL_MS`。
+   *
+   * **仅供测试注入更短的扫描间隔**（否则「到期 ⇒ 回收」在测试里最坏要等满一个周期）。
+   */
+  readonly reapIntervalMs?: number;
 }
 
 export function registerMcpBridgeRoutes(app: FastifyInstance, deps: McpBridgeDeps): void {
@@ -160,8 +185,28 @@ export function registerMcpBridgeRoutes(app: FastifyInstance, deps: McpBridgeDep
     deps.upstreamRequestTimeoutMs ?? UPSTREAM_REQUEST_TIMEOUT_MS;
   const registry = new SessionRegistry();
 
-  // 进程收尾：关闭全部会话（HTTP 传输侧 → 上游 → 注册表条目），避免孤儿进程。
+  // ---- `3.4`：会话到期的两个**限额**与**单一**扫描定时器 ----
+  //
+  // 注入值优先（测试注短值），否则读配置；**两者都未配置 ⇒ 连定时器都不起**（`4.1` 的取值纪律：
+  // 本层不写死默认值 —— 有默认值就等于替 `4.1` 定了值）。
+  const reapLimits: ReapLimits = {
+    idleMs: deps.sessionIdleTimeoutMs ?? cfg.sessionIdleTimeoutMs,
+    maxMs: deps.sessionMaxDurationMs ?? cfg.sessionMaxDurationMs,
+  };
+  const reapTimer =
+    reapLimits.idleMs === undefined && reapLimits.maxMs === undefined
+      ? undefined
+      : setInterval(() => {
+          // 判定在 `SessionRegistry.reap`（吃 `now` 的纯方法，可单测）；这里只负责到点调它。
+          // **单一** ticker：N 个会话不产生 N 个 timer，回收顺序与「注册表状态」保持单一真相。
+          void registry.reap(Date.now(), reapLimits);
+        }, deps.reapIntervalMs ?? REAP_INTERVAL_MS);
+  // `unref()`：定时器**不得**拖住进程退出（否则测试与优雅关闭都会被它吊住）。
+  reapTimer?.unref();
+
+  // 进程收尾：先停扫描，再关闭全部会话（HTTP 传输侧 → 上游 → 注册表条目），避免孤儿进程。
   app.addHook('onClose', async () => {
+    if (reapTimer !== undefined) clearInterval(reapTimer);
     await registry.closeAll();
   });
 
@@ -169,6 +214,19 @@ export function registerMcpBridgeRoutes(app: FastifyInstance, deps: McpBridgeDep
     // ---- 第 1 步：令牌校验（统一 401；理由不外泄，否则原因会变成枚举探针）----
     const verified = verifyToken(db, parseBearerToken(request.headers.authorization));
     if (!verified.ok) {
+      // ---- `3.4`：**吊销事件 ⇒ 回收**（§12.5「回收触发」的第三类）----
+      //
+      // 判据取**该会话自己的** `keyId` / `userId`，**不是**请求里的令牌 ⇒ 回收的是「该会话自己的
+      // 终态」，与 `3.3` 立下的「拒绝越权不得伤到第三方」同源：请求本身无权，但只要它指向的
+      // 会话**自己的**令牌已不可用，那个会话就该被收掉（否则它会一直挂到空闲超时）。
+      // 对外响应**不变**（仍是同形 401），不给探测者区分信号。
+      const incomingSessionId = headerSessionId(request);
+      if (incomingSessionId !== undefined) {
+        const existing = registry.get(incomingSessionId);
+        if (existing !== undefined && !isSessionKeyUsable(db, existing.keyId, existing.userId)) {
+          await registry.close(existing);
+        }
+      }
       sendBridgeError(reply, 401, BRIDGE_ERROR_CODES.unauthorized, UNAUTHORIZED_MESSAGE);
       return;
     }
@@ -319,13 +377,46 @@ export function registerMcpBridgeRoutes(app: FastifyInstance, deps: McpBridgeDep
       upstream,
       startedAt: Date.now(),
       lastActivityAt: Date.now(),
+      // `3.4`：门户侧子进程 pid（宿主侧对照与排障用；「子进程归零」的权威判据在容器内）
+      // 与**解析后的**库路径（`AC4.3` 的审计行只在这一处取值）。
+      childPid: upstream.pid,
+      dbPath: upstream.dbPath,
     };
 
     await relay(session, request, reply, registry, {
       register: true,
       onRelayFailure,
     });
+
+    // ---- `3.4`：`AC4.3`「每次会话断言并记录实际使用的库路径」----
+    //
+    // **为什么在这里判「已建立」**：`relay` 只在拿到 `sessionId` 时才登记（拿不到就关掉会话），
+    // 故 `session.id` 非空 ⇔ 会话已建立。审计只记**解析后的库路径**与会话 id；
+    // 不含令牌明文，也不含记忆正文（`detail_json` 纪律）。
+    if (session.id !== '') {
+      insertAudit(db, {
+        actor: `token:${key.key_prefix}`,
+        action: 'mcp_session_opened',
+        target: user.handle,
+        detail: { sessionId: session.id, dbPath: session.dbPath },
+        sourceIp: request.ip,
+      });
+    }
   });
+}
+
+/**
+ * 该会话**自己的**令牌是否仍可用（`3.4` 的「吊销事件 ⇒ 回收」用）。
+ *
+ * 判据取**会话记录里的** `keyId` / `userId`，**不是**请求里的令牌 —— 这样回收的才是「该会话
+ * 自己的终态」，第三方无法借此影响别人的会话（`3.3` 的不可侵扰纪律）。
+ * 「可用」= 令牌未被吊销 **且** 其用户处于 `active`。
+ */
+function isSessionKeyUsable(db: Database.Database, keyId: number, userId: number): boolean {
+  const key = getKeyById(db, keyId);
+  if (key === undefined || key.revoked_at !== null) return false;
+  const user = getUserById(db, userId);
+  return user !== undefined && user.status === 'active';
 }
 
 /** 读取 HTTP 层会话 id（SDK 用该头在请求间关联同一会话）。 */

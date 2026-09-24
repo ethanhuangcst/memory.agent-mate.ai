@@ -24,8 +24,6 @@ export const AUDIT_ACTIONS = [
   'restore_user',
   // 接入面（PSP-W2 起）：**会话被拒绝**。只记失败面 —— 依据 web-design.md §12.5 的纪律 3
   // 「spawn 断言失败与上游不可用必写审计行」。
-  // 注意：「会话开始」的审计行（含解析出的库路径）属审计视图批次（RID D4 / Sprint 6），
-  // 不在本批范围，故此处**只登记拒绝类**，避免与本批之外的动作语义混淆。
   'mcp_session_rejected',
   /**
    * 转发阶段失败（`3.8` 新增）—— 与「会话被拒」**分开**记：
@@ -33,6 +31,18 @@ export const AUDIT_ACTIONS = [
    * （见 `web-design.md` §12.5 的纪律 ④）。
    */
   'mcp_upstream_error',
+  /**
+   * **会话建立**（`3.4` 新增）—— `AC4.3`「每次会话断言并记录实际使用的库路径」的落点。
+   *
+   * **与拒绝类分开记**：这条是**成功**面，且它存在的意义就是「事后能界定串号范围与追责」
+   * （`RID D4`）⇒ `detail` 必须含**解析后的**库路径（`dbPath`）。
+   *
+   * **口径修正（2026-09-24，用户拍板）**：此前这里写着「『会话开始』的审计行属审计视图批次
+   * （RID D4 / Sprint 6），不在本批范围」—— 现行口径是**机制在 Sprint 4 `3.4`、
+   * 审计视图（查询 / 页面 / 展示）在 Sprint 6**；本次拍板后该注释按新口径改写，
+   * 排期口径见 `sprint-backlog.md` 的 `3.4` 行与 Sprint 6 备忘记载。
+   */
+  'mcp_session_opened',
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

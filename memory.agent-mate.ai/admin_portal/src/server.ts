@@ -46,6 +46,15 @@ export interface BuildOptions {
    * **仅供测试注入短值**（让「上游太慢 ⇒ MCP 层超时错误」这条路径可被快速覆盖）。
    */
   readonly upstreamRequestTimeoutMs?: number;
+  /**
+   * 会话**空闲超时**（毫秒，`3.4`）；不传则用 `cfg.sessionIdleTimeoutMs`（未配置 ⇒ 该触发不启用）。
+   * **仅供测试注入短值**（否则「空闲到期 ⇒ 回收」这条路径要等满真实值）。
+   */
+  readonly sessionIdleTimeoutMs?: number;
+  /** 会话**最长时长**（毫秒，`3.4`）；口径同上。 */
+  readonly sessionMaxDurationMs?: number;
+  /** 到期扫描频率（毫秒，`3.4`）；默认见 `bridge/route.ts` 的 `REAP_INTERVAL_MS`。**仅供测试缩短**。 */
+  readonly reapIntervalMs?: number;
 }
 
 export async function buildServer(
@@ -159,6 +168,14 @@ export async function buildServer(
     ...(options.upstreamRequestTimeoutMs === undefined
       ? {}
       : { upstreamRequestTimeoutMs: options.upstreamRequestTimeoutMs }),
+    // `3.4` 的三个同样条件展开（漏了转发 ⇒ 注入被静默丢弃、ticker 根本不起 —— 集成用例实测踩过）：
+    ...(options.sessionIdleTimeoutMs === undefined
+      ? {}
+      : { sessionIdleTimeoutMs: options.sessionIdleTimeoutMs }),
+    ...(options.sessionMaxDurationMs === undefined
+      ? {}
+      : { sessionMaxDurationMs: options.sessionMaxDurationMs }),
+    ...(options.reapIntervalMs === undefined ? {} : { reapIntervalMs: options.reapIntervalMs }),
   });
 
   app.setNotFoundHandler((request, reply) => {

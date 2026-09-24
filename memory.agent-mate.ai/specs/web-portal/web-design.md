@@ -406,7 +406,7 @@ admin_portal/
 | 客户端 transport | 官方 SDK 的 **stdio client transport**：`command` / `args` / `env` **全部来自 `launch` 模板的替换结果**，门户**不解析语义**。**开发期例外**：`command`/`args` 可被 `PORTAL_LAUNCH_OVERRIDE` 覆盖（仅 development，生产拒绝启动）；**覆盖时 env 透传由覆盖命令自己负责**（见 §12.9） |
 | 双向转发 | 由 SDK 的 server↔client 直连能力完成（**不手写帧解析**）；门户只负责建连、注册、回收 |
 | 背压 | stdio 管道与 HTTP 流**按 stream 处理**，**不整包缓冲**；对超大响应设门户级上限并**明确报错**（避免大响应击穿内存） |
-| 会话注册表 | `sessionId → { userId, handle, child, transport, startedAt, lastActivityAt, clientInfo }` |
+| 会话注册表 | `sessionId → { userId, handle, keyId, childPid, dbPath, transport, startedAt, lastActivityAt }` —— **`3.4` 按实测校正**：① SDK **不暴露 `ChildProcess` 句柄**、只暴露 `StdioClientTransport.pid` ⇒ 字段名由 `child` 改为 **`childPid`**（且本机借壳下它指向**宿主的 `docker` 客户端**，见下方「会话回收的实现口径」）；② 补上实际已在用的 **`keyId`**（会话归属校验与吊销回收的判据）与 **`dbPath`**（`AC4.3` 审计行的取值，来自模板渲染结果）；③ **`clientInfo` 至今未落地**，如实登记（不在 `3.4` 范围） |
 | 回收触发 | 客户端断开 · HTTP 流结束 · **空闲超时** · **单会话最长时长** · **吊销事件** → `kill` 子进程并注销（AC3.4 / TC-P-L3-04） |
 **会话归属校验的不可侵扰（2026-09-24 定档，Sprint 4 `3.3` 开工前置）**
 
@@ -428,7 +428,7 @@ admin_portal/
 > | 会话记录字段 `child` | **语义 = 门户侧被 spawn 的那个进程**（`StdioClientTransport.pid`：**连接后**才有值、`close()` 后回 `null`）。**实测**：本机借壳下它指向**宿主的 `docker` 客户端**（`pid=7484` vs 容器内真上游 `19936`）⇒ **不得**把它当「上游进程 pid」用；生产 β′（门户容器内直接 spawn）下它才等于上游二进制进程 ⇒ 契约按后者写，**判据一律走容器内观测**（见下行） |
 > | 「子进程归零」的三条判据 | ① **进程数回落基线**（容器内 `cmdline` 精确前缀计数，手法见 `3.12`）② **无进程持有该用户库的句柄** —— 扫 `/proc/<pid>/fd` 找指向 `/data/users/<handle>/ai-memory.db*` 的符号链接（实测：会话**中**该会话进程持有 **4** 个 fd：`db` / `-shm` / `-wal` / `.deferred-audit.journal`；**收尾后 0 个**）③ **无僵尸** —— 扫 `/proc/<pid>/stat` 的 `state=Z`，且**僵尸的 `cmdline` 是空的** ⇒ 只能按 `stat` 的 `comm` 认名 |
 > | 三类触发的实现归属 | **空闲超时 / 单会话最长时长**：本行实现**机制**（每会话计时器 + 复用支刷新 `lastActivityAt`），**取值归 `4.1`**（§12.9 的两把键已登记为「必填」，但**本行不写死默认值**）· **吊销事件**：本行实现（`:410` 一行已把它挂在 `AC3.4` / `TC-P-L3-04` 上），实现位置**必须遵守上方「不可侵扰」纪律** —— 只回收**属于本令牌**的会话 |
-> | `AC4.3` 路径留痕（审计行含解析后的库路径） | **落点仍未定（开工前置待拍板）**：`RID D4` 的处理说明与 `src/shared/audit.ts:25-28` 的注释都说该审计行属 **Sprint 6「审计功能」**（2026-09-23 重排移入），而 `sprint-backlog.md` 的 `3.4` 行把「路径留痕」写在**本行**的验收条件里 ⇒ 两处必须对齐后才能施工（选项与证据见该行） |
+> | `AC4.3` 路径留痕（审计行含解析后的库路径） | **已定档并落地（2026-09-24，用户拍板；`3.4` 交付）**：**机制在 Sprint 4 `3.4`** —— 会话**登记成功后**写一行审计动作 **`mcp_session_opened`**，`detail_json` 含 `dbPath`（模板渲染出的**实际使用**的库路径）与 `sessionId`；**审计视图（查询 / 页面 / 展示）在 Sprint 6「审计功能」**（`RID D4` 的处理说明与 Sprint 6 `#1` 的备忘已同步）。原先「该审计行属审计视图批次、不在本批范围」的注释与口径已在 `src/shared/audit.ts` 与排期表同步 |
 
 **失败映射（2026-09-23 定档，Sprint 4 `3.1` 开工前置）**
 

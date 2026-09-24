@@ -70,6 +70,16 @@ export interface PortalConfig {
   readonly launchOverride: string | null;
   /** 门户专用 MaaS key（spawn 上游会话时注入子进程）；未配置时为 `null`。 */
   readonly upstreamApiKey: string | null;
+  /**
+   * 会话**空闲超时**（毫秒）；`undefined` = **不启用该触发**（`3.4`）。
+   *
+   * **取值归属**：Sprint 4 `4.1`「web-portal:会话限流」。`web-design.md` §12.9 已把键名
+   * （`PORTAL_SESSION_IDLE_TIMEOUT`）登记为「必填」，但**本批只做机制与读取位**、
+   * **不写死默认值** —— 否则等于替 `4.1` 定了值（`ADR-016` 的颗粒度纪律）。
+   */
+  readonly sessionIdleTimeoutMs: number | undefined;
+  /** 会话**最长时长**（毫秒）；`undefined` = 不启用该触发（`3.4`）。口径同 `sessionIdleTimeoutMs`。 */
+  readonly sessionMaxDurationMs: number | undefined;
 }
 
 const RawEnvSchema = z.object({
@@ -105,6 +115,11 @@ const RawEnvSchema = z.object({
   // 与主 key 同 workspace / 同模型权限 —— 否则 embeddings 模型或维度不一致会**静默降级**
   //（见 knowledge/web-portal/portal-launch-mechanism.md E4）。
   DASHSCOPE_API_KEY: z.string().min(1).optional(),
+  // 会话回收的两个**限额**（`3.4`）：正整数毫秒；**未提供 = 不启用该触发**。
+  // 键名已在 `web-design.md` §12.9 登记（「必填」），但**取值归 `4.1`** —— 本批只做读取位，
+  // 不写死默认值（否则等于替 `4.1` 定了值）。
+  PORTAL_SESSION_IDLE_TIMEOUT: z.coerce.number().int().positive().optional(),
+  PORTAL_SESSION_MAX_DURATION: z.coerce.number().int().positive().optional(),
 });
 
 function formatIssues(error: z.ZodError): string {
@@ -228,5 +243,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): PortalConfig {
     testJwt,
     launchOverride,
     upstreamApiKey: raw.DASHSCOPE_API_KEY ?? null,
+    sessionIdleTimeoutMs: raw.PORTAL_SESSION_IDLE_TIMEOUT,
+    sessionMaxDurationMs: raw.PORTAL_SESSION_MAX_DURATION,
   };
 }

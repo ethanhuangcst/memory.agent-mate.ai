@@ -95,11 +95,14 @@ PORTAL_PORT=$PORT
 PORTAL_DB_PATH=$TMP/portal.db
 PORTAL_USERS_ROOT=$TMP/users
 PORTAL_LOG_LEVEL=warn
-# 借壳必须**显式转发模板注入的每一项 env**（`-e VAR` 不带值 = 从宿主环境继承）：
-#   `docker exec` 只把容器自身的 env 给进程，宿主传进来的 `AI_MEMORY_DB` / `AI_MEMORY_AGENT_ID` /
+# 借壳必须**显式转发模板注入的每一项 env**（-e VAR 不带值 = 从宿主环境继承）：
+#   docker exec 只把容器自身的 env 给进程，宿主传进来的 AI_MEMORY_DB / AI_MEMORY_AGENT_ID /
 #   … 一律丢 **进不了容器**。少了这一步的后果实测过且很严重：
-#   `memory_store` 照样成功，但数据落到**共享主库**、身份退回上游默认值 —— 即隔离静默失效。
-#   ⇒ 这条也说明 `PORTAL_LAUNCH_OVERRIDE` 的语义：**env 透传由覆盖命令自己负责**（见 web-design.md §12.9）。
+#   memory_store 照样成功，但数据落到**共享主库**、身份退回上游默认值 —— 即隔离静默失效。
+#   ⇒ 这条也说明 PORTAL_LAUNCH_OVERRIDE 的语义：**env 透传由覆盖命令自己负责**（见 web-design.md §12.9）。
+# 【本 heredoc 内不得出现反引号】分隔符未加引号 ⇒ 正文会做变量与命令替换，正文里的反引号会被
+# **当成命令执行**（实测：会报 -e: command not found，并把 docker 的用法信息打到 stderr）。
+# 3.4 修掉了这两处历史遗留（原先只表现为 stderr 噪音 + env 文件里被替换掉的注释文字）。
 PORTAL_LAUNCH_OVERRIDE="docker -H $DOCKER_ENDPOINT exec -i -e AI_MEMORY_DB -e AI_MEMORY_AGENT_ID -e AI_MEMORY_KEY_DIR -e AI_MEMORY_REQUIRE_AGENT_ATTESTATION -e HOME -e DASHSCOPE_API_KEY $CONTAINER $BIN"
 PORTAL_ACCESS_TEAM_DOMAIN=dev-placeholder.cloudflareaccess.com
 PORTAL_ACCESS_AUD=dev-placeholder-aud

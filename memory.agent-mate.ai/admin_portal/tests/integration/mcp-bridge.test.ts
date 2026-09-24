@@ -544,8 +544,14 @@ describe('整行转发与失败诊断（`3.8`：TC-M-L1-15 / 16 / 17）', () => 
     // 分类的**精度**（`-32001` → 504 · `-32000` → 503 · 其余 → 502 `upstream_error`）由
     // `tests/unit/bridge-failure.test.ts` 覆盖：真实的「转发阶段抛异常」路径很难稳定构造
     //（SDK 的 5 个 throw 点都是内部状态错误，需要制造定时窗口）。
-    // 本用例测它的**另一面**：正常转发**不得**产生失败审计行（否则「失败可诊断」会退化成噪音）。
-    const before = listAudit(db, { limit: 1000, offset: 0 }).length;
+    // 本用例测它的**另一面**：正常转发**不得**产生**失败**审计行（否则「失败可诊断」会退化成噪音）。
+    //
+    // **判据按「动作」筛，不按「总行数」**（`3.4` 修正）：会话建立本身会写一行
+    // `mcp_session_opened`（`AC4.3` 的落点），按总行数判会把「合法的成功审计」当成误报。
+    const countUpstreamErrors = (): number =>
+      listAudit(db, { limit: 1000, offset: 0 }).filter((row) => row.action === 'mcp_upstream_error')
+        .length;
+    const before = countUpstreamErrors();
 
     const client = await connect(tokenAlice);
     try {
@@ -555,7 +561,7 @@ describe('整行转发与失败诊断（`3.8`：TC-M-L1-15 / 16 / 17）', () => 
     }
 
     const after = listAudit(db, { limit: 1000, offset: 0 });
-    expect(after.length, '正常转发不应新增审计行').toBe(before);
+    expect(countUpstreamErrors(), '正常转发不应新增 mcp_upstream_error 审计行').toBe(before);
     expect(
       after.some((row) => row.action === 'mcp_upstream_error'),
       '正常路径产生了失败审计行 ⇒ 误报',

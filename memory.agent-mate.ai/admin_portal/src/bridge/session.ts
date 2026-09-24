@@ -5,10 +5,12 @@
  *
  * ## 归属说明
  *
- * - **`3.1`（本批）**：登记 / 注销 / 关闭顺序 / 「客户端断开与流结束 ⇒ 回收」的骨架。
- * - **`3.4`（后续）**：回收的**验收判据**（子进程归零、路径留痕审计）与空闲超时 / 单会话最长时长。
- * - **`4.1`（后续）**：并发上限与超时的**取值**。本批只留读取位，**不写死默认值**
- *   （键名已在 `web-design.md` §12.9 登记为 `PORTAL_SESSION_IDLE_TIMEOUT` 等）。
+ * - **`3.1`**：登记 / 注销 / 关闭顺序 / 「客户端断开与流结束 ⇒ 回收」的骨架。
+ * - **`3.4`（本批）**：**到期判定与回收**（`reap`，吃 `now` 的纯方法）+ 会话记录字段
+ *   `childPid` / `dbPath`。定时器与三类触发（空闲 / 最长时长 / 吊销）的**接线在 `route.ts`**
+ *   —— 本层只做判定，不自己读时钟、不起 timer（判据要能确定性复现，见 `reap` 的注释）。
+ * - **`4.1`（后续）**：并发上限与超时的**取值**。本层**只接受读入的限额**，
+ *   **未提供 = 不启用该触发**（不写死默认值；键名已登记于 `web-design.md` §12.9）。
  *
  * 当前为**单实例部署**（`web-design.md` §12.1），注册表只需进程内结构、无需持久化。
  */
@@ -33,6 +35,35 @@ export interface BridgeSession {
   readonly upstream: UpstreamSession;
   readonly startedAt: number;
   lastActivityAt: number;
+  /**
+   * **门户侧**被 spawn 的那个进程的 pid（`3.4`；取自 `StdioClientTransport.pid`）。
+   *
+   * **语义边界（`3.13` 探针实测）**：本机借壳（`PORTAL_LAUNCH_OVERRIDE` 走 `docker exec`）下
+   * 它指向**宿主上的 `docker` 客户端**，**不是**容器里的上游进程；生产 β′（门户容器内直接
+   * spawn）下它才是上游进程。⇒ 「子进程归零」的**权威判据仍走容器内观测**（`web-design.md`
+   * §12.5），本字段用于**宿主侧对照**与排障。`null` = SDK 未报告（例如未连接成功时）。
+   */
+  readonly childPid: number | null;
+  /**
+   * 该会话**解析后的**库路径（`3.4`；模板渲染结果，非请求输入）。
+   *
+   * 用途有二：① `AC4.3` 的「会话建立」审计行只在这一处取值；② 排障时不必再去反推模板。
+   * **不含机密**（是路径，不是 env 值）。
+   */
+  readonly dbPath: string;
+}
+
+/**
+ * 到期判定的两个限额（`3.4`）。
+ *
+ * **未提供 = 不启用该触发** —— 取值归 `4.1`，本层不写死默认值（与 `McpBridgeDeps` 的两个
+ * 超时字段同一纪律：生产从 `config.ts` 读、测试才注入短值）。
+ */
+export interface ReapLimits {
+  /** 空闲超时（毫秒）：`now - lastActivityAt >= idleMs` 即到期。 */
+  readonly idleMs?: number | undefined;
+  /** 单会话最长时长（毫秒）：`now - startedAt >= maxMs` 即到期。 */
+  readonly maxMs?: number | undefined;
 }
 
 export class SessionRegistry {
@@ -78,6 +109,42 @@ export class SessionRegistry {
     } catch {
       /* 尽力而为 */
     }
+  }
+
+  /**
+   * 回收**已到期**的会话，返回被回收的 id 列表（顺序 = 回收顺序，便于断言与排障）。
+   *
+   * ## 为什么吃 `now` 而不是自己读时钟 / 不起 timer
+   *
+   * 判据要能**确定性复现**。若把到期判定埋进 `setTimeout` 回调，测试就只能 `sleep` 撞时间
+   * （本仓已定档过「只断状态码会漏掉『超时没生效』」的教训，见 `TC-M-L1-19`）。抽成吃 `now`
+   * 的纯方法后：单测**直接喂时间戳**（不睡）、集成层再用注入的短值跑端到端；定时器留在装配层
+   * （`route.ts` 起**单一** `setInterval(...).unref()`）。
+   *
+   * ## 口径
+   *
+   * - **空闲到期**：`now - lastActivityAt >= idleMs`（复用支已在刷新 `lastActivityAt`）
+   * - **超最长时长**：`now - startedAt >= maxMs` —— 与空闲**独立判定**（刚活动过也可能到期）
+   * - 未配置的限额 ⇒ 该触发**不启用**（两者都未配置时直接返回，不做任何事）
+   * - 回收走既有 `close()`：幂等、不抛出（已经不在表里的会话不会被重复回收）
+   */
+  async reap(now: number, limits: ReapLimits): Promise<string[]> {
+    const { idleMs, maxMs } = limits;
+    if (idleMs === undefined && maxMs === undefined) return [];
+
+    // 先取快照再逐个回收：`close()` 会改 `byId`，边遍历边删不可靠。
+    const expired = [...this.byId.values()].filter((session) => {
+      const idleExpired = idleMs !== undefined && now - session.lastActivityAt >= idleMs;
+      const tooLongExpired = maxMs !== undefined && now - session.startedAt >= maxMs;
+      return idleExpired || tooLongExpired;
+    });
+
+    const reaped: string[] = [];
+    for (const session of expired) {
+      reaped.push(session.id);
+      await this.close(session);
+    }
+    return reaped;
   }
 
   /** 关闭全部会话（进程退出 / `onClose` 钩子用）。 */

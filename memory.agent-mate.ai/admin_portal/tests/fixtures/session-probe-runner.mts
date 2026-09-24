@@ -112,6 +112,40 @@ const snapshot = (): Map<string, string> => {
 };
 const ownDir = (key: string): boolean => ACTIVE.some((handle) => key.startsWith(`/data/users/${handle}/`));
 
+/**
+ * 收尾后「**谁还持有**这两个用户的库句柄」—— `AC3.4`「不残留**占用中的库文件句柄**」的直接判据。
+ *
+ * 实测（`3.13` 探针）：会话**中**该会话进程持有 **4** 个 fd（`db` / `-shm` / `-wal` /
+ * `.deferred-audit.journal`），**收尾后 0 个** ⇒ 判据**双向都实测过**，不是「无则通过」型。
+ * 扫 `/proc/<pid>/fd` 的符号链接即可；**同 uid** 可读（`-u 0` 反而 `Permission denied`）。
+ */
+const dbHolders = (): string[] => {
+  const patterns = ACTIVE.map((handle) => `/data/users/${handle}/ai-memory.db`).join(' ');
+  return dexec(
+    `for d in /proc/[0-9]*/fd; do p=\${d#/proc/}; p=\${p%/fd}; ` +
+      `for f in "$d"/*; do l=$(readlink "$f" 2>/dev/null) || continue; ` +
+      `for pat in ${patterns}; do case "$l" in "$pat"*) echo "$p:$l";; esac; done; done; done | sort -u`,
+  )
+    .split('\n')
+    .filter((line) => line.trim().length > 0);
+};
+
+/**
+ * 容器内的**僵尸**进程（`state = Z`）。
+ *
+ * **实测教训（`3.13` 探针）**：僵尸的 `/proc/<pid>/cmdline` **是空的** ⇒ 按 cmdline 前缀计数
+ * **永远抓不到它**；只能读 `stat` 的 `state`，并按 `comm`（第 2 字段 —— 可能含空格，
+ * 故先剥到最后一个 `)` 再取字段）认名。
+ */
+const zombies = (): string[] =>
+  dexec(
+    `for f in /proc/[0-9]*/stat; do p=\${f#/proc/}; p=\${p%/stat}; ` +
+      `st=$(sed 's/^[^)]*)//' "$f" | awk '{print $1}'); comm=$(sed 's/^[^(]*(//; s/).*//' "$f"); ` +
+      `[ "$st" = "Z" ] && echo "$p:$comm"; done | sort -u`,
+  )
+    .split('\n')
+    .filter((line) => line.trim().length > 0);
+
 function main(): Promise<number> {
   return (async () => {
     const mod = async <T>(rel: string): Promise<T> =>
@@ -295,6 +329,22 @@ function main(): Promise<number> {
       afterAll === base,
       '全部收尾后无孤儿进程（受害者的子进程始终在受管范围内）',
       `进程数 ${afterAll}（基线 ${base}）`,
+    );
+
+    // ---- `AC3.4` 的两条「不残留」判据（判据形状由 `3.13` 探针实测钉死）----
+    const holders = dbHolders();
+    check(
+      'TC-P-L1-04·1',
+      holders.length === 0,
+      '收尾后**没有任何进程持有**这两个用户的库句柄（`AC3.4` 的「不残留占用中的库文件句柄」）',
+      holders.join(' | ') || '（无）',
+    );
+    const zombieList = zombies();
+    check(
+      'TC-P-L1-04·2',
+      zombieList.length === 0,
+      '收尾后**无僵尸进程**（按 `stat` 的 `comm` 认名 —— 僵尸的 `cmdline` 是空的）',
+      zombieList.join(' | ') || '（无）',
     );
 
     db.close();
