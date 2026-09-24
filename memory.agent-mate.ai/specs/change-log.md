@@ -82,6 +82,24 @@
 
 ---
 
+### `3.3` 开工准备：`3.12` 探针钉死「会话隔离判据」，并实测到 2 处缺陷
+
+**为什么**：`3.3`「mcp:一会话一子进程」的两条验收条件 —— `AC4.6`（两个并发会话对应两个独立子进程）与 `AC4.5`（会话前后不出现其他用户的库或临时文件）—— **都指向容器里的东西**。假上游既不是「一个 `ai-memory` 进程」，也没有「用户的库文件」⇒ 这两条**没法**用离线集成测试验；而真上游上「数进程」「看文件足迹」各有两个已知坑（容器是 debian-slim，**没有 `ps`**；本机经 Rosetta 跑 x86_64 镜像 ⇒ `/proc/<pid>/exe` 恒指向 rosetta）。判据不实测一遍，写进 `mcp-test.md` 就只是**纸面判据**。
+
+**做了什么**（**只做开工准备，产品代码一行未动**）：
+
+- **新增探针 [`../probes/session-isolation-probe/`](../probes/session-isolation-probe/)（`3.12`，研究类）**：**真上游**拓扑（探针 HTTP 客户端 → 门户 `/mcp` → 容器内 `ai-memory`，经 `PORTAL_LAUNCH_OVERRIDE` 借壳 `docker exec`），**8/8 断言 PASS、退出码 `0`、两次复跑一致**。缺陷类事实以 `[F] 发现：…` 输出、**不参与**退出码 —— 探针的职责是把事实钉死，不是替实现判对错。断言体放 [`../admin_portal/tests/fixtures/session-isolation-probe.mts`](../admin_portal/tests/fixtures/session-isolation-probe.mts)（放 `probes/` 下会 `ERR_MODULE_NOT_FOUND`，与 `probe-runner.mts` 同因；`tests/` 不进制品）。
+- **结论与两处反直觉点落档**（[`mcp/mcp-design.md`](mcp/mcp-design.md) §5.6.2 的 `3.12` 实证块）：① 两会话 ⇒ 容器内上游进程 **0 → 2** 且 **PID 互不相同**、各自带**自己用户的** `AI_MEMORY_DB` / `AI_MEMORY_AGENT_ID`（与 §5.6.4 模板的 `human:{handle}` 一致）；② **`/proc/<pid>/environ` 同 uid 读得到、`-u 0` 读不到**（反直觉实测 ⇒ 判据不要借 root）；③ 会话**真写一次**后用户目录之外**零新增**，**唯一**变化是上游**共享**审计日志 `/data/.local/state/ai-memory/audit/*.jsonl` ⇒ 判据**必须豁免**它（**不能**写「`/data` 零变化」）；④ 旁观者用户库**零变化**；⑤ **门户退出后容器内归零**（β′「父死子死」成立，不需要额外 `kill` 逻辑）。
+- **用例与跑法定档**（[`mcp/mcp-test.md`](mcp/mcp-test.md)）：§4-F 新增 `TC-M-L1-21`（两会话两进程 + 各自身份）/ `TC-M-L1-22`（无他人痕迹 + 共享审计日志豁免 + 旁观者零变化）/ `TC-M-L3-05`（**负向**：接管被拒且不伤及受害者）；**新增 §4-G「真上游端到端（online）的跑法与判据」**（入口 / 前置 / 外部依赖 / 观测面 / **拓扑无关**（容器名 + cmdline 前缀 ⇒ 本机借壳与生产 β′ 同一套判据）/ 退出码 / 收尾复验 / 本机局限），并写明**本轮即可用探针跑**同一套观测；产品侧入口 `make portal-mcp-session-probe` 由 `3.3` 交付，**既有 `make portal-mcp-probe` 不动**（不使既有门禁失稳）。同时**补记**该文件 §5 版本记录里 `3.9` 那轮的漏登记。
+- **实测到 2 处缺陷（同源）→ 已定档修正**：客户端带**甲的令牌** + **乙的 `sessionId`** 发一次请求时，实现里的「不匹配就 `registry.remove()`」把**乙**的会话从注册表里摘掉 ⇒ ① 乙随后用**自己的**令牌 + 原 `sessionId` **立刻 `401`**；② 乙的上游子进程**失去唯一引用**，没有任何路径去 `close()` 它 ⇒ **孤儿**（门户进程退出才随之消失）。这是 `D3`（一会话一子进程 · 禁止跨用户复用）的**反方向**：拒绝越权请求是对的，但**不能顺手伤到别人**。修正定档于 [`web-portal/web-design.md`](web-portal/web-design.md) §12.5 的「会话归属校验的不可侵扰」（**只拒不动**；仅「该会话自己的传输已关闭」一支才幂等 `close()`），并作为 `3.3` 的**必修项**写入 [`sprint-backlog.md`](sprint-backlog.md) 的 `3.3` 行。
+- **排期同步**：[`sprint-backlog.md`](sprint-backlog.md) 增 `3.12` 行（研究 · `Done`）、`3.3` 行补「开工前置已就绪」与判据落点与新缺陷、编号口径与执行顺序同步、变更记录一行。
+
+**验证**：`bash memory.agent-mate.ai/probes/session-isolation-probe/probe.sh` **退出码 `0`**，两次复跑一致（8/8 断言 PASS · 2 项发现 · 门户退出后容器内进程 `0`）。原始输出落 `probes/session-isolation-probe/out/`（**不入库**）。
+
+**未做（等确认才动）**：`3.3` 的产品代码（归属校验修正 · 真上游 e2e 脚本与 Make 目标 · 集成用例）**一行未改**；代码排布见计划文件。
+
+---
+
 ## 2026-09-23
 
 ### `3.8`「mcp:桥的透传完整性与失败诊断」交付：桥开始「按契约可用」

@@ -307,6 +307,19 @@ aimem-ssh ALL=(root) NOPASSWD: /usr/bin/docker exec -i ai-memory-mcp ai-memory m
 >
 > **与探针结论的差异（如实登记）**：探针断言 5 证的是「全 fallback 下 `tools/call` 往返正常」；本轮**未**在真上游上另验 `prompts/*` 走 fallback 的形态 —— 该形态由集成用例（夹具）覆盖，并按本批纪律**不**在真上游端到端脚本里新增此类断言（真上游上未实测，加进去会让脚本不稳定）。**反方向仍未转发**（上游 → 客户端的主动通知与 server→client 请求）：真上游 core 档实测**零条主动消息**，故当前无损；触发条件见 [`../web-portal/web-design.md`](../web-portal/web-design.md) §12.5。
 
+> **`3.12` 探针补充的事实（2026-09-24，为 `3.3` 定档；探针与原始输出见 [`../../probes/session-isolation-probe/`](../../probes/session-isolation-probe/)）**：回答「`AC4.5` / `AC4.6` 那两条**指向容器内**的验收条件，判据到底怎么写才成立」，**8/8 断言 PASS、退出码 `0`、两次复跑一致**，另实测到 **2 处缺陷**。
+>
+> | 结论 | 实测与依据 |
+> |---|---|
+> | **「两个会话两个进程」可直接在容器内数出来** | 两个并发会话（不同令牌）⇒ 容器内 `ai-memory mcp --tier smart --profile core` 进程 **0 → 2**，PID 互不相同；正常收尾 **2 → 0**；**同用户重开**会话是新 PID（禁池化成立）。手法：按 **cmdline 精确前缀**计数（镜像是 debian-slim，**没有 `ps`**；本机经 Rosetta 跑 x86_64 镜像 ⇒ `/proc/<pid>/exe` 恒指向 rosetta，**不能**按 exe 判） |
+> | **「以谁的库与身份启动」可判，但必须用同 uid 读** | `/proc/<pid>/environ` 两个进程分别给出 `AI_MEMORY_DB=/data/users/<handle>/ai-memory.db` 与 `AI_MEMORY_AGENT_ID=human:<handle>`（与 §5.6.4 模板的 `human:{handle}` 一致）。**反直觉点**：`docker exec -u 0` 读该文件 **`Permission denied`**，容器默认用户读得到 ⇒ 判据**不要**借 root |
+> | **「他人痕迹」判据必须豁免上游的共享审计日志** | 会话**真写一次**（`memory_store` ⇒ 真 embedding）后：活跃用户目录**之外**新增文件 **0 个**，但 **1 个文件被更新** —— `/data/.local/state/ai-memory/audit/forensic-<date>.jsonl`（**上游共享**的 forensic 审计日志）。⇒ 判据**不能**写成「`/data` 零变化」，只能写「除该共享日志外，变化只落在活跃会话自己的用户目录内」；另以**旁观者用户库零变化**作正面对照 |
+> | **进程随门户死亡而消失（β′ 的天然保证成立）** | 门户进程退出后容器内同形进程数回落 **0**（每轮复验）；`docker exec` 的 stdio 管道断开即够 ⇒ 「父死子死」不依赖额外 `kill` 逻辑 |
+> | **缺陷 F1：接管被拒时**顺手摘掉了第三方的会话** | 用甲的令牌 + 乙的 `sessionId` 发一次请求：**401** 正确、**不新增**子进程也正确，但实现里的 `registry.remove()` 把**乙**的会话从注册表摘掉 ⇒ **乙随后用自己的令牌 + 原 `sessionId` 已是 401**。修正定档见 [`../web-portal/web-design.md`](../web-portal/web-design.md) §12.5 的「会话归属校验的不可侵扰」 |
+> | **缺陷 F2：被摘掉的会话，其子进程成孤儿** | 会话不在注册表里 ⇒ 没有任何引用去 `close()` 它 ⇒ 收尾后**残留 1 个**容器内进程（门户进程退出时才随之消失，故非永久泄漏，但一直占着库与内存）。**根因与 F1 同源**（用 `remove()` 而不是 `close()`），一并修 |
+>
+> **由上述结论导出的判据口径（`3.3` 直接照用）**：① 数进程用 **cmdline 精确前缀 + 容器名参数化** ⇒ 本机借壳（门户在宿主 + `docker exec`）与生产 β′（门户在容器内直接 spawn）**同一套判据**；② 判「谁的进程」用**同 uid** 读 `environ`；③ 判「他人痕迹」用 `find -printf` **快照差分** + **共享审计日志豁免** + **旁观者用户库零变化**；④ 收尾**必须复验**（端口释放 + 容器内归零）。跑法见 [`../mcp/mcp-test.md`](../mcp/mcp-test.md) §4-G，用例为同文件 §4-F 的 `TC-M-L1-21` / `TC-M-L1-22` / `TC-M-L3-05`。
+
 **部署顺序依赖**：`ai-memory-mcp` 先起（创建命名卷 `ai_memory_data`），门户以 `external: true` 引用。
 
 #### 5.6.3 启动机制 β′ 与制品契约
