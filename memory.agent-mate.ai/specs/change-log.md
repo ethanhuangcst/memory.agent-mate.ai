@@ -8,6 +8,23 @@
 
 ## 2026-09-24
 
+### 备份目标写实为「阿里云 OSS」+ 云资源清单落点 + 两处指称校正（含订正上一轮核实里的误判）
+
+**为什么**：① 用户核实备份机制时确认「备份用的是我在阿里云的 OSS」，而全仓**没有一处**写「阿里云」——只写 `OSS` 或「OSS 兼容对象存储」，靠 `ossutil` 与 `RAM 子账号` 两条阿里云专有术语间接体现；② Sprint 5 的阻塞行 `#8` 写「云资源准备清单见 `deploy/README.md`」，而该文件**并无此清单**（只有 4 个事实文件的说明）⇒ 阻塞项的依据指向空处；③ `deployment.md` 写「生产定时器安装 / 日志采集 / 告警留 Sprint 5」，但在 Sprint 5/6/7 全部行内检索 `定时器|cron|日志采集|告警|每库维护` **零命中** ⇒ 该生产项**无任何承接条目**；④ 核实中发现 `deployment.md` 有一条变更记录（2026-09-22）声称「三处的 Sprint 由 5 改为 6」，而 2026-09-23 的重排已把生产上线与备份恢复放回 Sprint 5 ⇒ **正文对、声明错**。
+
+**做了什么**：
+
+- **写实供应商**：`deployment.md` §8 的外迁目标由「OSS 兼容对象存储」改为**阿里云 OSS 私有桶**；[`product-backlog.md`](product-backlog.md) #9 · [`sprint-backlog.md`](sprint-backlog.md) Sprint 5 `#8` · [`web-portal/web-design.md`](web-portal/web-design.md) T10 · [`adr/ADR-005`](adr/ADR-005-upgrade-admission-gate-layering.md) 同步写实。
+- **region 标为待核查**：用户明确「region 需要再核查」⇒ **不写死香港**，四处权威表述改为「region **待核查**（现登记为香港）」，并在 `deployment.md` §1.1 给出核查命令（`ossutil ls` / `ossutil stat` / `ossutil config`，或控制台看「地域」）；**核实后回填**。
+- **新增 §1.1 云资源准备清单**（`deployment.md`，唯一真源，7 项：阿里云 OSS 私有桶 · RAM 子账号 AK · SSH 密钥对 · Cloudflare Access 应用与策略 · Access Service Token · 门户专用 MaaS key · DNS）；Sprint 5 `#8` 的指针改指本表。
+- **补上生产项的承接**：`deployment.md` §5.3 的「留 Sprint 5」改为条目级指称 **Sprint 5 `#10`**，并在 `#10` 的说明列写明「含每库维护生产定时器安装、日志采集与失败告警」⇒ 双向可追溯。
+- **订正 2026-09-22 的改指声明**：保留原行（历史叙述不改），其后标注**已被 2026-09-23 重排取代**；正文三处「Sprint 5」**自始正确，未改**。
+- **如实登记的缺口**：`DNS` 在 Sprint 5 无承接条目 —— 本次只把它列进 §1.1，归属待定。
+
+**验证**：`make doc-links` · `make secret-check` · `make attestation-paths`（五路径）· `make preflight-test`（5/0）· `git diff --check` 均通过；人工核对 §1.1 清单与 Sprint 5 `#8` 指针双向一致、四处 region 均**未写死**、`deployment.md` §12.1 的「hk_vps_4（香港 VPS）」是**服务器位置**未受影响。
+
+**边界**：按用户选择**只写实措辞、不新增护栏**（未改 `secret-check` / `attestation-paths-check`）；region 回填待用户核查后进行。本轮同时订正了上一轮核实中**因按行号跨表取数**而误报的两项（`deployment.md` 正文三处与 §12.2 的 Sprint 号本自正确）。
+
 ### `3.9` 开工准备：`3.11` 探针钉死「身份透传」与「超时分层」的装配语义
 
 **为什么**：`3.9`「mcp:上游能力透传与超时分层」要把 `initialize` 回包的 `serverInfo` / `capabilities` **从「桥自报」改成「代上游自报」**。这不是改两行字面量 —— 身份与能力一旦取自上游，SDK 的三处行为立刻变成硬约束，而它们**只写在编译产物的构造函数里**：能力断言发生在 `setRequestHandler`（**注册期**）、`capabilities.logging` 会让 SDK 在桥本地**吞掉** `logging/setLevel`、`ServerCapabilitiesSchema` 会**丢弃未知能力键**。不先钉死，就会写出「上游缺某项能力 ⇒ 桥直接起不来」这类**只在特定上游上暴露**的缺陷。
@@ -179,6 +196,21 @@
 **验证**：`make portal-mcp-probe` 由 **4 项 → 6 项断言全 PASS、退出码 `0`**（改前基线 **4/4**）· **判据敏感性已证明**（临时删掉该用户的库后重测，**同一判据 PASS → FAIL**）· `make portal-mcp-session-probe` 退出码 `0`（零回归）· 离线 **334 passed / 31 files** · `make doc-links` / `make attestation-paths` 通过 · `npx tsc --noEmit` 0 错。
 
 **一处如实登记**：`3.6` 的「越权库路径」在真上游**无观测面**（拒绝发生在 spawn **之前**）⇒ 判据留在离线层，**没有**硬造真上游断言。
+
+### `3.7` 开工准备：`3.15` 探针定档「跨用户隔离」判决据
+
+**为什么**：`3.7`「跨用户隔离」的验收条件是「A/B **经同一门户实例**互不可见」+「两侧均记录**解析后的库路径**」。覆盖核对发现**两条都有缺口** —— `scripts/iso-probe.sh`（Sprint 3，`V2` / `V3` / `V4` 的本地版）已证**上游级**隔离（交叉 `get` / 库路径解析 / 共享主库不变），但那是**用显式 env 直连上游**、**没有经过门户**；`make portal-mcp-session-probe`（`3.3` / `3.4`）虽然经门户起了两个用户的会话，但验的是**进程与文件隔离**，**从没让 B 去召回 A 写的东西**。而「令牌 → handle → 库路径」这一步**恰恰在门户** —— `R1`（致命：多用户隔离可能静默失效）与 `R2`（严重：隔离完全依赖门户一处正确性，无纵深）指向的就是它。⇒ 判据不实测一遍，写进 `mcp-test.md` 就还是**纸面判据**。
+
+**做了什么**（**只做开工准备，产品代码一行未动**）：
+
+- **新增探针 [`../probes/cross-user-probe/`](../probes/cross-user-probe/)（`3.15`，研究类）**：编排骨架由 `3.3` 的 `portal-mcp-session-probe.sh` **派生**（改端口 / 用户名 / 断言体 / 文案），断言体放 [`../admin_portal/tests/fixtures/cross-user-probe.mts`](../admin_portal/tests/fixtures/cross-user-probe.mts)（与 `probe-runner.mts` 同因：复用门户的依赖解析与 `better-sqlite3` 原生编译）。**7/7 断言 PASS、退出码 `0`、两轮复跑一致**；拓扑是**同一门户实例 + 两个用户 + 两条令牌**。
+- **决定性结论**：① **B 经同一门户实例召回 A 的标记 ⇒ 回包不含**（上游回 `count:0`）；② **灵敏度对照**：B 能召回**自己**写的（`count:1`）⇒ ① 的「不含」**不是**「B 的检索根本不可用」造成的假通过；③ 反向亦然（**双向**）；④ **按 id 直取**：B 用 A 的记忆 id 调 **`memory_get`** ⇒ 上游回 **`memory not found`**；⑤ **端到端取证**：门户 `audit` 表两侧各一行 `mcp_session_opened`，`detail_json.dbPath` 各自指向 `/data/users/<自己>/ai-memory.db` 且互不相同（`AC4.3` 的机制由 `3.4` 交付，这里判它在**跨用户**场景下成立）；⑥ 两侧库文件真实存在；⑦ 收尾后容器内归零。
+- **判据硬约束（写进用例口径）**：召回类判据一律按「**回包里有没有那个标记**」判、**禁止按 `count` 判**（`3.14` 的教训）；且**每条否定型判据必须配一条「必须为正向」的灵敏度对照** —— 这是本轮实测到的**假绿风险**（只有 X2 而没有 X3 时，「B 的检索环境坏掉」也会让它变绿）。
+- **覆盖核对与范围**：`3.7` 的第二条验收条件「两侧记录解析后的库路径」的**机制已由 `3.4` 交付** ⇒ 本行只需**取证与登记**，不需新机制。
+
+**验证**：`bash memory.agent-mate.ai/probes/cross-user-probe/probe.sh` **退出码 `0`**，两轮复跑一致（**7/7 断言 PASS** · 收尾后容器内同形进程 `0`）。原始输出落 `probes/cross-user-probe/out/`（**不入库**）。
+
+**未做（等确认才动）**：`3.7` 的产品代码（把三类判据挂到门禁）**一行未改**；代码排布见计划文件。
 
 ---
 

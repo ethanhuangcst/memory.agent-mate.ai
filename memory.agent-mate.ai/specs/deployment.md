@@ -17,6 +17,23 @@
 | 本地 | `docker` CLI；无 compose 插件时脚本自动回退 `docker-compose` |
 | 纪律 | 改 `.gitignore` 之后才能 `git add -A`；提交前 `make secret-check`（pre-commit 已挂） |
 
+### 1.1 云资源准备清单
+
+> **用途**：生产上线前须在**云侧 / 域名侧**就绪的**外部资源**。Sprint 5 的阻塞行（`#7` / `#8`）指向本表；本表是这份清单的**唯一真源**。
+> **纪律**：AK / Token / key 一律**只存服务器侧**，不入仓（`make secret-check` 守护）。
+
+| 云资源 | 要求 | 承接条目 |
+|---|---|---|
+| **阿里云 OSS 私有桶** | 桶为**私有** + **SSE 已开**；region **待核查**（现登记为香港，核查方式见下） | Sprint 5 `#8` |
+| **RAM 子账号 AK** | 只授予该桶的最小权限；只存服务器侧 | Sprint 5 `#8` |
+| **SSH 密钥对** | 调用者 ↔ 野草云4；无 passphrase + forced command，`ssh ai-memory` 可完成 MCP 握手 | Sprint 5 `#7` |
+| **Cloudflare Access 应用 + Allow 策略** | 策略内列已批准邮箱（**建议 ≥ 2 个**）；`<MCP_HOST>` 必须**绕过** Access | [`web-portal/web-design.md`](./web-portal/web-design.md) §6.1 · Sprint 5 `#6` |
+| **Access Service Token** | 供在线链路探针判定「策略已生效」 | Sprint 5 `#6` |
+| **门户专用 MaaS key** | 与主 key 分离，只放 `portal.env` | [`../deploy/portal.env.example`](../deploy/portal.env.example) |
+| **DNS（两个域名）** | `<MCP_HOST>` 与 `<ADMIN_HOST>` 分别解析到本机 | **暂无承接条目**（如实登记，归属待定） |
+
+**OSS region 核查方式**（核实后回填本文档 §8、`product-backlog.md` #9、Sprint 5 `#8` 与 [`adr/ADR-005`](./adr/ADR-005-upgrade-admission-gate-layering.md)）：`ossutil ls` · `ossutil stat oss://<OSS_BUCKET>` · `ossutil config`（endpoint 形如 `oss-<region>.aliyuncs.com`）；或阿里云控制台 → OSS → 该桶 → 概览 → 「地域」。
+
 ---
 
 ## 2. 服务器落地清单
@@ -191,7 +208,7 @@ bash memory.agent-mate.ai/scripts/maintain-user-dbs.sh --dry-run   # 先核对�
 make maintain-user-dbs                                             # 逐库 gc + curator --once
 ```
 
-调度定档为**宿主机 cron**（生产定时器安装 / 日志采集 / 告警留 Sprint 5）。脚本两条硬约束：每条调用**显式 `--db <绝对路径>`**（漏传会静默回落相对路径库；容器内 `AI_MEMORY_DB` 指向主库 ⇒ 有误操作主库的风险）、每条调用显式 `AI_MEMORY_REQUIRE_AGENT_ATTESTATION=0`（v0.11 起上游缺省翻转为全 surface required）。单库失败**不中断**、最终非零退出供 cron 告警。
+调度定档为**宿主机 cron**（生产定时器安装 / 日志采集 / 告警留 **Sprint 5 `#10`**「deploy:部署执行（ai-memory）」）。脚本两条硬约束：每条调用**显式 `--db <绝对路径>`**（漏传会静默回落相对路径库；容器内 `AI_MEMORY_DB` 指向主库 ⇒ 有误操作主库的风险）、每条调用显式 `AI_MEMORY_REQUIRE_AGENT_ATTESTATION=0`（v0.11 起上游缺省翻转为全 surface required）。单库失败**不中断**、最终非零退出供 cron 告警。
 
 退出码契约：`0` 全部成功 · `1` 至少一个库失败 · `2` 参数错误 · `3` 环境不可用（容器未运行）—— 环境不可用时**不得静默成功**，否则 cron 会长期漏维护而不报警。
 
@@ -297,7 +314,7 @@ make curl-probe                # 参考用：直连容器 HTTP API 探针（生�
 | 目录 | `/data/backups`（备份脚本 Sprint 5 落地到 `memory.agent-mate.ai/backup/`） |
 | 本地快照 | `sqlite3 /data/ai-memory.db ".backup '/data/backups/ai-memory-<ts>.db'"`（**在线备份首选**，非 `cp` 裸文件） |
 | 频率 | **每日 1 次**（对齐 RPO ≤ 24h）；留存 ≥ 30 份，带时间戳 |
-| 外迁 | **每日**同步到 OSS 兼容对象存储 `<OSS_BUCKET>`；同步后**校验 `sha256sum` 一致** |
+| 外迁 | **每日**同步到**阿里云 OSS 私有桶** `<OSS_BUCKET>`（region **待核查**，核查方式见 §1.1）；同步后**校验 `sha256sum` 一致** |
 | 恢复演练 | 每月一次：拷贝 → 起临时实例 → 抽样检索验证 |
 | 每用户库 | **必须一起备份**：`/data/users/<handle>/ai-memory.db` |
 | 告警 | 备份失败 / 大小异常 / 恢复演练失败均告警 |
@@ -470,3 +487,4 @@ bash scripts/pin-update.sh <ref> [--force]          # 更新锁文件（--force 
 | 2026-09-21 | **§4.4 改为「用户目录属主引导」**：一次性 `install -d -m 2775 -o root -g 999 /data/users`（setgid）使非 root 门户可自建 `0700` 用户目录，并**删除**原 `NOPASSWD: docker exec -u 0` root 规则（`aimem-ssh` 密钥一律带 forced command，不需要 sudo）；§4.5 改为「root 手工操作，保底」。§12.2 补门户 stack 的挂载/密钥/启动自检前置。§7.2 补 S1 的门户侧新触发路径（缺 `DASHSCOPE_API_KEY` ⇒ 401 + linear scan，工具仍成功）。依据 [`architecture.md`](./architecture.md) §2.3 与 [`knowledge/web-portal/portal-launch-mechanism.md`](./knowledge/web-portal/portal-launch-mechanism.md) |
 | 2026-09-21 | **§4.3 强制命令定档**：主人（默认库 = **管理员入口**）行 → `--profile admin`（22 项）；用户（一用户一库）行 → `--profile core`（8 项，显式声明 —— 不传时默认也是 core 且**不报错**）；补「档位口径」注与「改档须重连」。决议与理由 [`mcp/mcp-design.md`](./mcp/mcp-design.md) §8.3；实测依据 [`../scripts/profile-probe.sh`](../scripts/profile-probe.sh)（7 档全绿）；对外用户版说明 [`mcp/mcp-capabilities.md`](./mcp/mcp-capabilities.md) |
 | 2026-09-22 | **Sprint 编号随 Replan 改指**：§5.3 生产定时器、端到端验收脚本、`/data/backups` 备份脚本目录三处的 Sprint 由旧 Sprint 5 改为 **Sprint 6** |
+| 2026-09-24 | **云资源清单落点 + 备份目标写实 + 两处指称校正**：① 新增 **§1.1 云资源准备清单**（唯一真源，7 项外部资源）；Sprint 5 `#8` 的指针由 `deploy/README.md`（该文件**并无**此清单）改指 §1.1；② §8 外迁目标由「OSS 兼容对象存储」写实为**阿里云 OSS 私有桶**，region 标 **待核查**并给出核查命令；③ §5.3 的「留 Sprint 5」改为**条目级**指称 `#10`，与该行承接的「生产定时器安装 / 日志采集 / 告警」互指（此前该生产项在任何 Sprint 都无承接条目）；④ **订正上一条（2026-09-22）**：其「改为 Sprint 6」的改指已被 2026-09-23 重排取代 —— 生产上线与备份恢复整体回到 Sprint 5，故正文三处「Sprint 5」自始正确，本次未改正文。依据与过程见 [`change-log.md`](./change-log.md) 2026-09-24 |
