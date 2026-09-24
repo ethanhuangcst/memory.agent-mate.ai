@@ -142,6 +142,83 @@ async function connect(token: string, host = '127.0.0.1'): Promise<Client> {
   return client;
 }
 
+/**
+ * 起一个「上游形态不同」的独立门户实例 —— `PORTAL_LAUNCH_OVERRIDE` 是**配置级**的，
+ * 一个进程只能有一种上游形态，所以要验证另一种上游形态就得另起一个。
+ *
+ * `3.9` 提到模块作用域：失败面、身份与超时两处 describe 都要用它。
+ */
+async function startWithUpstream(
+  extra: string,
+  timeouts: { handshakeMs?: number; requestMs?: number } = {},
+): Promise<{ base: string; close: () => Promise<void> }> {
+  const cfgForBadUpstream = loadConfig({
+    PORTAL_ENV: 'development',
+    PORTAL_ADMIN_HOST: 'localhost',
+    PORTAL_MCP_HOST: '127.0.0.1',
+    PORTAL_DB_PATH: path.join(tmpRoot, 'portal.db'),
+    PORTAL_USERS_ROOT: cfg.usersRoot,
+    PORTAL_LAUNCH_OVERRIDE: `node ${FIXTURE} ${extra}`,
+    PORTAL_LOG_LEVEL: 'silent',
+  } as NodeJS.ProcessEnv);
+  // 两个超时**分开注入**（`3.9` 起分层）：`handshakeMs` 只影响 `client.connect`、
+  // `requestMs` 只影响每条上游请求 —— 只有这样「到底哪一支在起作用」才是可分辨的。
+  const badApp = await buildServer(cfgForBadUpstream, {
+    db,
+    ...(timeouts.handshakeMs === undefined ? {} : { handshakeTimeoutMs: timeouts.handshakeMs }),
+    ...(timeouts.requestMs === undefined
+      ? {}
+      : { upstreamRequestTimeoutMs: timeouts.requestMs }),
+  });
+  await badApp.listen({ port: 0, host: '127.0.0.1' });
+  const address = badApp.server.address();
+  const badPort = typeof address === 'object' && address !== null ? address.port : 0;
+  return {
+    base: `http://127.0.0.1:${badPort}`,
+    close: async () => {
+      await badApp.close();
+    },
+  };
+}
+
+/** 裸 `fetch` 发 `initialize`（只回状态码与错误体），用于「会话根本没建起来」那类断言。 */
+async function initializeAt(base: string): Promise<{ status: number; body: { error?: string } }> {
+  const response = await fetch(`${base}/mcp`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      // MCP Streamable HTTP 要求客户端显式声明可接受的响应类型；
+      // 缺它会得到 **406**（而不是会话失败）—— 这是协议层门禁，不是我们的业务分支。
+      accept: 'application/json, text/event-stream',
+      authorization: `Bearer ${tokenAlice}`,
+    },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'initialize',
+      params: {
+        protocolVersion: '2024-11-05',
+        capabilities: {},
+        clientInfo: { name: 'it', version: '0' },
+      },
+    }),
+  });
+  return { status: response.status, body: (await response.json()) as { error?: string } };
+}
+
+/** 把 SDK 客户端指向某个具体 `base`（顶层 `connect()` 走的是主实例，这里要换实例）。 */
+async function connectTo(base: string): Promise<Client> {
+  const client = new Client(
+    { name: 'it-identity', version: '0.0.0' },
+    { capabilities: { roots: { listChanged: true } } },
+  );
+  const transport = new StreamableHTTPClientTransport(new URL(`${base}/mcp`), {
+    requestInit: { headers: { authorization: `Bearer ${tokenAlice}` } },
+  });
+  await client.connect(transport as unknown as Parameters<typeof client.connect>[0]);
+  return client;
+}
+
 describe('会话跑通（AC-M1.1 / AC3.5）', () => {
   it('initialize → tools/list → memory_store → memory_recall 全程经桥返回真实结果', async () => {
     const client = await connect(tokenAlice);
@@ -303,62 +380,6 @@ describe('使用时间粒度（AC3.7，口径见 web-design.md §4.4）', () => 
 });
 
 describe('上游失败面（web-design.md §12.5 的上游不可用与超时）', () => {
-  /**
-   * 起一个「上游形态不同」的独立实例 —— `PORTAL_LAUNCH_OVERRIDE` 是**配置级**的，
-   * 一个进程只能有一种上游形态，所以要验证另一种失败面就得另起一个。
-   */
-  async function startWithUpstream(
-    extra: string,
-    timeoutMs?: number,
-  ): Promise<{ base: string; close: () => Promise<void> }> {
-    const cfgForBadUpstream = loadConfig({
-      PORTAL_ENV: 'development',
-      PORTAL_ADMIN_HOST: 'localhost',
-      PORTAL_MCP_HOST: '127.0.0.1',
-      PORTAL_DB_PATH: path.join(tmpRoot, 'portal.db'),
-      PORTAL_USERS_ROOT: cfg.usersRoot,
-      PORTAL_LAUNCH_OVERRIDE: `node ${FIXTURE} ${extra}`,
-      PORTAL_LOG_LEVEL: 'silent',
-    } as NodeJS.ProcessEnv);
-    const badApp = await buildServer(cfgForBadUpstream, {
-      db,
-      ...(timeoutMs === undefined ? {} : { requestTimeoutMs: timeoutMs }),
-    });
-    await badApp.listen({ port: 0, host: '127.0.0.1' });
-    const address = badApp.server.address();
-    const badPort = typeof address === 'object' && address !== null ? address.port : 0;
-    return {
-      base: `http://127.0.0.1:${badPort}`,
-      close: async () => {
-        await badApp.close();
-      },
-    };
-  }
-
-  async function initializeAt(base: string): Promise<{ status: number; body: { error?: string } }> {
-    const response = await fetch(`${base}/mcp`, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        // MCP Streamable HTTP 要求客户端显式声明可接受的响应类型；
-        // 缺它会得到 **406**（而不是会话失败）—— 这是协议层门禁，不是我们的业务分支。
-        accept: 'application/json, text/event-stream',
-        authorization: `Bearer ${tokenAlice}`,
-      },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: 1,
-        method: 'initialize',
-        params: {
-          protocolVersion: '2024-11-05',
-          capabilities: {},
-          clientInfo: { name: 'it', version: '0' },
-        },
-      }),
-    });
-    return { status: response.status, body: (await response.json()) as { error?: string } };
-  }
-
   it('上游启动即失败 ⇒ 503 upstream_unavailable，并写审计行（纪律 3）', async () => {
     const { base, close } = await startWithUpstream('--fail-before-initialize=1');
     try {
@@ -377,7 +398,8 @@ describe('上游失败面（web-design.md §12.5 的上游不可用与超时）'
   }, 30_000);
 
   it('上游挂起不响应 ⇒ 握手超时兜底（按上游不可用处理，不再挂到上游最终响应）', async () => {
-    const { base, close } = await startWithUpstream('--hang-ms=5000', 300);
+    // 这一条卡的是**握手**（`client.connect`）⇒ 注入的是 `handshakeMs`，不是 `requestMs`。
+    const { base, close } = await startWithUpstream('--hang-ms=5000', { handshakeMs: 300 });
     try {
       const startedAt = Date.now();
       const { status, body } = await initializeAt(base);
@@ -519,5 +541,138 @@ describe('整行转发与失败诊断（`3.8`：TC-M-L1-15 / 16 / 17）', () => 
       '正常路径产生了失败审计行 ⇒ 误报',
     ).toBe(false);
   }, 30_000);
+});
 
+describe('上游身份与能力透传、超时分层（3.9：TC-M-L1-18 / 19 / 20）', () => {
+  it('TC-M-L1-18：身份 / 能力 / 指令取自上游，且网关不凭空造字段', async () => {
+    // ① 让夹具带一套**可辨识的**身份 / 能力 / 指令启动 —— 名字与版本都不是网关的，
+    //    能力比「上游默认值」多一项 `prompts`（能区分「透传」与「照抄旧硬编码」）。
+    //    指令值刻意不含空格：`PORTAL_LAUNCH_OVERRIDE` 是按空白切分的，带空格的参数会被拆开。
+    const customized = await startWithUpstream(
+      '--identity=ai-memory-probe@9.9.9' +
+        ' --capabilities={"tools":{},"prompts":{},"resources":{},"completions":{}}' +
+        ' --instructions=probe-instructions-ok',
+    );
+    try {
+      const client = await connectTo(customized.base);
+      try {
+        // 判据写「**字段与取值**」，不写「逐字节」：SDK 的 schema 解析会重建键序
+        // （`3.11` 探针断言 1 首跑就因按字符串比而假失败）。
+        expect(client.getServerVersion()).toEqual({ name: 'ai-memory-probe', version: '9.9.9' });
+        expect(client.getServerCapabilities()).toEqual({
+          tools: {},
+          prompts: {},
+          resources: {},
+          completions: {},
+        });
+        expect(client.getInstructions()).toBe('probe-instructions-ok');
+      } finally {
+        await client.close();
+      }
+    } finally {
+      await customized.close();
+    }
+
+    // ② 反证：上游**没有**声明指令时不带 `--instructions` ⇒ 客户端读到的必须是 `undefined`。
+    //    少了这条，「网关只要不回吐空串就算过」——而凭空多一个 `instructions` 同样是偏离上游。
+    const plain = await startWithUpstream('');
+    try {
+      const client = await connectTo(plain.base);
+      try {
+        expect(client.getServerVersion()).toEqual({ name: 'fake-upstream', version: '0.0.0' });
+        expect(client.getInstructions()).toBeUndefined();
+      } finally {
+        await client.close();
+      }
+    } finally {
+      await plain.close();
+    }
+  }, 60_000);
+
+  it('TC-M-L1-19：握手超时与每请求超时互不牵连（反着设值，行为仍正确）', async () => {
+    // 夹具在**工具调用内部**挂 1500ms（`--tool-hang-ms`）—— 与「连接前挂起」的 `--hang-ms`
+    // 是两条独立链路：那个覆盖握手超时，这个覆盖每请求超时。
+
+    // ① 短握手（300ms）+ 长请求（5000ms）：超时值反着设，耗时 1500ms 的调用**必须成功**。
+    //    分层之前两者共用一个值 ⇒ 这次调用会被 300ms 掐断。
+    const shortHandshake = await startWithUpstream('--tool-hang-ms=1500', {
+      handshakeMs: 300,
+      requestMs: 5_000,
+    });
+    try {
+      const client = await connectTo(shortHandshake.base);
+      try {
+        const startedAt = Date.now();
+        const result = await client.callTool({
+          name: 'memory_recall',
+          arguments: { context: 'probe' },
+        });
+        const elapsed = Date.now() - startedAt;
+        expect(JSON.stringify(result.content)).toContain('count:');
+        expect(elapsed, '握手超时不该管到转发阶段').toBeGreaterThanOrEqual(1_500);
+      } finally {
+        await client.close();
+      }
+    } finally {
+      await shortHandshake.close();
+    }
+
+    // ② 长握手（5000ms）+ 短请求（300ms）：同一类调用这次必须在**每请求**超时处失败，
+    //    且以 **MCP 层错误 `-32001`** 返回 —— 转发期 SSE 响应头已发出，状态码改不动。
+    const shortRequest = await startWithUpstream('--tool-hang-ms=1500', {
+      handshakeMs: 5_000,
+      requestMs: 300,
+    });
+    try {
+      const client = await connectTo(shortRequest.base);
+      try {
+        const startedAt = Date.now();
+        let code: unknown = null;
+        try {
+          await client.callTool({ name: 'memory_recall', arguments: { context: 'probe' } });
+        } catch (error) {
+          code = (error as { code?: unknown }).code ?? null;
+        }
+        const elapsed = Date.now() - startedAt;
+        // **错误码与耗时一起断**：只断错误码会漏掉「超时没生效」（本仓踩过这个）。
+        expect(code).toBe(-32001);
+        expect(elapsed, '每请求超时必须在上游的 1500ms 之前生效').toBeLessThan(1_500);
+      } finally {
+        await client.close();
+      }
+    } finally {
+      await shortRequest.close();
+    }
+  }, 60_000);
+
+  it('TC-M-L1-20：网关不吞掉上游的请求 —— logging/setLevel 抵达上游进程', async () => {
+    // 上游必须**声明 `logging`**：SDK 才会为它在网关**本地**注册 `logging/setLevel` 的 handler
+    // （那正是「被吞掉」的成因）；网关随后显式移除它，请求才会落回 fallback 被转发出去。
+    const requestLog = path.join(tmpRoot, 'upstream-requests.log');
+    fs.writeFileSync(requestLog, '');
+    const { base, close } = await startWithUpstream(
+      '--capabilities={"tools":{},"resources":{},"completions":{},"logging":{}}' +
+        ` --request-log=${requestLog}`,
+    );
+    try {
+      const client = await connectTo(base);
+      try {
+        expect(client.getServerCapabilities()).toHaveProperty('logging');
+        await client.request(
+          { method: 'logging/setLevel', params: { level: 'debug' } },
+          z.unknown(),
+        );
+      } finally {
+        await client.close();
+      }
+
+      // 判据以**上游进程传输层**的留痕为准，**不以**「上游返回了什么」为准 ——
+      // 上游自己也会本地处理该请求（与 `TC-M-L1-16` 对取消通知的判据纪律同源）。
+      // 反证（不拽回 handler 时上游收不到）由 `probes/bridge-identity-probe/` 断言 4 给出，
+      // 无法在集成层构造：网关侧「不拽回」这个状态在产品代码里不存在。
+      expect(fs.readFileSync(requestLog, 'utf8')).toContain('logging/setLevel');
+    } finally {
+      await close();
+    }
+  }, 30_000);
 });

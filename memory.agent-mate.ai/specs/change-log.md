@@ -21,7 +21,23 @@
 
 **验证**：`node probe.mjs` **七项断言全 PASS、退出码 `0`、两次复跑一致** —— 断言 6 实测 `303ms` / `304ms`（上游需 `1500ms`）· 断言 7 在「握手超时 300ms、请求超时 5000ms」的桥上 `1502ms` 的调用**成功**。原始输出落 `probes/bridge-identity-probe/out/`。
 
-**未做（等确认才动）**：`3.9` 的产品代码（`transport.ts` / `spawn.ts` / `route.ts` / 测试夹具 / 集成测试）**一行未改**。
+**当时的边界**：本次只做探针与定档，`3.9` 的产品代码**一行未改**（随后于同日交付，见下节）。
+
+### `3.9`「mcp:上游能力透传与超时分层」交付：客户端开始看到上游的真实身份
+
+**为什么**：`3.1` 交付后 code review 找出的两处缺口之一 —— 网关对外**自报家门**（硬编码 `portal-bridge 0.1.0` + 固定 `{tools, prompts}`），客户端看不到上游真实版本，上线后**无法判断镜像是否漂移**；同时「与上游握手」和「向上游发每一个请求」这两类**语义与失败形态都不同**的超时**共用一个值**。本行是 `3.1` 的**最后一条完成前置**。
+
+**做了什么**：
+
+- **身份与能力改为「代上游自报家门」**（`transport.ts`）：`serverInfo` / `capabilities` / `instructions` 取自 `Client.getServerVersion()` / `getServerCapabilities()` / `getInstructions()`，取值**先于** `new Server(...)`（`registerCapabilities()` 在 transport 已连接时**抛错**，是条时序死路）；`instructions` **条件展开** —— 上游无指令就**不写**该键（真上游 core 档正是无指令），否则会把「无」变成「空」，自己破坏契约。
+- **删除 `3.1` 遗留的 4 个显式业务 handler，只留 fallback**：依据 `3.11` 探针定档 —— 能力断言发生在 `setRequestHandler`（**注册期**），一旦能力取自上游而网关仍无条件注册 `prompts/*`，**上游未声明该能力时网关会在构造期抛错**（⇒ 会话直接起不来）；且实测两条路径的能力断言**完全相同**（`Client.listTools / callTool / listPrompts` 只是 `Client.request` 的薄包装）。删除后**少两处**网关侧介入（入参校验、具名结果 schema 解析）⇒「原样转发、门户语义知识 = 0」**字面成立**。
+- **把 `logging/setLevel` 拽回 fallback**：SDK 为 `capabilities.logging` 在网关**本地**自动注册该 handler（本地处理、返回 `{}`、**不转发**）⇒ 客户端以为设置了级别、上游从未收到；一行 `removeRequestHandler('logging/setLevel')` 修正（上游未声明 `logging` 时是**空操作**）。
+- **超时按「语义」分层**（`route.ts` / `spawn.ts` / `server.ts`）：根因是**一个名字管两种语义**，故注入面与选项**一并拆开**为 `handshakeTimeoutMs` 与 `upstreamRequestTimeoutMs`，让二者在**类型层面**不可能再被混用；两个默认值保持 `30s`（分层本身不改变行为，取值归 `4.1`）。顺带**删掉 `relay()` 的死参 `opts.timeoutMs`** —— 声明了却从不使用，会让人误以为转发层还有一层超时兜底，而那一层在 HTTP 侧包不出来。
+- **测试**：集成新增 `TC-M-L1-18`（身份 / 能力 / 指令取自上游 + **不凭空造字段**的反证）· `TC-M-L1-19`（两个超时**反着设**各起一个实例：短握手 + 长请求必须成功、长握手 + 短请求必须在 `-32001` 处失败，**错误码与耗时一起断**）· `TC-M-L1-20`（`logging/setLevel` 抵达上游，判据取**上游传输层留痕**而非上游返回值）；夹具新增五个观测位（`--identity` / `--capabilities` / `--instructions` / `--tool-hang-ms` / `--request-log`），**默认值全部不变** ⇒ 既有用例零回归。
+
+**验证**：离线 **312 passed / 28 files** · 覆盖率 **93.05 / 85.77 / 97.66 / 94.36**（阈值 92/85/96/93，**比改前更高**）· `make portal-mcp-probe`（真上游借壳）**退出码 0、四断言 PASS** · `make doc-links` **48 文件 / 1317 链接 / 零悬空** · `npx tsc --noEmit` 无错。
+
+**一处要如实体认的事**：真上游 core 档声明的能力恰好是 `{prompts, tools}` —— **等于网关原来的硬编码值**，所以本行对当前部署的**可观测变化只有 `serverInfo`**（`portal-bridge 0.1.0` → `ai-memory 0.10.0`）。这不削减本行的价值（契约正确 + 换档位自动跟随 + 镜像漂移可见），但意味着**验收断言只能写「等于上游声明的值」，不能写「能力发生了变化」**。
 
 ---
 

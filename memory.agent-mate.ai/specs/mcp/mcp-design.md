@@ -295,6 +295,18 @@ aimem-ssh ALL=(root) NOPASSWD: /usr/bin/docker exec -i ai-memory-mcp ai-memory m
 >
 > **由上述结论导出的装配顺序（`3.9` 的硬约束）**：先 `spawnUpstream` 完成握手 → 取 `Client.getServerVersion()` / `getServerCapabilities()` / `getInstructions()` → 再 `new Server(上游身份, { capabilities: 上游能力, instructions: 上游指令 })` → 删掉显式业务 handler、只**赋值**两条 fallback → `removeRequestHandler('logging/setLevel')`。**不要**走 `Server.registerCapabilities()`（transport 已连接时抛错，是条时序死路）。恒不转发的三项（SDK 无条件内置）：`ping` · `initialize` · `initialized` 通知。契约细节见 [`../web-portal/web-design.md`](../web-portal/web-design.md) §12.5 的「桥对客户端的身份与能力」与「超时分层」两节。
 
+> **`3.9` 实现轮补充（2026-09-24）**：把上表三条硬约束落地时的实际取舍 ——
+>
+> | 落地 | 说明 |
+> |---|---|
+> | **身份 / 能力 / 指令全部取自上游，取值先于 `new Server(...)`** | `upstream.client.getServerVersion()` / `getServerCapabilities()` / `getInstructions()`；`instructions` 用**条件展开**（上游无指令则不写该键，避免把「无」变成「空」）。未用 `registerCapabilities()`（transport 已连接时抛错）。`getServerVersion()` 类型上可空，但 `InitializeResultSchema` 把 `serverInfo` 定为**必填** ⇒ 收窄断言并留注，**不**兜底出一个假身份。 |
+> | **桥不再注册任何业务方法** | 删除 `3.1` 遗留的 4 个 `setRequestHandler`，代价实测为零：`Client.listTools / callTool / listPrompts` 本就是 `Client.request` 的薄包装，能力断言也在 `request` 里 ⇒ 两条路径断言完全相同；删除后**少两处**桥侧介入（入参校验、具名结果 schema 解析），「原样转发、门户语义知识 = 0」字面成立。 |
+> | **`logging/setLevel` 拽回 fallback** | 一行 `removeRequestHandler('logging/setLevel')`。上游未声明 `logging` 时是**空操作** —— 真上游 core 档即此情形（其能力只有 `{prompts, tools}`）。 |
+> | **超时按「语义」重命名，而不只是拆常量** | 根因是**一个名字管两种语义**（`requestTimeoutMs` 同时喂 `client.connect` 与每请求 `timeout`）⇒ 注入面与选项一并拆为 `handshakeTimeoutMs` / `upstreamRequestTimeoutMs`，让二者在**类型层面**不可能再被混用。两个默认值都保持 `30_000`（分层本身不改变行为；取值归 `4.1`）。 |
+> | **删掉 `relay()` 的死参 `opts.timeoutMs`** | `3.1` 遗留：声明了但函数体**从不使用**。留着会让后来者以为转发层还有一层超时兜底 —— 而那一层在 HTTP 侧根本包不出来（`Promise.race` 无效，见上文实测）。 |
+>
+> **与探针结论的差异（如实登记）**：探针断言 5 证的是「全 fallback 下 `tools/call` 往返正常」；本轮**未**在真上游上另验 `prompts/*` 走 fallback 的形态 —— 该形态由集成用例（夹具）覆盖，并按本批纪律**不**在真上游端到端脚本里新增此类断言（真上游上未实测，加进去会让脚本不稳定）。**反方向仍未转发**（上游 → 客户端的主动通知与 server→client 请求）：真上游 core 档实测**零条主动消息**，故当前无损；触发条件见 [`../web-portal/web-design.md`](../web-portal/web-design.md) §12.5。
+
 **部署顺序依赖**：`ai-memory-mcp` 先起（创建命名卷 `ai_memory_data`），门户以 `external: true` 引用。
 
 #### 5.6.3 启动机制 β′ 与制品契约

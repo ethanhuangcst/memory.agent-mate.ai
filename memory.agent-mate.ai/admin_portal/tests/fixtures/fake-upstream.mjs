@@ -59,6 +59,40 @@ const closedMarkerPath = argValue('--closed-marker');
 const notifyLogPath = argValue('--notify-log');
 
 /**
+ * `3.9` 新增的四个观测位（同样走 argv）。**默认值全部保持原有的硬编码值** ⇒ 既有用例零回归，
+ * 只有显式传入时才改变上游对外声明的身份 / 能力 / 指令。
+ *
+ * - `--identity=NAME@VERSION`：改 `initialize` 回包的 `serverInfo`（默认 `fake-upstream@0.0.0`）；
+ * - `--capabilities=<json>`：改 `capabilities`（默认 `{tools, resources, completions}` —— 那三项不能删，
+ *   见下方 `new Server` 的注释）。**收窄**它会触发 `setRequestHandler` 的**注册期**能力断言 ⇒
+ *   正是给「上游缺某能力时网关还能不能起来」那类用例准备的；
+ * - `--instructions=<text>`：加 `instructions`（默认**不写**该键 —— 保持「上游无指令」的语义，
+ *   好让「网关不凭空造字段」这条判据可被证伪）；
+ * - `--tool-hang-ms=N`：在**工具调用内部**挂起 N 毫秒。与 `--hang-ms` 是两条独立链路：
+ *   那个挂在 `server.connect()` **之前**（覆盖**握手**超时），这个挂在**转发期**（覆盖**每请求**超时）。
+ */
+const identityArg = argValue('--identity');
+const identityParts = identityArg === undefined ? [] : identityArg.split('@');
+const identityName = identityParts[0] ?? 'fake-upstream';
+const identityVersion = identityParts[1] ?? '0.0.0';
+const capabilitiesArg = argValue('--capabilities');
+const capabilities = capabilitiesArg
+  ? JSON.parse(capabilitiesArg)
+  : { tools: {}, resources: {}, completions: {} };
+const instructions = argValue('--instructions');
+const toolHangMs = Number(argValue('--tool-hang-ms') ?? '0');
+
+/**
+ * `--request-log=PATH`：把**到达本进程的请求**按 JSON 行追加到该文件（`3.9` 的 `TC-M-L1-20` 观测点）。
+ *
+ * **为什么要在传输层记、而不是用一个 handler 记**：本夹具一旦声明 `logging`，它自己的 SDK
+ * 也会在构造期注册 `logging/setLevel` 的**本地** handler ⇒ 用 handler 观测会与「网关有没有转发」
+ * 混为一谈（两边都会被本地拦下）。记在传输层读到的就是**进程真正收到的东西** ——
+ * 与 `TC-M-L1-16` 对通知「以上游进程的 stdin 留痕为准」是同一条判据纪律。
+ */
+const requestLogPath = argValue('--request-log');
+
+/**
  * `--fail-before-initialize`：启动即退出。
  *
  * 用来覆盖「上游在 `initialize` 阶段就断了」这条**失败面**（`web-design.md` §12.5 的
@@ -104,12 +138,16 @@ if (envDumpPath) {
 const memories = [];
 
 const server = new Server(
-  { name: 'fake-upstream', version: '0.0.0' },
+  { name: identityName, version: identityVersion },
   {
-    // `3.8` 新增 `resources` / `completions` 两项：下面两个 handler 的注册会被
-    // `setRequestHandler` 的能力断言检查 —— 字段名写错（如把 `completions` 写成 `completion`）
+    // 能力默认含 `resources` / `completions`：**不能删** —— 下面两个 handler 的注册会被
+    // `setRequestHandler` 的能力断言检查，字段名写错（如把 `completions` 写成 `completion`）
     // 会当场抛「Server does not support completions」（`3.10` 探针首跑就踩过这个）。
-    capabilities: { tools: {}, resources: {}, completions: {} },
+    // `3.9` 起可由 `--capabilities` 覆盖（收窄即触发同一断言，正是那类用例要验的）。
+    capabilities,
+    // `instructions` **条件展开**：默认**不写**该键 —— 保持「上游无指令」的语义，
+    // 好让「网关不凭空造出这个字段」这条判据可被证伪（真上游 core 档正是无指令）。
+    ...(instructions === undefined ? {} : { instructions }),
   },
 );
 
@@ -175,6 +213,13 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
 
+  // `--tool-hang-ms=N`：**转发期**挂起（与 `--hang-ms` 的连接前挂起是两条独立链路）——
+  // 覆盖「上游每个请求太慢」这条失败面（`TC-M-L1-19`）。挂在参数解构之后、业务分支之前，
+  // 这样任何工具调用都能被它拖住。
+  if (Number.isFinite(toolHangMs) && toolHangMs > 0) {
+    await new Promise((resolve) => setTimeout(resolve, toolHangMs));
+  }
+
   if (name === 'memory_store') {
     const content = String((args?.content ?? ''));
     // 与真上游一致的必填校验：故意在缺 title 时返回错误，用于验证错误透传。
@@ -229,4 +274,24 @@ process.stdin.on('end', () => {
   process.exit(0);
 });
 
-await server.connect(new StdioServerTransport());
+const serverTransport = new StdioServerTransport();
+await server.connect(serverTransport);
+
+// `--request-log=PATH`：在**传输层**记下到达本进程的请求（`3.9` 的 `TC-M-L1-20`）。
+//
+// **必须挂在 `server.connect()` 之后**：`Protocol.connect` 会先给 `transport.onmessage` 赋值，
+// 提前挂会被它覆盖、观测定不到东西。判据以这里为准 —— 「网关有没有把请求转出来」与
+// 「上游自己怎么处理它」是两件事（后者会被上游的本地 handler 消费掉）。
+if (requestLogPath) {
+  const protocolOnMessage = serverTransport.onmessage;
+  serverTransport.onmessage = (message) => {
+    try {
+      if (typeof message?.method === 'string') {
+        fs.appendFileSync(requestLogPath, `${JSON.stringify(message)}\n`);
+      }
+    } catch {
+      /* 观测失败不影响协议行为 */
+    }
+    return protocolOnMessage?.(message);
+  };
+}

@@ -31,12 +31,28 @@ import { createBridgeTransport } from './transport';
 export const MCP_PATH = '/mcp';
 
 /**
- * 请求级转发超时上限（保守值，不会误伤正常工具调用）。
+ * 桥 → 上游**握手**超时（保守值，不会误伤正常工具调用）。
  *
- * **取值归属**：Sprint 4 `4.1`「web-portal:会话限流」—— 本批（`3.1`）不写死业务参数，
- * 只给一个兜底上限（`ADR-016` 的颗粒度纪律）。
+ * **管哪一段**：`spawn.ts` 的 `client.connect(transport, { timeout })` —— 覆盖「上游起得来但
+ * 不响应」。失败形态：握手期挂起 ⇒ **503 `upstream_unavailable`**（此时响应头未发出，可以用
+ * 状态码表达，见 `web-design.md` §12.5 的超时三分支）。
+ *
+ * **取值归属**：Sprint 4 `4.1`「web-portal:会话限流」。本批（`3.9`）**只把两类超时分层**、
+ * 不定义取值 —— 两个默认值都与分层前保持一致（`ADR-016` 的颗粒度纪律）。
  */
-const REQUEST_TIMEOUT_MS = 30_000;
+const HANDSHAKE_TIMEOUT_MS = 30_000;
+
+/**
+ * 桥 → 上游**每一个请求**的超时（`RequestOptions.timeout`）。
+ *
+ * **管哪一段**：`transport.ts` 里每条上游调用附带的 `{ timeout }` —— 覆盖「某个具体调用太慢」。
+ * 失败形态：转发期 ⇒ **MCP 层错误 `-32001`**（SSE 响应头已先于上游结果发出，状态码改不动）。
+ *
+ * 与 `HANDSHAKE_TIMEOUT_MS` 是**两个独立常量**：实测把两者反着设（短握手 / 长请求）时，耗时
+ * 超过握手超时的调用仍能成功（[`probes/bridge-identity-probe/`](../../probes/bridge-identity-probe/)
+ * 断言 7）。**取值归属**：同上，归 `4.1`。
+ */
+const UPSTREAM_REQUEST_TIMEOUT_MS = 30_000;
 
 /** 统一 401 的文案：**不区分**「未携带 / 无效 / 已吊销 / 用户停用 / 非 `memo_` 前缀」。 */
 const UNAUTHORIZED_MESSAGE =
@@ -117,17 +133,28 @@ export interface McpBridgeDeps {
   readonly cfg: PortalConfig;
   readonly db: Database.Database;
   /**
-   * 请求级转发的超时（毫秒），默认 `REQUEST_TIMEOUT_MS`。
+   * 桥 → 上游**握手**超时（毫秒），默认 `HANDSHAKE_TIMEOUT_MS`。
    *
-   * **仅供测试注入短超时**（否则「上游挂起 ⇒ 504」这条路径在测试里要等 30 秒）。
-   * 生产**不**通过环境变量配置它 —— 取值归属 `4.1`，见 `REQUEST_TIMEOUT_MS` 的说明。
+   * **仅供测试注入短值**（否则「上游挂起 ⇒ 503」这条路径在测试里要等满默认值）。
+   * 生产**不**通过环境变量配置它 —— 取值归属 `4.1`，见 `HANDSHAKE_TIMEOUT_MS` 的说明。
    */
-  readonly requestTimeoutMs?: number;
+  readonly handshakeTimeoutMs?: number;
+  /**
+   * 桥 → 上游**每请求**超时（毫秒），默认 `UPSTREAM_REQUEST_TIMEOUT_MS`。
+   *
+   * 同上：**仅供测试注入短值**（否则「上游太慢 ⇒ MCP 层超时错误」在测试里要等满默认值）；
+   * 生产不通过环境变量配置 —— 取值归属 `4.1`，见 `UPSTREAM_REQUEST_TIMEOUT_MS` 的说明。
+   */
+  readonly upstreamRequestTimeoutMs?: number;
 }
 
 export function registerMcpBridgeRoutes(app: FastifyInstance, deps: McpBridgeDeps): void {
   const { cfg, db } = deps;
-  const timeoutMs = deps.requestTimeoutMs ?? REQUEST_TIMEOUT_MS;
+  const handshakeTimeoutMs = deps.handshakeTimeoutMs ?? HANDSHAKE_TIMEOUT_MS;
+  // 两条超时链的起点：握手那一支交给 `spawnUpstream`、每请求那一支交给 `createBridgeTransport`。
+  // 两个值在类型层面就是两个名字 —— 分层之前它们共用一个 `timeoutMs`，语义被混为一谈（`3.1` 遗留）。
+  const upstreamRequestTimeoutMs =
+    deps.upstreamRequestTimeoutMs ?? UPSTREAM_REQUEST_TIMEOUT_MS;
   const registry = new SessionRegistry();
 
   // 进程收尾：关闭全部会话（HTTP 传输侧 → 上游 → 注册表条目），避免孤儿进程。
@@ -201,7 +228,7 @@ export function registerMcpBridgeRoutes(app: FastifyInstance, deps: McpBridgeDep
         return;
       }
       existing.lastActivityAt = Date.now();
-      await relay(existing, request, reply, registry, { timeoutMs, onRelayFailure });
+      await relay(existing, request, reply, registry, { onRelayFailure });
       return;
     }
 
@@ -212,7 +239,7 @@ export function registerMcpBridgeRoutes(app: FastifyInstance, deps: McpBridgeDep
         handle: user.handle,
         launchOverride: cfg.launchOverride,
         upstreamApiKey: cfg.upstreamApiKey,
-        requestTimeoutMs: timeoutMs,
+        handshakeTimeoutMs,
         logger: request.log,
       });
     } catch (error) {
@@ -232,7 +259,7 @@ export function registerMcpBridgeRoutes(app: FastifyInstance, deps: McpBridgeDep
 
     let transport;
     try {
-      transport = await createBridgeTransport(upstream, { requestTimeoutMs: timeoutMs });
+      transport = await createBridgeTransport(upstream, { upstreamRequestTimeoutMs });
     } catch {
       // 建桥失败：先把刚起的子进程收掉（纪律 2），再回 503。
       await upstream.close();
@@ -262,7 +289,6 @@ export function registerMcpBridgeRoutes(app: FastifyInstance, deps: McpBridgeDep
 
     await relay(session, request, reply, registry, {
       register: true,
-      timeoutMs,
       onRelayFailure,
     });
   });
@@ -280,6 +306,11 @@ function headerSessionId(request: FastifyRequest): string | undefined {
  *
  * @param opts.register 新建会话路径：SDK 在 `initialize` 处理完成后才给 `sessionId` 赋值，
  *   因此必须**转发之后**才能登记；拿不到 id 说明这一轮不是 `initialize` ⇒ 立即关掉，不留孤儿。
+ *
+ * **本函数刻意没有「转发超时」参数**（`3.9` 删掉了 `3.1` 遗留的 `opts.timeoutMs` 死参）：
+ * 转发阶段的超时加在**上游请求**上（由 `createBridgeTransport` 的 `upstreamRequestTimeoutMs`
+ * 落到每条 `client.request`），本层包不出来 —— 它在下方 `handleRequest` 前用 `Promise.race`
+ * 是无效的。留一个用不上的参数只会让后来者以为这里还有一层兜底。
  */
 async function relay(
   session: BridgeSession,
@@ -288,7 +319,6 @@ async function relay(
   registry: SessionRegistry,
   opts: {
     readonly register?: boolean;
-    readonly timeoutMs?: number;
     /**
      * 转发阶段失败时的回调 —— 由调用方决定怎么记（本仓：一行日志 + 一行审计）。
      * `relay` 只负责**分类**与**写响应**；它拿不到 `auditRejected` 那个闭包，故不在此处碰 `db`。
@@ -301,7 +331,7 @@ async function relay(
   try {
     // 注意：**不在此处包超时**。`StreamableHTTPServerTransport.handleRequest` 把响应交给
     // 异步流后立即返回 ⇒ 用 `Promise.race` 包它做超时是无效的（实测：客户端仍会等到上游响应）。
-    // 上游超时由 `createBridgeTransport` 的 `requestTimeoutMs` 加在**上游请求**上，
+    // 上游超时由 `createBridgeTransport` 的 `upstreamRequestTimeoutMs` 加在**上游请求**上，
     // 以 MCP 层错误返回（见 `transport.ts` 的说明）。
     await session.transport.handleRequest(request.raw, reply.raw, request.body);
   } catch (error) {

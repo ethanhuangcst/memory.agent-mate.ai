@@ -39,13 +39,18 @@ export interface SpawnUpstreamOptions {
   /** 门户专用的 MaaS key；缺省则不注入（由启动自检负责暴露「无 key ⇒ 静默降级」）。 */
   readonly upstreamApiKey?: string | null;
   /**
-   * 与上游握手（`initialize`）的超时（毫秒）。
+   * 与上游**握手**（`initialize`）的超时（毫秒）。
    *
    * 覆盖「上游起得来但不响应」：`StdioClientTransport` 能成功 spawn 进程，但 `client.connect`
    * 会一直等上游回 `initialize`。超时后本函数抛错 ⇒ 调用方按**上游不可用（503）**处理，
    * 而不是让请求挂到上游最终响应（实测过：不设它，客户端会等满上游的全部延迟）。
+   *
+   * **只管握手这一段**（`3.9` 定档）：「上游每个请求」的超时是**另一个常量**，加在
+   * `transport.ts` 的上游调用上（`RequestOptions.timeout`），与这里互不牵连 ——
+   * 两者反着设值时行为仍正确，见 [`../../probes/bridge-identity-probe/`](../../probes/bridge-identity-probe/)
+   * 断言 7 与 `web-design.md` §12.5 的「超时分层」。
    */
-  readonly requestTimeoutMs?: number;
+  readonly handshakeTimeoutMs?: number;
   readonly logger?: {
     error: (obj: unknown, msg?: string) => void;
   };
@@ -67,7 +72,7 @@ export interface UpstreamSession {
  * 调用方负责在会话结束时调用 `close()`；否则会留下孤儿进程。
  */
 export async function spawnUpstream(options: SpawnUpstreamOptions): Promise<UpstreamSession> {
-  const { handle, launchOverride, upstreamApiKey, requestTimeoutMs, logger } = options;
+  const { handle, launchOverride, upstreamApiKey, handshakeTimeoutMs, logger } = options;
 
   const rendered = renderLaunch(handle, launchOverride);
 
@@ -113,7 +118,7 @@ export async function spawnUpstream(options: SpawnUpstreamOptions): Promise<Upst
   try {
     await client.connect(
       transport,
-      requestTimeoutMs === undefined ? undefined : { timeout: requestTimeoutMs },
+      handshakeTimeoutMs === undefined ? undefined : { timeout: handshakeTimeoutMs },
     );
   } catch (error) {
     // 起不来时不能让半成品留下（调用方据此回 503）。

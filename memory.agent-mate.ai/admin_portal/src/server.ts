@@ -37,10 +37,15 @@ export interface BuildOptions {
   /** 注入用（离线测试传内存库）；不传则由本函数按 `PORTAL_DB_PATH` 打开并负责关闭。 */
   readonly db?: Database.Database;
   /**
-   * 接入面（`/mcp`）请求级转发的超时（毫秒）；默认见 `bridge/route.ts`。
-   * **仅供测试注入短超时**（让「上游挂起 ⇒ 504」这条路径可被快速覆盖）。
+   * 接入面（`/mcp`）桥 → 上游**握手**超时（毫秒）；默认见 `bridge/route.ts` 的 `HANDSHAKE_TIMEOUT_MS`。
+   * **仅供测试注入短值**（让「上游挂起 ⇒ 503」这条路径可被快速覆盖）。
    */
-  readonly requestTimeoutMs?: number;
+  readonly handshakeTimeoutMs?: number;
+  /**
+   * 接入面（`/mcp`）桥 → 上游**每请求**超时（毫秒）；默认见 `UPSTREAM_REQUEST_TIMEOUT_MS`。
+   * **仅供测试注入短值**（让「上游太慢 ⇒ MCP 层超时错误」这条路径可被快速覆盖）。
+   */
+  readonly upstreamRequestTimeoutMs?: number;
 }
 
 export async function buildServer(
@@ -144,12 +149,17 @@ export async function buildServer(
   // ---- 接入面（MCP）：接管 `/mcp` ----
   // 面隔离钩子在前（`decideRequest` 只放行 MCP 面到该路径），因此这里只需处理令牌与会话；
   // 「管理域名上访问 /mcp」在到达本模块之前已被 403 拦下（面隔离先于身份）。
-  registerMcpBridgeRoutes(
-    app,
-    options.requestTimeoutMs === undefined
-      ? deps
-      : { ...deps, requestTimeoutMs: options.requestTimeoutMs },
-  );
+  // 两个超时各自条件展开（`exactOptionalPropertyTypes` 下不能塞 `undefined` 占位）：
+  // 未注入时由 `route.ts` 的常量兜底，注入时只覆盖对应的那一条链。
+  registerMcpBridgeRoutes(app, {
+    ...deps,
+    ...(options.handshakeTimeoutMs === undefined
+      ? {}
+      : { handshakeTimeoutMs: options.handshakeTimeoutMs }),
+    ...(options.upstreamRequestTimeoutMs === undefined
+      ? {}
+      : { upstreamRequestTimeoutMs: options.upstreamRequestTimeoutMs }),
+  });
 
   app.setNotFoundHandler((request, reply) => {
     const pathname = request.url.split('?')[0] ?? '/';

@@ -12,6 +12,9 @@
  *   转发是「请求 → 上游 → 回包」的直通，没有跨会话共享缓冲（判据归 `3.3`）。
  * - **一会话一 transport 实例**：`StreamableHTTPServerTransport` 用 `sessionIdGenerator`
  *   生成 HTTP 层会话 id（实测形如 `7677a16a-…`），与「一会话一子进程」一一对应。
+ * - **代上游自报家门**：`initialize` 回包的 `serverInfo` / `capabilities` / `instructions`
+ *   全部**取自上游**，桥不声明自己的身份（`3.9`；契约见 `web-design.md` §12.5 的
+ *   「桥对客户端的身份与能力」，三条硬约束由 `probes/bridge-identity-probe/` 实证）。
  */
 
 import { randomUUID } from 'node:crypto';
@@ -19,13 +22,8 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { z } from 'zod';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import {
-  CallToolRequestSchema,
-  CancelledNotificationSchema,
-  GetPromptRequestSchema,
-  ListPromptsRequestSchema,
-  ListToolsRequestSchema,
-} from '@modelcontextprotocol/sdk/types.js';
+import type { Implementation } from '@modelcontextprotocol/sdk/types.js';
+import { CancelledNotificationSchema } from '@modelcontextprotocol/sdk/types.js';
 import type { UpstreamSession } from './spawn';
 
 export interface BridgeTransport {
@@ -44,7 +42,7 @@ export interface BridgeTransport {
 
 export interface BridgeTransportOptions {
   /**
-   * 上游请求的超时（毫秒）。
+   * **上游每一个请求**的超时（毫秒）—— 与「握手超时」是两件事，两者的常量都在 `route.ts`。
    *
    * **为什么放在上游调用上、而不是 HTTP 层**：Streamable HTTP 的响应是流式，
    * **响应头先于上游结果发出** ⇒ HTTP 状态码在那一刻就已确定，「上游太慢」无法再用
@@ -52,42 +50,69 @@ export interface BridgeTransportOptions {
    * 这是唯一在协议上说得通的位置。（集成测试实测：在 HTTP 层包超时完全无效，
    * SDK 的 `handleRequest` 对 `initialize` 是立即返回、把响应交给异步流。）
    */
-  readonly requestTimeoutMs?: number;
+  readonly upstreamRequestTimeoutMs?: number;
 }
 
 /**
  * 为一个上游会话建立传输桥。
  *
- * @param upstream 已连接的上游会话（`spawnUpstream` 的产物）。
+ * @param upstream 已连接的上游会话（`spawnUpstream` 的产物）—— 身份 / 能力 / 指令都从它读。
  */
 export async function createBridgeTransport(
   upstream: UpstreamSession,
   options: BridgeTransportOptions = {},
 ): Promise<BridgeTransport> {
-  const requestOptions =
-    options.requestTimeoutMs === undefined ? {} : { timeout: options.requestTimeoutMs };
+  const upstreamRequestOptions =
+    options.upstreamRequestTimeoutMs === undefined
+      ? {}
+      : { timeout: options.upstreamRequestTimeoutMs };
 
-  const server = new Server(
-    { name: 'portal-bridge', version: '0.1.0' },
-    { capabilities: { tools: {}, prompts: {} } },
-  );
+  // ---- 身份与能力：**代上游自报家门**（`3.9`；契约见 `web-design.md` §12.5）----
+  //
+  // 取值必须在这里、也就是 `new Server(...)` **之前**：上游 client 已在 `spawnUpstream` 里
+  // 完成握手，三个取值点此刻即可用；而 `Server.registerCapabilities()` 在 transport 已连接时
+  // **会抛错**（`server/index.js`）⇒ 那是条时序死路，**不要**改用它。
+  //
+  // 透传的准确含义是「**经协议 schema 归一化后**的透传」（`3.11` 探针实测）：`serverInfo` 的
+  // 字段与取值保留、但键序会被 schema 解析重建；`capabilities` 的已知键保留、未知键被丢弃。
+  // ⇒ 验收断言写「字段与取值等于上游」，**不写**「逐字节」。
+  // `Client.getServerVersion()` 类型上带 `| undefined`，但**上游握手一旦完成它必然存在** ——
+  // `InitializeResultSchema` 把 `serverInfo` 定为**必填**（`types.js`），SDK 也只是把回包原样存下。
+  // `| undefined` 只对「尚未连接」有意义，而本函数的前置条件就是已连接（`spawnUpstream` 的产物）。
+  // ⇒ 此处收窄断言并留注，不静默兜底出一个假身份（那会直接违背本行的契约）。
+  const serverInfo = upstream.client.getServerVersion() as Implementation;
+  const capabilities = upstream.client.getServerCapabilities() ?? {};
+  const instructions = upstream.client.getInstructions();
 
-  // 桥的全部职责：把 HTTP 侧收到的请求**原样**转给上游 client。
-  // 不解析语义、不做业务判断 —— 门户对 ai-memory 的语义知识保持为 0。
-  server.setRequestHandler(ListToolsRequestSchema, async (req) =>
-    upstream.client.listTools(req.params, requestOptions),
-  );
-  server.setRequestHandler(CallToolRequestSchema, async (req) =>
-    upstream.client.callTool(req.params, undefined, requestOptions),
-  );
-  server.setRequestHandler(ListPromptsRequestSchema, async (req) =>
-    upstream.client.listPrompts(req.params, requestOptions),
-  );
-  server.setRequestHandler(GetPromptRequestSchema, async (req) =>
-    upstream.client.getPrompt(req.params, requestOptions),
-  );
+  const server = new Server(serverInfo, {
+    capabilities,
+    // **条件展开**：SDK 只在真值时回吐该字段（`server/index.js` 的 `_oninitialize`），
+    // 无条件写成 `instructions` 会把上游的「无指令」变成桥的「空指令」，
+    // 破坏「字段与取值等于上游」这条契约（真上游 core 档正是「无指令」）。
+    ...(instructions === undefined ? {} : { instructions }),
+  });
 
-  // ---- 未显式注册的请求与通知：原样转发给上游（`3.8` 的「整行转发」）----
+  // ---- 不注册任何业务 handler：全部经 fallback 整行转发 ----
+  //
+  // **这不是风格选择，而是能力断言的强制后果**（`3.11` 探针断言 3 实测）：SDK 的能力断言
+  // 发生在 `setRequestHandler`（**注册期**，`shared/protocol.js`），不在请求分派期。一旦能力
+  // 取自上游而桥仍无条件注册 `prompts/*`，**上游未声明 `prompts` 时桥会在构造期抛错**
+  // （实测文案 `Server does not support prompts (required for prompts/list)`）⇒ 会话直接
+  // 起不来（503）。
+  //
+  // 删掉 `3.1` 遗留的这 4 个 handler 另有两处收益：入参不再由桥校验、上游结果不再由桥用
+  // **具名 schema** 解析 ⇒ 「原样转发、门户语义知识 = 0」字面成立。两条路径的能力断言本来
+  // 就完全相同 —— `Client.listTools / callTool / listPrompts` 只是 `Client.request` 的薄包装
+  // （`client/index.js`），而能力断言由 `Client.request` 完成（`shared/protocol.js`）。
+  //
+  // **`capabilities.logging` 会被 SDK 在桥本地吞掉**（同探针断言 4）：`Server` 构造期即为该
+  // 能力注册 `logging/setLevel` 的 handler，**本地处理并返回 `{}`、不转发** ⇒ 客户端以为
+  // 设置了级别、上游从未收到。显式移除，让它落回 fallback 走转发。
+  // 上游未声明 `logging` 时这是**空操作**（该 handler 本就不存在）—— 真上游 core 档即此情形。
+  server.removeRequestHandler('logging/setLevel');
+
+  // ---- 请求与通知：全部原样转发给上游（`3.8` 的「整行转发」；`3.9` 起**没有任何业务方法
+  //      被显式注册**，能到这里的只剩 SDK 未内置消费的那些）----
   //
   // **为什么是「赋值」而不是「构造参数」**（`3.10` 探针实测，结论见 `mcp-design.md` §5.6.2 实证块）：
   // `Protocol` 的构造函数只把 options 存进 `this._options`，**从不**把 fallback 提升为实例属性，
@@ -105,7 +130,7 @@ export async function createBridgeTransport(
   // 宽松 schema `z.unknown()` 是「不校验」在类型上的表达（`Protocol.request` 的 schema 形参是
   // `AnySchema` 而非 `AnyObjectSchema`）—— 上游结果的形状由上游决定，桥不替它把关。
   bridge.fallbackRequestHandler = async (request) =>
-    upstream.client.request(request, z.unknown(), requestOptions) as never;
+    upstream.client.request(request, z.unknown(), upstreamRequestOptions) as never;
 
   // 未注册的**通知**：`cancelled` 必须**显式注册**才能转发 —— SDK 在 `Protocol` 构造函数里就内置
   // 注册了 `cancelled` → `_oncancel` 与 `progress` → `_onprogress`，它们**永远落不到** fallback。
