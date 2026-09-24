@@ -6,7 +6,7 @@ Accepted
 
 ## Context
 
-`PSP-W1`（Sprint 4 `#2`）以 **PSP 批次**形态交付（批次口径见 [`sdd-scrum-practices.md`](../sdd-scrum-practices.md) §2.4）。它的**书面判据只有一件事**：
+`PSP-W1`（Sprint 4 `#2`）以 **PSP 批次**形态交付（批次口径见 `sdd-scrum-practices.md` §2.4）。它的**书面判据只有一件事**：
 
 > 本地可完成「管理员建用户 → 签发令牌 → 列出元信息 → 轮换 → 吊销即时失效」闭环，且非管理员无法创建用户或令牌。
 
@@ -37,13 +37,13 @@ Accepted
 
 ## Decision
 
-1. **批次口径由 PSP 细化为 SBI，而非取消 PSP。** 新建批次按 **SBI** 编排；[`sdd-scrum-practices.md`](../sdd-scrum-practices.md) §2.4 的四条判据（有接收方 · 有端到端判据 · 无跨批硬依赖 · 不是任务清单）**全部保留**。
+1. **批次口径由 PSP 细化为 SBI，而非取消 PSP。** 新建批次按 **SBI** 编排；`sdd-scrum-practices.md` §2.4 的四条判据（有接收方 · 有端到端判据 · 无跨批硬依赖 · 不是任务清单）**全部保留**。
 2. **SBI 的范围判据（可机械核对）：**
    - **单一角色 × 单一动作**：一个 SBI 只让某类角色**多做/能做一件事**；
    - **技术复杂度隔离**：一个 SBI 最多**首次引入一项**技术 / 依赖 / 外部系统 —— 隧道与真身份接入、跨进程桥（stdio）、并发与安全机制等高风险项**各自单独成批**；
    - **收口期不得扩张**：批次收口期内新发现的工作必须登记为**新 SBI**，不得以「同日补充」并入正在收口的批次。
 3. **既有 `PSP-*` 批次不重排**：历史与已交付批次不改（ADR 不可变、已交付事实不改），本决定**只对后续工作生效**。
-4. **落点**：判据写入 [`sdd-scrum-practices.md`](../sdd-scrum-practices.md) §2.4；后续 Sprint 的 ToDo 行按 SBI 给出；在飞计划（如 [`web-portal/portal-identity-plan.md`](../web-portal/portal-identity-plan.md) 的阶段 2/3）**按 SBI 重排后再执行**。
+4. **落点**：判据写入 `sdd-scrum-practices.md` §2.4；后续 Sprint 的 ToDo 行按 SBI 给出；在飞计划（如 [`web-portal/portal-identity-plan.md`](../web-portal/portal-identity-plan.md) 的阶段 2/3）**按 SBI 重排后再执行**。
 
 ## Rationale
 

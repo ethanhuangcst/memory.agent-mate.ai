@@ -239,13 +239,12 @@ memory.agent-mate.ai = 上游 `ai-memory-mcp` 的**私有化部署 + 定制**（
 | 2026-09-20 | **目录改名收口**：`hk_vps_4/` → `memory.agent-mate.ai/`，全仓路径引用同步；新增 `make doc-links` 防「删文档留悬空引用」复发 |
 | 2026-09-21 | **D1 定稿 β′（用户确认）+ 新增 §2.2 排除项与 §2.3 落地前置**：排除 α（门户挂 docker socket ≈ 宿主 root；且**主流 socket 代理不支持按容器/命令过滤**，放行 exec 必开 POST ⇒ 写面打开，故「α + 受限代理」一并排除）；新增三条硬前置（`/data/users` setgid 引导 / 门户持独立 MaaS key / 版本断言）。依据 [`knowledge/web-portal/portal-launch-mechanism.md`](./knowledge/web-portal/portal-launch-mechanism.md)（含 β′ 端到端探针实证）；决议记录 [`adr/ADR-012`](./adr/ADR-012-portal-launch-mechanism-no-docker-socket.md) |
 | 2026-09-21 | §4.1 高敏感速查补「**检索按语言分级**」：多语言探针（Sprint 2 #8）结论 = **部分支持**——存储 / 语义召回 / 按 id 直取不限语言；关键词通路按 FTS5 默认分词器（`unicode61`）只认完整词元（中文需标点界定整段、简繁不互通、无配置项）。证据：[`mcp/mcp-test.md`](./mcp/mcp-test.md) §4-E（L1.6 探针）与 [`knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md`](./knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md) |
-| 2026-09-21 | §6 改为 RID 薄索引，说明、影响、解决方案与状态统一指向 [`sprint-backlog.md`](./sprint-backlog.md)；新增过程文档体例 [`sdd-scrum-practices.md`](./sdd-scrum-practices.md)，决议见 [`ADR-013`](./adr/ADR-013-sdd-scrum-process-doc-boundaries.md) |
+| 2026-09-21 | §6 改为 RID 薄索引，说明、影响、解决方案与状态统一指向 [`sprint-backlog.md`](./sprint-backlog.md)；新增过程文档体例 `sdd-scrum-practices.md`，决议见 [`ADR-013`](./adr/ADR-013-sdd-scrum-process-doc-boundaries.md) |
 | 2026-09-21 | **`sprint_plan.md` → `sprint-plan.md` 改名**：按仓内既有改名口径全量同步引用（16 个文件，含 4 份 ADR、3 个脚本的路径与注释、`spec-doc-conventions.md` 的 `related_spec` 元数据）；旧名残留 0 处，只在改名记录里保留旧→新映射。本文档 §6 与「相关」表的指向随之更新 |
 | 2026-09-22 | **Sprint 重排（8 → 7）连带同步**：§5 仓库布局的备份脚本落点改为 `Sprint 6`；§7「相关」表登记 [`mcp/mcp-stories.md`](./mcp/mcp-stories.md)（Sprint 5 设计包交付物，正文待 Sprint 5 #1 落盘）以避免孤儿 spec |
 
 | 相关 | 用途 |
 |---|---|
-| [`sdd-scrum-practices.md`](./sdd-scrum-practices.md) | RID Registry、Sprint Backlog 与 Product Backlog 的体例、状态和单一真源边界 |
 | [`deployment.md`](./deployment.md) | 部署 / 配置 / 升级 / 备份 / 回滚 / 排障 |
 | [`mcp/mcp-design.md`](./mcp/mcp-design.md) | MCP 能力、多用户隔离、档位与工具、上游契约面全量 |
 | [`mcp/mcp-test.md`](./mcp/mcp-test.md) | MCP 测试策略 + 计划 + 用例 |
