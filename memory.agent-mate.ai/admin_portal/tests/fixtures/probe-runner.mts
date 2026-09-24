@@ -91,7 +91,11 @@ async function main(): Promise<number> {
 
   const recalled = await client.callTool({ name: 'memory_recall', arguments: { context: marker } });
   const recalledText = JSON.stringify(recalled.content ?? '');
-  check(recalledText.includes('count:1'), 'memory_recall 命中刚写入的记忆', recalledText.slice(0, 90));
+  // **判据按「回包里有没有那个标记」判，不按 `count` 判** —— `memory_recall` 是**语义混合检索**，
+  // `count` 是**返回条数**而非精确命中数：从未写入的标记同样会返回相关命中（`count:0` **永不出现**），
+  // 且库里多一条记忆时 `count:1` 会变 `count:2` ⇒ 按 `count` 写的断言**必然假失败**
+  // （`3.14` 探针实测；见 `specs/mcp/mcp-design.md` §5.6.2 的 `3.14` 实证块）。
+  check(recalledText.includes(marker), 'memory_recall 命中刚写入的记忆', recalledText.slice(0, 90));
 
   // ---- 4. 断言：库落点在容器内的该用户目录 ----
   const userDb = `/data/users/${handle}/ai-memory.db`;
@@ -109,9 +113,41 @@ async function main(): Promise<number> {
   // 注：**不**断言「共享主库不存在」—— 常驻 serve 进程本来就用 `/data/ai-memory.db`，它恒存在。
   // 「写入未落主库」这条在离线集成测试里用假上游验过。
 
-  // ---- 5. 收尾：显式终止会话（服务端据此回收子进程）----
+  // ---- 5. 断言（`3.6` 全链路）：写入**真的落进了用户库** —— 换一个会话（**新子进程**）仍能召回 ----
+  //
+  // 为什么单列：上面第 3 条是**同一会话内**的召回，可能是**该进程内存索引**给的；只有「**另一个进程**
+  // 也能召回」才证明写入落进了该用户的库（`3.14` 探针已实测成立）。判据**不**把「必须先优雅终止」写成
+  // 隐含前提（`3.14` 的 Q3 实测「直接 `close()` 也成立」），这里先正常终止只是顺带回收子进程。
   await transport.terminateSession();
   await client.close();
+
+  const client2 = new Client({ name: 'portal-mcp-probe', version: '0.1.0' }, { capabilities: {} });
+  const transport2 = new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${port}/mcp`), {
+    requestInit: { headers: { authorization: `Bearer ${issued.plaintext}` } },
+  });
+  await client2.connect(transport2 as unknown as Parameters<typeof client2.connect>[0]);
+
+  const recalled2 = await client2.callTool({ name: 'memory_recall', arguments: { context: marker } });
+  const recalled2Text = JSON.stringify(recalled2.content ?? '');
+  check(
+    recalled2Text.includes(marker),
+    '新会话（另一个子进程）仍能召回 ⇒ 写入真的落进了该用户库',
+    recalled2Text.slice(0, 90),
+  );
+
+  // 反向对照：防空转 —— 否则「怎么都能命中」的假阳性无法被发现（`3.14` 首版就是这样暴露 `count` 陷阱的）。
+  const never = `PROBE-NEVER-${Date.now()}`;
+  const recalledNever = await client2.callTool({ name: 'memory_recall', arguments: { context: never } });
+  const recalledNeverText = JSON.stringify(recalledNever.content ?? '');
+  check(
+    !recalledNeverText.includes(never),
+    '反向对照：从未写入的标记不出现在回包里（证明上一条不是空转）',
+    recalledNeverText.slice(0, 90),
+  );
+
+  // ---- 6. 收尾：显式终止会话（服务端据此回收子进程）----
+  await transport2.terminateSession();
+  await client2.close();
   db.close();
 
   console.log(`\n  通过 ${pass.length} 项 · 失败 ${fail.length} 项`);

@@ -66,8 +66,9 @@ trap cleanup EXIT INT TERM
 log '[1/6] 前置检查'
 command -v docker >/dev/null 2>&1 || { log 'ERROR: 未找到 docker'; exit 10; }
 docker inspect "$CONTAINER" >/dev/null 2>&1 || {
-  log "ERROR: 容器 $CONTAINER 未运行（先 make local-up）"; exit 10; }
-[ -d "$PORTAL/node_modules" ] || { log 'ERROR: 门户依赖未安装（cd admin_portal && npm install）'; exit 10; }
+  log "ERROR: 容器 $CONTAINER 未运行（先执行 bash memory.agent-mate.ai/scripts/local-up.sh —— 注意不是 make local-up，仓根没有该目标）"; exit 10; }
+[ -d "$PORTAL/node_modules" ] || {
+  log 'ERROR: 门户依赖未安装（(cd memory.agent-mate.ai/admin_portal && npm install) —— 从仓根执行）'; exit 10; }
 if lsof -nP -iTCP:"$PORT" -sTCP:LISTEN >/dev/null 2>&1; then
   log "ERROR: 端口 $PORT 已被占用（换 PROBE_PORT=）"; exit 10
 fi
