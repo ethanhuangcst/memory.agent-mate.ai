@@ -282,6 +282,19 @@ aimem-ssh ALL=(root) NOPASSWD: /usr/bin/docker exec -i ai-memory-mcp ai-memory m
 > | **上游 client 要声明「它打算转发的通知」所需的能力** | 桥的 `Client` 原先 `capabilities: {}` ⇒ 转发 `notifications/roots/list_changed` 会被 `assertNotificationCapability` 拦下、错误再被 `onerror` **静默吞掉**（症状是「通知没被转发」）。现声明 `roots.listChanged`；`cancelled` / `progress` 属 always allowed，不需声明。 |
 > | **`cancelled` 在每一跳都被内置消费 ⇒ 判据不能用「落文件」** | 集成测试与夹具都踩过：桥确实转发成功，但**上游**同样内置消费它、于是它的 fallback 不记录 ⇒ **假阴性**。夹具现**显式注册**该通知的 recorder；判据以「上游进程收到」为准。 |
 
+> **`3.11` 探针补充的事实（2026-09-24，为 `3.9` 定档；探针与原始输出见 [`../../probes/bridge-identity-probe/`](../../probes/bridge-identity-probe/)）**：回答「把 `initialize` 回包的 `serverInfo` / `capabilities` / `instructions` 改成**取自上游**后，桥还能不能维持「原样转发」；以及两个超时能不能分层」，**七项断言全 PASS、退出码 `0`、两次复跑一致**。
+>
+> | 结论 | 实测与依据 |
+> |---|---|
+> | **身份与指令可透传，但「逐字节」是错觉** | `serverInfo` 的 `name` / `title` / `version` / `websiteUrl` / `description` 与 `instructions` **字段与取值全保留**，但**键序被 schema 解析重建**（首版探针按字符串比，就因为这个假失败退了一次码 20）⇒ 契约只能写「字段与取值保留」，写「逐字节」会让验收断言写错 |
+> | **能力是「归一化后透传」** | `ServerCapabilitiesSchema` 是普通 `z.object` ⇒ 已知键（`experimental` / `logging` / `completions` / `prompts` / `resources` / `tools` / `tasks` / `extensions`）保留，**未知键被丢弃**（探针声明的自定义键实测消失） |
+> | **能力断言在「注册期」，不在「分派期」** | 断言只从 `setRequestHandler` 触发（`shared/protocol.js:888`），请求分派路径不查能力 ⇒ ① 透传转发**不依赖**能力声明；② 但「能力取自上游」+「无条件注册业务 handler」会耦合：**上游未声明 `prompts` 时注册 `prompts/*` 会在构造期抛错**（实测 `Server does not support prompts (required for prompts/list)`）⇒ **桥直接起不来（503）** |
+> | **`capabilities.logging` 会让 SDK 在桥本地吞掉 `logging/setLevel`** | `Server` 构造期即注册该 handler、**本地处理并返回 `{}`**（`server/index.js:54-64`）⇒ 透传后该请求不再抵达上游；`removeRequestHandler('logging/setLevel')` 可把它拽回 fallback（实测有效） |
+> | **全 fallback（不注册任何业务 handler）下 `tools/call` 往返正常** | 结果逐字保留（`[{"type":"text","text":"UPSTREAM-RAW-PAYLOAD"}]`）⇒ 「删掉 `3.1` 那 4 个显式业务 handler、只留 fallback」是**可选项**，且一并消解上一条 |
+> | **两个超时真正独立** | 请求超时加在上游请求上生效（`{timeout: 300}` + 上游挂 `1500ms` ⇒ 客户端 **`303ms`** 收到 `-32001`）；握手超时 `300ms` 与请求超时 `5000ms` **反着设**时，耗时 `1502ms` 的调用仍**成功** ⇒ 握手超时值不参与请求路径 |
+>
+> **由上述结论导出的装配顺序（`3.9` 的硬约束）**：先 `spawnUpstream` 完成握手 → 取 `Client.getServerVersion()` / `getServerCapabilities()` / `getInstructions()` → 再 `new Server(上游身份, { capabilities: 上游能力, instructions: 上游指令 })` → 删掉显式业务 handler、只**赋值**两条 fallback → `removeRequestHandler('logging/setLevel')`。**不要**走 `Server.registerCapabilities()`（transport 已连接时抛错，是条时序死路）。恒不转发的三项（SDK 无条件内置）：`ping` · `initialize` · `initialized` 通知。契约细节见 [`../web-portal/web-design.md`](../web-portal/web-design.md) §12.5 的「桥对客户端的身份与能力」与「超时分层」两节。
+
 **部署顺序依赖**：`ai-memory-mcp` 先起（创建命名卷 `ai_memory_data`），门户以 `external: true` 引用。
 
 #### 5.6.3 启动机制 β′ 与制品契约

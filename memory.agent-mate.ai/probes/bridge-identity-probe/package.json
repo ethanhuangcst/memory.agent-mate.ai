@@ -1,0 +1,13 @@
+{
+  "name": "bridge-identity-probe",
+  "private": true,
+  "type": "module",
+  "description": "Sprint 4 3.9 探针：把 initialize 回包的 serverInfo / capabilities / instructions 改成取自上游后，桥是否仍维持「原样转发」，以及握手超时与上游请求超时能否真正分层。产物可丢弃。",
+  "scripts": {
+    "probe": "node probe.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.30.0",
+    "zod": "4.6.5"
+  }
+}

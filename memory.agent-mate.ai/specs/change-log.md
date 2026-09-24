@@ -6,6 +6,25 @@
 
 ---
 
+## 2026-09-24
+
+### `3.9` 开工准备：`3.11` 探针钉死「身份透传」与「超时分层」的装配语义
+
+**为什么**：`3.9`「mcp:上游能力透传与超时分层」要把 `initialize` 回包的 `serverInfo` / `capabilities` **从「桥自报」改成「代上游自报」**。这不是改两行字面量 —— 身份与能力一旦取自上游，SDK 的三处行为立刻变成硬约束，而它们**只写在编译产物的构造函数里**：能力断言发生在 `setRequestHandler`（**注册期**）、`capabilities.logging` 会让 SDK 在桥本地**吞掉** `logging/setLevel`、`ServerCapabilitiesSchema` 会**丢弃未知能力键**。不先钉死，就会写出「上游缺某项能力 ⇒ 桥直接起不来」这类**只在特定上游上暴露**的缺陷。
+
+**做了什么**（**只做开工准备，产品代码一行未动**）：
+
+- **新增探针 [`../probes/bridge-identity-probe/`](../probes/bridge-identity-probe/)（`3.11`，研究类）**：**全进程内**拓扑（`[探针客户端] → [桥 Server] → [假上游 Server]`，`InMemoryTransport`），**七项断言全过、退出码 `0`、两次复跑一致**。用进程内传输是**刻意的边界**并已如实登记：本探针要证的是**装配层语义**（构造参数会不会被回吐、能力断言在什么时点触发、SDK 内置 handler 会不会遮蔽 fallback、两个 `timeout` 各管哪一段），这些与传输无关；传输层（`Streamable HTTP ⇄ stdio`）已由 `3.5` / `3.10` 覆盖，再搭一遍只会把无关失败面引进来。
+- **六条结论落档**（[`mcp/mcp-design.md`](mcp/mcp-design.md) §5.6.2 的 `3.11` 实证块）：① 身份与指令**字段与取值全保留**，但**键序被 schema 解析重建** ⇒ 契约**不能**写「逐字节」（首版探针按字符串比，就因这个**假失败**退了一次码 20）；② 能力是「**归一化后**透传」（`ServerCapabilitiesSchema` 是普通 `z.object`，未知键被丢弃）；③ **能力断言在注册期** ⇒ 透传转发**不依赖**能力声明，但「能力取自上游 + 无条件注册业务 handler」会让**上游缺该项时桥构造期抛错**；④ `capabilities.logging` 会让 SDK 在**桥本地吞掉** `logging/setLevel`（`removeRequestHandler` 可拽回）；⑤ **全 fallback 下 `tools/call` 往返正常** ⇒ 可删掉 `3.1` 的 4 个显式业务 handler，一并消解 ③ 与 ④；⑥ 两个超时**真正独立**（反着设值仍正确）。
+- **[`web-portal/web-design.md`](web-portal/web-design.md) §12.5 新增两节定档**：「桥对客户端的身份与能力」（透传范围 / 归一化口径 / 桥可辨识性**不进** MCP 身份 / 显式 handler 一律不注册 / `setLevel` 拽回 / 恒不转发的三项 / **反方向仍未转发**的已知边界）与「超时分层」（`HANDSHAKE_TIMEOUT_MS` vs `UPSTREAM_REQUEST_TIMEOUT_MS`、各自失败形态、**只分层不定值**、可调方式）。§12.9 登记「**不**新增环境键」。
+- **[`mcp/mcp-test.md`](mcp/mcp-test.md) §4-F 登记 `TC-M-L1-18` / `TC-M-L1-19` / `TC-M-L1-20`**（上游身份与能力透传 · 超时分层互不牵连 · `setLevel` 抵达上游）与计划落点；[`sprint-backlog.md`](sprint-backlog.md) 增 `3.11` 行、`3.9` 行补「开工前置已就绪」。
+
+**验证**：`node probe.mjs` **七项断言全 PASS、退出码 `0`、两次复跑一致** —— 断言 6 实测 `303ms` / `304ms`（上游需 `1500ms`）· 断言 7 在「握手超时 300ms、请求超时 5000ms」的桥上 `1502ms` 的调用**成功**。原始输出落 `probes/bridge-identity-probe/out/`。
+
+**未做（等确认才动）**：`3.9` 的产品代码（`transport.ts` / `spawn.ts` / `route.ts` / 测试夹具 / 集成测试）**一行未改**。
+
+---
+
 ## 2026-09-23
 
 ### `3.8`「mcp:桥的透传完整性与失败诊断」交付：桥开始「按契约可用」

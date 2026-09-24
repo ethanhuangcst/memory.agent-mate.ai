@@ -448,6 +448,31 @@ admin_portal/
 - **`message` 会被逐层加 `MCP error <code>: ` 前缀**：每经过一次 SDK 客户端就加一层（本探针拓扑实测 **3 层**）。**`code` 是原样的、无需重建**；若要 `message` 也干净，必须在 `fallbackRequestHandler` 里用 `error.code` / `error.message` **手工重建**错误体。
 - **两个 fallback 必须构造后赋值实例属性**（`server.fallbackRequestHandler = …`）。按类型提示传构造参数（`ServerOptions` 类型上合法）**静默失效** —— `Protocol` 的构造函数只把 options 存进 `_options`，从不提升为实例属性；后果是请求侧被合成 `Method not found`、通知侧**直接静默丢弃**（连错误都不报）。依据与反例见 [`../../probes/bridge-fallback-probe/`](../../probes/bridge-fallback-probe/) 的断言 2 / 5。
 
+**桥对客户端的身份与能力（2026-09-24 定档，Sprint 4 `3.9` 开工前置）**
+
+> 依据：`3.11` 探针（[`../../probes/bridge-identity-probe/`](../../probes/bridge-identity-probe/)，**七项断言全过、退出码 `0`、两次复跑一致**）。为什么必须定档：`3.9` 把 `initialize` 回包的**身份与能力**从「桥自报」改成「代上游自报」，而 SDK 对这两件事的处理**写在构造函数里**（不在文档里）—— 不定档就会出现「上游缺某项能力 ⇒ 桥直接起不来」这类**只在特定上游上暴露**的缺陷。
+
+| 项 | 定档 | 理由与判据 |
+|---|---|---|
+| 透传范围 | `serverInfo` / `capabilities` / `instructions` **均取自上游**（`Client.getServerVersion()` / `getServerCapabilities()` / `getInstructions()`，上游握手完成后即可用） | 客户端据此看到 `ai-memory` 的**真实版本与能力** ⇒ Sprint 5 上线后可直接发现镜像漂移（本行的原始动机）。取值点必须在 `new Server(...)` **之前**；**不要**用 `registerCapabilities()`（transport 已连接时抛错，是条时序死路） |
+| 透传的准确含义 | **经 SDK schema 归一化后的透传**，**不是逐字节**：`serverInfo` 字段与取值保留（**键序被 schema 解析重建**）；`capabilities` 的已知键保留、**未知键被丢弃** | 探针断言 1 / 2（首版探针按字符串比，就因键序重建**假失败**退了一次码）。⇒ **验收断言必须写「字段与取值」，不能写「逐字节」** |
+| 桥的可辨识性 | **不进 MCP 身份** —— 不往 `serverInfo` / `instructions` 里塞桥的自我标识 | 与 `3.8` 的「原样转发、门户语义知识 = 0」同源。判「这个会话是否经桥」看门户日志与 `mcp-session-id`，**不看** MCP 身份 |
+| 桥的显式业务 handler | **一律不注册，全部经 fallback 转发**（`3.9` 删除 `3.1` 遗留的 4 个） | 能力断言发生在**注册期**（`setRequestHandler`）而非分派期 ⇒ 若能力取自上游而桥仍无条件注册 `prompts/*`，**上游未声明 `prompts` 时桥会在构造期抛错**（⇒ 503）。且探针断言 5 已证「全 fallback 下 `tools/call` 往返正常」 |
+| `logging/setLevel` | 透传 `logging` 能力后**必须** `removeRequestHandler('logging/setLevel')` 把它拽回 fallback | SDK 在**桥本地**自动注册该 handler（本地处理、返回 `{}`、**不转发**）⇒ 否则客户端以为设置了级别、**上游从未收到**（探针断言 4 的对照支就是这个偏差） |
+| 恒不转发的三项 | `ping`（本地自动 pong）· `initialize` · `initialized` 通知 —— SDK **无条件**内置注册，任何装法都遮蔽 fallback | 如实登记，免得被当成「透传不彻底」。`3.9` 不改变其行为 |
+| 反方向（**已知边界，不在本行**） | 桥当前只做「客户端 → 上游」；**上游 → 客户端**的主动通知与 server→client 请求（`roots/list` / `sampling/*` / `elicitation/*`）**尚未转发** | 透传能力后这层不对称**更显眼**，但它是独立缺口 ⇒ 另立条目，不塞进 `3.9` |
+
+**超时分层（2026-09-24 定档，Sprint 4 `3.9` 开工前置）**
+
+| 常量 | 管哪一段 | 该段失败形态 |
+|---|---|---|
+| `HANDSHAKE_TIMEOUT_MS` | 桥 → 上游**握手**（`client.connect`） | 握手期挂起 ⇒ **503 `upstream_unavailable`**（见上表「上游超时」的握手期支） |
+| `UPSTREAM_REQUEST_TIMEOUT_MS` | 桥 → 上游**每一个请求**（`request(…, {timeout})`） | 转发期 ⇒ **MCP 层错误**（`-32001`），按上方「上游超时」三分支 |
+
+- **两者互不牵连**（实测：握手超时 `300ms` + 请求超时 `5000ms` 的桥上，耗时 `1502ms` 的调用**成功** —— 探针断言 7）。分层前二者**共用同一个值**，语义被混为一谈（`3.10` / `3.1` 的注释里「请求级转发超时」同时管着握手）。
+- **本行只分层、不定义值**：两个常量的**默认值保持不变**（`30s`）⇒ 分层本身**不改变现有行为**；**取值归 `4.1`**。
+- **可调整方式**：装配层注入（`McpBridgeDeps` 的两个可选字段，**仅供测试注短值** —— 否则「上游挂起」这条路径在测试里要等 30 秒）；**不**引入环境变量键（§12.9 因此**不变**）。
+
 **四条统一纪律**：① 错误体一律 `{"error":"<code>","message":"<可读说明>"}`，**不含**内部路径、堆栈或上游 stderr 原文；② 任何失败路径都**不得留下未回收的子进程**（与 §12.7 的回收触发同源）；③ `spawn_assertion_failed` 与 `upstream_unavailable` **必写审计行**；④ **转发阶段的异常必留一行日志 + 一行审计**（动作 `mcp_upstream_error`，`detail` 只放 `stage` / `errorCode` / 规范化 message，**不含**上游 stderr 原文）—— 「上游起不来」与「转发阶段出错」是两类故障，混在一起会让排障无从下手。
 
 ### 12.6 门户数据模型落地
@@ -493,6 +518,8 @@ admin_portal/
 | `PORTAL_LAUNCH_OVERRIDE` | **开发期命令覆盖**（2026-09-23 随 `3.1` 落地）：覆盖 launch 模板的「二进制那一段」（可给多段，如 `docker -H <uri> exec -i <容器> <二进制>`），模板 argv 的其余部分照旧接在其后。**仅 `PORTAL_ENV=development` 生效；production 下出现即拒绝启动**（与自签 JWT / 开发登录入口同构，见 [`adr/ADR-015`](../adr/ADR-015-dev-login-entry-config-gated-registration.md)）。存在的理由：本机是 macOS，执行不了镜像内的 linux 二进制。**它的语义边界**：只覆盖 `command`/`args`；**env 透传由覆盖命令自己负责** —— 例如借壳 `docker exec` 时必须显式 `-e AI_MEMORY_DB -e AI_MEMORY_AGENT_ID …`，否则模板注入的四项 env 进不了容器：`memory_store` 照样成功，但数据落到**共享主库**、身份退回上游默认值（即隔离静默失效，实测踩过） | 否 |
 | `DASHSCOPE_API_KEY` | 门户专用 MaaS key（与主 key 同 workspace，§3.4 前置 2） | 是 |
 | `PORTAL_I18N_DEFAULT` | 默认语言（`zh-CN`） | 否 |
+
+> **`3.9` 定档（2026-09-24）：超时分层**不**新增环境键** —— 两个超时常量（握手 / 每请求）的**默认值不变**（`30s`），只保留**装配层注入位**（仅供测试注短值）；取值归 `4.1`，届时若判定需要可配置，再**在此登记键名**。理由：本行的判据是「两个超时**各自可调**且互不牵连」，而「可调」在装配层已成立 —— 过早引入 env 键会把尚未定值的业务参数固化成对外配置面。
 
 **本地开发认证实施口径（2026-09-22 定档，随 `PSP-W1` 落地）**
 
