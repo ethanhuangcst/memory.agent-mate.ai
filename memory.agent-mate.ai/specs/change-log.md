@@ -8,6 +8,32 @@
 
 ## 2026-09-25
 
+### Sprint 4 `#7`「deploy:真身份口径核对」交付：8 项断言逐项结论 + DNS 承接归属
+
+**为什么**：`#7` 的验收形态是**文档核对**（`SBI-D5`：「受影响则更新；未受影响则显式登记『已核对、无需改』」）—— 这一行的交付物**就是逐项结论本身**，不是功能改动。
+
+**三项「受影响 ⇒ 已更新」**：
+
+- `deploy/portal.compose.yml` 注释 `PORTAL_ENV=dev` → `development`：这是全仓唯一异形值，代码侧 `z.enum(['development','production'])` 只认后两者 ⇒ 照注释填报会踩启动期校验（**只改注释措辞，不动任何键值**）。
+- `deployment.md` §12.5.4 补**开发登录入口** `/admin/dev-login` 的生产禁用登记：实测 `server.ts` 为 `if (cfg.testJwt.enabled) registerDevLoginRoutes(app, deps);`，而 `cfg.testJwt.enabled` 由 `PORTAL_TEST_JWT_ENABLED` 驱动 ⇒ 该入口与已登记的 `PORTAL_TEST_JWT_*` **同源开关**；**修法是补点明入口**（禁用那套键即彻底关闭它），**不新增键、不改行为**；入口边界口径指向 `web-design.md` D15 / `ADR-015`。
+- 本机**未入仓**派生文件（`deploy/config.toml` / `config.local.toml` 注释）里的旧部署目录 → `/opt/ai-memory/`：入仓模板 `config.toml.tmpl` 本就干净（旧路径来自更早版本的模板），残留只在这一对本机副本上；改它们**不进提交**（`.gitignore` 第 12/15 条）。
+
+**五项「未受影响 ⇒ 已核对、无需改」**：生产禁用键三处同集（6 键）· 面隔离两 Host 键齐备且「必须不相交」在代码与设计两侧都写了 · 「MCP 面必须绕过 Access」四处一致 · `mcp-design.md` §5.6.2 回链有效（目标节含 Host/Bypass 表）· 旧口径规则的灵敏度对照（注入即命中）。
+
+**DNS 承接归属落定**：`deployment.md` §1.1 的「DNS（两个域名）· **暂无承接条目**（归属待定）」⇒ 承接列改为 **Sprint 5 `#9`（上线准备包）**，视为上线前准备项；**只改承接列、不加行**（`ADR-021` D2 已定 Sprint 5 的 16 行不裁）。
+
+**探针两条规则的修正（同一行 `#7` 的判据质量，两条都是本轮实测教训）**：
+
+1. **M2b 从「字样存在」升级为「开关同源 + 指南有落点」**：原规则只查 `deployment.md` 里有没有 `dev-login` 字样 —— 任意一句提及即可蒙过；改为要求「代码侧注册确受 `cfg.testJwt.enabled` 支配」**且**「指南里提到该入口的那一行**同时**点明它由哪套键开关」。
+   **修正过程中自身踩到一次假红（值得记）**：先写成 `l.includes('registerDevLoginRoutes')`，`findIndex` 命中的是文件顶部的 `import { registerDevLoginRoutes } ...`（第 33 行）而非调用行（第 133 行）⇒ 判据**恒假**；改为匹配**调用**（`registerDevLoginRoutes\s*\(`）后转 PASS。**教训：判据的取行方式本身就是判据的一部分。**
+2. **M6 的扫描面与「制品」定义对齐**：旧路径只出现在**未入仓**的本机派生文件里 ⇒ 把未跟踪文件当制品判据，结论会随开发机状态漂移；扫描面改由 `git ls-files` 判定，未跟踪文件**显式排除并把排除项打印在结论里**（本轮排除 2 个）。
+
+**验证**：`3.22` 复跑 **8/8 PASS · rc=0** · **敏感性证明两项**（`M1` 临时反向 ⇒ **7/1**；`M2b` 临时反向 ⇒ **7/1**；两次还原后文件哈希与基准一致、复跑 8/8）· `doc-links` 59 文件 / 1498 链接零悬空 · `attestation-paths` ✓ · `preflight-test` 5/0 · `secret-check` ✓ · `git diff --check` 干净 · `tsc --noEmit` 0 错。
+
+**先在红项（如实登记，非本轮回归）**：`make deploy-doc-audit` 在 **HEAD 上已红** —— `A2`（「门户真正会读的每个 `PORTAL_*` 键都至少在一处登记」）遗漏 `PORTAL_CONTACT_EMAIL`。归因链：`#4.2` 交付（`55a4fa0`）在 `admin_portal/src/web/routes/index.ts` 的注释里写了「如需按部署改地址，再加 `PORTAL_CONTACT_EMAIL`」—— 审计的**正则抽键**（扫 `admin_portal/src` 全文本，注释也算）把**将来键名**当成了「代码会读的键」。机械证据：审计规则自基线提交 `95cc82b` 以来未变（`git diff --stat` 空），而该键在 `95cc82b` 源码 **0 命中**、在 `55a4fa0` **1 命中**。本轮**未修改审计规则**（属 `4.4`/`3.16` 交付物，越界）；建议二选一：① 抽键面收窄为**真读取**（如 `process.env.PORTAL_*` 形态）；② 或按 `#4.2` change-log 已登记的「待配置化」把该键写进配置契约表（但会与「目前无配置键承载它」的事实并列，需读者自行判断）。
+
+**边界**：未动 `admin_portal/`（含该审计探针）· 未动 MCP 桥 / 上游 / 会话层 · 未涉 `4.3`（启动自检）· 未新增 Sprint 5 行 · OSS region 仍待用户提供（`ADR-021` D3，本轮不臆造）。
+
 ### `ADR-021` 落定并当轮执行：scripts 目录分层（8 个探针 → `scripts/probes/`）+ 「最小上线」范围分级
 
 **为什么**：用户反馈「看到一堆 sh 脚本，看不懂现在在开发什么」⇒ 决策把 `scripts/` 按职责分层（护栏 / 入口+回归 / 探针），并给「最小上线」定出判据。该决策原由 Ken 起草为 `ADR-020`；本轮按用户指示**换号 `ADR-021` 并瘦身**后**当轮执行**（决策与执行分开记账）。

@@ -30,7 +30,7 @@
 | **Cloudflare Access 应用 + Allow 策略** | 策略内列已批准邮箱（**建议 ≥ 2 个**）；`<MCP_HOST>` 必须**绕过** Access | [`web-portal/web-design.md`](./web-portal/web-design.md) §6.1 · Sprint 5 `#6` |
 | **Access Service Token** | 供在线链路探针判定「策略已生效」 | Sprint 5 `#6` |
 | **门户专用 MaaS key** | 与主 key 分离，只放 `portal.env` | [`../deploy/portal.env.example`](../deploy/portal.env.example) |
-| **DNS（两个域名）** | `<MCP_HOST>` 与 `<ADMIN_HOST>` 分别解析到本机 | **暂无承接条目**（如实登记，归属待定） |
+| **DNS（两个域名）** | `<MCP_HOST>` 与 `<ADMIN_HOST>` 分别解析到本机 | Sprint 5 `#9`（上线准备包；Sprint 4 `#7` 核对时定归属） |
 
 **OSS region 核查方式**（核实后回填本文档 §8、`product-backlog.md` #9、Sprint 5 `#8` 与 [`adr/ADR-005`](./adr/ADR-005-upgrade-admission-gate-layering.md)）：`ossutil ls` · `ossutil stat oss://<OSS_BUCKET>` · `ossutil config`（endpoint 形如 `oss-<region>.aliyuncs.com`）；或阿里云控制台 → OSS → 该桶 → 概览 → 「地域」。
 
@@ -518,7 +518,7 @@ bash scripts/pin-update.sh <ref> [--force]          # 更新锁文件（--force 
 | 会话 | `PORTAL_SESSION_IDLE_TIMEOUT` · `PORTAL_SESSION_MAX_DURATION` | 毫秒；**取值归 `4.1`**，compose 里给的是保守初值 |
 | 身份 | `PORTAL_ACCESS_TEAM_DOMAIN` · `PORTAL_ACCESS_AUD` · `PORTAL_ACCESS_JWKS_URL` | 团队域 + Access 应用的 `aud`；`JWKS_URL` **可选**（默认由团队域推导） |
 | 日志 / i18n | `PORTAL_LOG_LEVEL` · `PORTAL_I18N_DEFAULT` | `info` · `zh-CN` |
-| **生产不得设置** | `PORTAL_TEST_JWT_ENABLED` · `PORTAL_TEST_JWT_JWKS` · `PORTAL_TEST_JWT_ISS` · `PORTAL_TEST_JWT_AUD` · `PORTAL_TEST_JWT_EMAIL` | 自签 JWT 通道：仅离线自动化用，且**只允许绑定回环 Host**；写进生产即拒绝启动 |
+| **生产不得设置** | `PORTAL_TEST_JWT_ENABLED` · `PORTAL_TEST_JWT_JWKS` · `PORTAL_TEST_JWT_ISS` · `PORTAL_TEST_JWT_AUD` · `PORTAL_TEST_JWT_EMAIL` | 自签 JWT 通道：仅离线自动化用，且**只允许绑定回环 Host**；写进生产即拒绝启动。该通道**同时**启用**开发登录入口** `/admin/dev-login`（**同源开关**：`enabled` 为真才注册该路由，否则路由不存在）—— 故禁止这套键即彻底关闭该入口。入口边界与身份口径见 [`web-portal/web-design.md`](./web-portal/web-design.md) D15 / [`adr/ADR-015-dev-login-entry-config-gated-registration.md`](./adr/ADR-015-dev-login-entry-config-gated-registration.md) |
 | **仅开发期** | `PORTAL_LAUNCH_OVERRIDE` | 覆盖 launch 模板的「二进制那一段」；生产用 β′（镜像自带上游二进制）⇒ **不设** |
 
 #### 12.5.5 收口验证（三段做完后一次跑完）

@@ -73,10 +73,11 @@ services:
       # ── **生产不得设置**的两个族（留作注释：写了就是事故）─────────────────────────
       # PORTAL_TEST_JWT_ENABLED / PORTAL_TEST_JWT_JWKS / PORTAL_TEST_JWT_ISS /
       # PORTAL_TEST_JWT_AUD / PORTAL_TEST_JWT_EMAIL
-      #   自签 JWT 测试通道：仅离线自动化用，且**只允许绑定回环 Host**。
+      #   自签 JWT 测试通道：仅离线自动化用，且**只允许绑定回环 Host**；
+      #   **同时**启用开发登录入口 `/admin/dev-login`（**同源开关** —— 口径见 deployment.md §12.5.4）。
       #   在 `PORTAL_ENV=production` 下启用即**拒绝启动**（fail-closed）。
       # PORTAL_LAUNCH_OVERRIDE
-      #   开发期命令覆盖（覆盖 launch 模板的「二进制那一段」）；**仅 `PORTAL_ENV=dev` 生效**。
+      #   开发期命令覆盖（覆盖 launch 模板的「二进制那一段」）；**仅 `PORTAL_ENV=development` 生效**。
       #   生产用 β′：镜像内自带上游二进制，直接 spawn —— 不设此键。
 
     volumes:

@@ -13,6 +13,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 
 const HERE = path.dirname(new URL(import.meta.url).pathname);
 const SPECS = path.resolve(HERE, '../../specs');
@@ -80,12 +81,33 @@ console.log('=== 3.22 真身份 / 主机名 / Bypass 口径核对 ===\n');
     missing.length === 0,
     missing.length ? `文档缺登记：${missing.join(', ')}` : `三处同集（${[...composeKeys].length} 键）`,
   );
-  const devLoginInDoc = has(DEPLOYMENT, 'dev-login');
+  // `--dev-login`（开发登录入口）**不是独立键**：实测 `server.ts` 为
+  //   `if (cfg.testJwt.enabled) registerDevLoginRoutes(app, deps);`
+  // 而 `cfg.testJwt.enabled` 由 `config.ts` 的 `PORTAL_TEST_JWT_ENABLED` 驱动
+  // ⇒ 它的生产禁用口径与 `PORTAL_TEST_JWT_*` **同源**。
+  // 判据因此不是「文档里出现过 `dev-login` 字样」（那种规则会被任意一句提及蒙过），而是
+  // **开关同源 + 指南有落点**：运维照 §12.5.4 禁用那套键时，必须知道它同时关掉了什么。
+  const SERVER = path.join(PORTAL, 'src/server.ts');
+  const serverLines = lines(SERVER);
+  // 取**调用行**（含括号），不是 `import { registerDevLoginRoutes } ...` 那一行 ——
+  // 本轮实测教训：先写成 `l.includes('registerDevLoginRoutes')`，`findIndex` 命中的是文件顶部的
+  // import（第 33 行），于是窗口取在了 import 附近 ⇒ 判据**恒假**（真调用在第 133 行）。
+  const CALL = /registerDevLoginRoutes\s*\(/;
+  const regIdx = serverLines.findIndex((l) => CALL.test(l));
+  const coupledInCode =
+    regIdx >= 0 &&
+    serverLines.slice(Math.max(0, regIdx - 15), regIdx + 1).some((l) => l.includes('testJwt.enabled')) &&
+    has(CONFIG, 'PORTAL_TEST_JWT_ENABLED') &&
+    has(CONFIG, 'testJwt');
+  // 落点判据：提到该入口的那一行必须**同时**点明它由哪套键开关（同源写在同一行，避免两处口径漂移）
+  const docLine = lines(DEPLOYMENT).find((l) => l.includes('/admin/dev-login')) ?? '';
+  const docCovers = docLine.includes('PORTAL_TEST_JWT');
   check(
     'M2b',
-    '`--dev-login`（开发登录入口）的生产禁用口径在 `deployment.md` 有登记',
-    devLoginInDoc,
-    devLoginInDoc ? '已登记' : '**缺位**：只登记在 web-design D15 / ADR-015，deployment §12.5.4 未提（口径覆盖不完整）',
+    '开发登录入口（`/admin/dev-login`）的开关与 `PORTAL_TEST_JWT_*` **同源**，且在 `deployment.md` 有落点',
+    coupledInCode && docCovers,
+    `代码耦合=${coupledInCode}（server.ts 的注册受 testJwt.enabled 支配）· 指南落点=${docCovers}` +
+      (docCovers ? '（同一行点明同源）' : '：指南提到入口却没点明它由哪套键开关'),
   );
 }
 
@@ -133,10 +155,27 @@ console.log('=== 3.22 真身份 / 主机名 / Bypass 口径核对 ===\n');
     { re: /\bai-mem\b(?!ory)/, label: '异形账号 `ai-mem`（应为 `aimem` / `aimem-ssh`）' },
     { re: /\/opt\/ai-memory-mcp\//, label: '旧部署目录 `/opt/ai-memory-mcp/`（已统一为 `/opt/ai-memory/`）' },
   ];
-  // 扫描面 = 现行真源（三份 spec）+ **制品**（两份 compose + 配置模板/样例/本地配置）。
-  // 排除项：变更记录表行（`| 20YY-MM-DD |`）—— 按仓内改名口径，历史叙述保留旧名、只靠映射表收口
-  // （本轮实测：deployment.md 的变更记录里那条旧路径是**合法历史**，不算残留）。
-  const SCAN = [
+  // 扫描面 = 现行真源（三份 spec）+ **入仓的制品**（两份 compose + 配置模板/样例）。
+  // 两条实测教训（都已写进规则）：
+  //   a. **历史叙述不是残留**：变更记录表行（`| 20YY-MM-DD |`）按仓内改名口径保留旧名、只靠映射表
+  //      收口（实测：`deployment.md` 变更记录里那条旧路径是**合法历史**）⇒ 规则豁免该形态，否则
+  //      第一条命中的就是历史行。
+  //   b. **扫描面必须与「制品」定义对齐**：`deploy/config.toml` / `config.local.toml` 是**未入仓**的
+  //      本机派生文件（`.gitignore` 第 12/15 条）⇒ 旧路径出现在它们里面只说明「本机副本旧」，不是
+  //      制品漂移；把未跟踪文件当制品判据，结论会随开发机状态漂移。⇒ 只扫 `git ls-files` 认得的文件。
+  const REPO = path.resolve(HERE, '../../..');
+  const isTracked = (abs) => {
+    try {
+      execFileSync('git', ['ls-files', '--error-unmatch', path.relative(REPO, abs)], {
+        cwd: REPO,
+        stdio: 'ignore',
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  const CANDIDATES = [
     DEPLOYMENT,
     WEB_DESIGN,
     MC_DESIGN,
@@ -147,6 +186,8 @@ console.log('=== 3.22 真身份 / 主机名 / Bypass 口径核对 ===\n');
     path.join(DEPLOY, 'config.local.toml'),
     path.join(DEPLOY, '.env.prod.example'),
   ].filter((p) => fs.existsSync(p));
+  const SCAN = CANDIDATES.filter((p) => isTracked(p));
+  const untracked = CANDIDATES.filter((p) => !isTracked(p));
   const HISTORY_ROW = /^\|\s*20\d\d-\d\d-\d\d\s*\|/;
   const hits = [];
   let excluded = 0;
@@ -159,10 +200,15 @@ console.log('=== 3.22 真身份 / 主机名 / Bypass 口径核对 ===\n');
       for (const p of PATTERNS) if (p.re.test(l)) hits.push(`${path.relative(SPECS, file)}:${i + 1} ⇒ ${p.label}`);
     });
   }
-  info(`扫描 ${SCAN.length} 个文件 · 历史叙述行豁免 ${excluded} 处`);
+  info(
+    `扫描 ${SCAN.length} 个**入仓**文件 · 历史叙述行豁免 ${excluded} 处` +
+      (untracked.length
+        ? ` · 未入仓派生文件排除 ${untracked.length} 个（${untracked.map((p) => path.basename(p)).join(' / ')}）`
+        : ''),
+  );
   check(
     'M6',
-    '现行真源与制品里旧口径零残留（扫描面：三份 spec + compose/配置制品；变更记录行豁免）',
+    '现行真源与**入仓制品**里旧口径零残留（扫描面 = 三份 spec + 入仓 compose/配置；变更记录行豁免；未跟踪派生文件排除）',
     hits.length === 0,
     hits.length ? hits.join(' · ') : `0 命中（历史叙述豁免 ${excluded} 处）`,
   );
