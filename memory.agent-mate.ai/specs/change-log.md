@@ -6,6 +6,55 @@
 
 ---
 
+## 2026-09-25
+
+### `ADR-021` 落定并当轮执行：scripts 目录分层（8 个探针 → `scripts/probes/`）+ 「最小上线」范围分级
+
+**为什么**：用户反馈「看到一堆 sh 脚本，看不懂现在在开发什么」⇒ 决策把 `scripts/` 按职责分层（护栏 / 入口+回归 / 探针），并给「最小上线」定出判据。该决策原由 Ken 起草为 `ADR-020`；本轮按用户指示**换号 `ADR-021` 并瘦身**后**当轮执行**（决策与执行分开记账）。
+
+**决策侧**：
+
+- **换号**：`ADR-020` 已被 `web-portal/web-login-plan.md` §9.2 预约给「登出入口与会话退出」（`SBI-L1`）⇒ 本决策改用 `ADR-021`，原稿（未跟踪）删除。
+- **瘦身**（96 → 69 行）：只留 `Status / Context / Decision / Rationale / Consequences / Date`；**执行清单与执行回执移出**到 `sprint-backlog.md` Sprint 4 `#9`（仓内体例：ADR 按新增决议 supersede、**不回写正文**）；**D3（OSS region 待核查）降为前置条件**（它不是决策，是待用户提供的数据）；**D2 只留「判据 + 代价 + 反转条件」**，不复制 Sprint 6 的 15 行清单。
+- **D1 名单按判据复查**：`portal-acceptance.sh` **留根**（Sprint 5 上线准入、会反复跑、调用走 `make` 目标 ⇒ 按原稿自己的判据属「入口 + 回归」，不是探针）⇒ 移入 `scripts/probes/` 的是 **8 个**，分层结果 **根目录 13 + `probes/` 8 = 21**。
+
+**执行侧（D1）**：
+
+- `git mv` 8 个探针入 `scripts/probes/`；`Makefile` 第 19–20 行变量值改指（`PORTAL_ACCEPTANCE` 不变）。
+- **路径改指 180 处 / 37 文件**（`change-log` 33 · `sprint-backlog` 33 · `mcp-test` 27 · `mcp-design` 15 · `knowledge/upstream-ai-memory` 13 · `product-backlog` 12 · `deployment` 7 · `web-design` 4 · 研究探针 / 测试 / 配置注释等）—— 按仓内改名口径执行：**旧路径零残留**，旧路径只在本节映射表里保留；**裸名（如 `iso-probe` / `make portal-mcp-probe`）不改**（名字与目标名未变）。
+- **修掉 5 处「按自身位置推导仓根」**（移动后会被打断）：`gc-probe.sh`（兄弟脚本 `maintain-user-dbs.sh`）· `limits-probe.sh`（`deploy/`）· `portal-mcp-probe.sh` 与 `portal-mcp-session-probe.sh`（`ROOT`）· `qwen-verify.sh`（`REPO_ROOT`）—— 各**多一级上溯**并加注。
+
+**旧 → 新路径映射（8 个脚本）**：
+
+| 旧路径 | 新路径 |
+|---|---|
+| `memory.agent-mate.ai/scripts/gc-probe.sh` | `memory.agent-mate.ai/scripts/probes/gc-probe.sh` |
+| `memory.agent-mate.ai/scripts/i18n-probe.sh` | `memory.agent-mate.ai/scripts/probes/i18n-probe.sh` |
+| `memory.agent-mate.ai/scripts/iso-probe.sh` | `memory.agent-mate.ai/scripts/probes/iso-probe.sh` |
+| `memory.agent-mate.ai/scripts/limits-probe.sh` | `memory.agent-mate.ai/scripts/probes/limits-probe.sh` |
+| `memory.agent-mate.ai/scripts/profile-probe.sh` | `memory.agent-mate.ai/scripts/probes/profile-probe.sh` |
+| `memory.agent-mate.ai/scripts/qwen-verify.sh` | `memory.agent-mate.ai/scripts/probes/qwen-verify.sh` |
+| `memory.agent-mate.ai/scripts/portal-mcp-probe.sh` | `memory.agent-mate.ai/scripts/probes/portal-mcp-probe.sh` |
+| `memory.agent-mate.ai/scripts/portal-mcp-session-probe.sh` | `memory.agent-mate.ai/scripts/probes/portal-mcp-session-probe.sh` |
+
+**D2 落盘**：Sprint 6 **15 行**逐行标注分级（上线后一周内补齐 3 · 上线后第一批 7 · 有真实规模需求再启动 4 · 随重排即时执行 1）· Sprint 7 加「压缩说明」· `product-backlog.md` 投影**已核对、`Sprint` 编号不变**（只登记核对结论，不改行）。
+
+**D3**：**跳过**（用户未提供 OSS region）⇒ 不填任何 region 值，四处「待核查」表述保持原样。
+
+**验证**：
+
+- `make portal-acceptance` **退出码 0**（结论表五行全绿）—— 其中 `TC-L2`（6/6）与 `TC-L3-ISO`（15/15）是**经 `Makefile` 变量调用的被移探针** ⇒ 直接验证「移动 + 改指」。
+- 其余 5 个被移探针逐个复跑：`gc-probe` / `i18n-probe` / `iso-probe` / `limits-probe` / `profile-probe` **全部 rc=0**；`qwen-verify` 仅 `--help` rc=0（**完整复跑会真实调用 MaaS，未执行** —— 如实登记，不谎称 rc=0）。
+- `bash -n` 8/8 · `doc-links` **56 文件 / 1479 链接零悬空** · `attestation-paths` 通过 · `preflight-test` 5/0 · `secret-check` 通过 · `tsc --noEmit` 0 错 · `git diff --check` 干净 · 收尾后容器内同形进程 **0**、未新增测试用户目录。
+
+**边界（如实登记）**：
+
+- **扫描面**：零残留复检面 =「文档 + 脚本 + 配置注释 + 测试注释」；**`.codebuddy/`（过程资产）内约 16 行旧路径未动**（与 `ADR-021` 边界一致），`link-check.sh` 的 `EXCLUDE_DIRS` 亦已排除该目录。
+- `admin_portal/tests/**` 只改**注释里的路径**（5 处），**无行为改动**。
+- `deploy/config.toml.tmpl` 只改**注释**（键集合未动 ⇒ 与 `deployment.md` §5.3 的镜像断言无关）。
+- 「约 55 处」是 ADR 原稿的快照，**实际 180 处**；已把「以现场 grep 为准」写进 `ADR-021` 的 Consequences。
+- 本机未入仓的 `memory.agent-mate.ai/secrets.local.hk_vps_4.md` 内 1 处旧路径已顺手同步（不入制品）。
+
 ## 2026-09-24
 
 ### 备份目标写实为「阿里云 OSS」+ 云资源清单落点 + 两处指称校正（含订正上一轮核实里的误判）
@@ -123,7 +172,7 @@
 
 - **修一处实测缺陷（同源两处）**（`src/bridge/route.ts`）：会话归属校验原先把「**不属于本令牌**」与「**自己的传输已关闭**」合在一支、统一 `registry.remove()`。单看**拒绝**完全正确（`401` 对、也不新增进程），实际后果是：客户端带**甲的令牌** + **乙的 `sessionId`** 发一次请求 ⇒ **乙**的会话被从注册表摘掉 ⇒ ① 乙随后用**自己的**令牌 + 原 `sessionId` **立刻 401**；② 乙的上游子进程**失去唯一引用**、没有任何路径去 `close()` ⇒ **孤儿**。现拆为两支：**不属于本令牌 ⇒ 只拒不动**（不 `remove`、不 `close`）；**自己的传输已关闭 ⇒ 幂等 `close()`**（传输 → 上游 → 删条目）后仍回 `401`。三条拒绝原因对外**同形**，不泄露会话是否存在。关闭语义按 SDK 源码核实过（服务端传输 `close()` 有 `_closed` 短路、`StdioClientTransport.close()` 把 `_process` 置空 ⇒ **均幂等**；`SessionRegistry.close()` 两步都不抛出）。
 - **离线机制层 3 支**（`tests/integration/mcp-bridge-session-isolation.test.ts`）：① 两个并发会话各自 spawn 一个上游进程、**pid 互不相同**且各带**自己用户的**库与身份（`--env-dump` 逐进程落盘 ⇒ **数文件 = 数 spawn**）；② 同用户**重开**会话**不复用**旧进程（禁池化），且旧进程确实退出（`--closed-marker` 写的是那个 pid）；③ **跨用户接管被拒 `401` 且不伤及受害者** —— 不新增进程、**受害者仍可用**、其子进程仍受管（收尾后才出现关闭标记）。
-- **真上游端到端新增入口**（`make portal-mcp-session-probe` = `scripts/portal-mcp-session-probe.sh` + `admin_portal/tests/fixtures/session-probe-runner.mts`）：把 `3.12` 探针实测钉死的判据固化成**产品侧门禁** —— 容器内进程 `0 → 2` 且 PID 互不相同 · 各自 `AI_MEMORY_DB` / `AI_MEMORY_AGENT_ID` 正确 · 用户目录之外**零新增**（**唯一豁免**上游**共享**审计日志）· 旁观者用户库**零变化** · 同用户重开为**新 PID** · 接管 `401` 且不新增进程 · **受害者仍可用** · 收尾**无孤儿** · 门户退出后容器内归零。观测参数化为「**容器名 + cmdline 前缀**」⇒ 本机借壳与生产 β′ **共用同一套判据**。**既有 `make portal-mcp-probe` 不动**（实测仍退出码 `0`）。
+- **真上游端到端新增入口**（`make portal-mcp-session-probe` = `scripts/probes/portal-mcp-session-probe.sh` + `admin_portal/tests/fixtures/session-probe-runner.mts`）：把 `3.12` 探针实测钉死的判据固化成**产品侧门禁** —— 容器内进程 `0 → 2` 且 PID 互不相同 · 各自 `AI_MEMORY_DB` / `AI_MEMORY_AGENT_ID` 正确 · 用户目录之外**零新增**（**唯一豁免**上游**共享**审计日志）· 旁观者用户库**零变化** · 同用户重开为**新 PID** · 接管 `401` 且不新增进程 · **受害者仍可用** · 收尾**无孤儿** · 门户退出后容器内归零。观测参数化为「**容器名 + cmdline 前缀**」⇒ 本机借壳与生产 β′ **共用同一套判据**。**既有 `make portal-mcp-probe` 不动**（实测仍退出码 `0`）。
 - **判据敏感性自证**：把 `route.ts` 的修正**临时回退**后重跑 ⇒ **只有 `TC-M-L3-05` 转红**（其余 `321` 项照绿），恢复后转绿 ⇒ 该用例确能检出缺陷，**不是空转**。
 - **`3.12` 探针转绿**：两条 `[F] 发现`（受害者被摘掉 / 孤儿）现输出为 `[i]` 的正面结论（「不可侵扰」成立 / 收尾后无孤儿）。
 - **如实登记（未做）**：`web-portal/web-design.md` §12.5 声明的会话注册表字段 `child`（子进程句柄 / PID）**仍未落地** —— SDK 已公开 `StdioClientTransport.get pid()`，但本行判据全走**容器内观测**、不需要它 ⇒ 按用户拍板**不塞进本行**，改为在 `sprint-backlog.md` 的 `3.4` 行登记备忘（`3.4` 的「子进程归零」判据要用）。
@@ -131,7 +180,7 @@
 
 **验证**：离线 **322 passed / 30 files** · 覆盖率 **93.28 / 86.26 / 97.68 / 94.48**（阈值 92/85/96/93）· `make portal-mcp-session-probe` **9/9 断言 PASS、退出码 `0`** · `make portal-mcp-probe` 退出码 `0`（零回归）· `3.12` 探针 **8/8 PASS 且两条发现转正面** · `make doc-links` / `make attestation-paths` 通过 · `npx tsc --noEmit` 0 错。
 
-**一处既有隐患（只登记、未改）**：`scripts/portal-mcp-probe.sh` 的 env heredoc 里有**两处反引号**（正文会做命令替换 ⇒ 被**当命令执行**、把 docker 用法信息打到 stderr）；本行新增的脚本已避开该坑，既有脚本属 `3.1` 的门禁、不在本行范围。
+**一处既有隐患（只登记、未改）**：`scripts/probes/portal-mcp-probe.sh` 的 env heredoc 里有**两处反引号**（正文会做命令替换 ⇒ 被**当命令执行**、把 docker 用法信息打到 stderr）；本行新增的脚本已避开该坑，既有脚本属 `3.1` 的门禁、不在本行范围。
 
 ### `3.4` 开工准备：`3.13` 探针钉死「会话回收」的判据，并清出一处契约矛盾
 
@@ -143,7 +192,7 @@
 - **四条决定性结论**：① `StdioClientTransport.pid` 的**生命周期**（连接前 `null` / 连接后可用 / `close()` 后回 `null`）与**语义** —— 本机借壳下它指向**宿主的 `docker` 客户端**（实测 `7484`）而**不是**容器内上游（`19936`）⇒ `child` 字段只能定义为「**门户侧被 spawn 的那个进程**」，**判据一律走容器内观测**；② 「**无占用中的库句柄**」有**直接**判据（扫 `/proc/<pid>/fd`）：会话**中**该会话进程持有该库 **4** 个 fd（`db` / `-shm` / `-wal` / `.deferred-audit.journal`）、**收尾后 0 个** ⇒ **双向都被实测过**，不是「无则通过」型；③ 「**无僵尸**」的判据**必须按 `comm` 认名** —— **僵尸的 `cmdline` 是空的**，按 cmdline 前缀计数**永远抓不到它**；④ **SDK 不提供任何空闲机制**（只有**每请求**超时与 ping 自动 pong）⇒ 空闲超时 / 单会话最长时长必须**自己起计时器**；而 §12.5 列的**五类**回收触发里，**代码只实现了两条**（客户端断开 / HTTP 流结束）。
 - **落档**：[`web-portal/web-design.md`](web-portal/web-design.md) §12.5 新增「会话回收的实现口径」（`child` 语义 · 三条判据 · 三类触发的归属 · `AC4.3` 落点待拍板）· [`mcp/mcp-design.md`](mcp/mcp-design.md) §5.6.2 新增 `3.13` 实证块 · [`web-portal/web-test.md`](web-portal/web-test.md) §2 新增 `3.4` 落点（三条**既有**用例 `TC-P-L1-04` / `TC-P-L3-04` / `TC-P-L3-06` + 机制层 / 真上游两层判据）。
 - **清出一处契约矛盾（待拍板）**：`AC4.3`「路径留痕（审计行含解析后的库路径）」的落点 —— `RID D4` 的处理说明（2026-09-23 重排）与 `src/shared/audit.ts:25-28` 的注释**都说它属 Sprint 6「审计功能」**，而 `sprint-backlog.md` 的 `3.4` 行把「路径留痕」写在**本行**的验收条件里 ⇒ 已在 `3.4` 行写明证据与推荐口径（**本行写「会话建立」审计行、审计视图留 Sprint 6**），**未擅自定**。
-- **用户指定的两项并入 `3.4`**：① `child`（PID）字段落地（本轮已给出其**语义边界**：门户侧进程，不是容器内上游）② 修 `scripts/portal-mcp-probe.sh` 的 heredoc 反引号隐患（既有门禁脚本，随 `3.4` 修并复跑该门禁）。
+- **用户指定的两项并入 `3.4`**：① `child`（PID）字段落地（本轮已给出其**语义边界**：门户侧进程，不是容器内上游）② 修 `scripts/probes/portal-mcp-probe.sh` 的 heredoc 反引号隐患（既有门禁脚本，随 `3.4` 修并复跑该门禁）。
 - **排期同步**：[`sprint-backlog.md`](sprint-backlog.md) 增 `3.13` 行（研究 · `Done`）· `3.4` 行扩容为「三块范围 + 用户指定的既有隐患修复 + `AC4.3` 落点待拍板」· 编号口径与执行顺序同步 · 变更记录一行。
 
 **验证**：`cd memory.agent-mate.ai/probes/session-reclaim-probe && npm install && node probe.mjs` → **退出码 `0`**，两次复跑一致（**8/8 断言 PASS**）。原始输出落 `probes/session-reclaim-probe/out/`（**不入库**）。
@@ -161,7 +210,7 @@
 - **`child` → `childPid`（字段落实并更名）**：`UpstreamSession.pid`（`transport.pid` 取一次，`close()` 后回 `null`）→ `BridgeSession.childPid`；§12.5 的字段清单**按实测校正**（SDK 只暴露 PID、**不暴露 `ChildProcess` 句柄**；本机借壳下它指向**宿主的 `docker` 客户端** ⇒ 权威判据仍在容器内），并补记 `keyId` / `dbPath`、如实登记 `clientInfo` 至今未落地。
 - **`AC4.3` 机制落地 + 口径修正**：新增审计动作 **`mcp_session_opened`**（会话**登记成功后**写一行，`detail_json` 含 `dbPath` 与 `sessionId`）；`src/shared/audit.ts` 里「该审计行属审计视图批次、不在本批范围」的注释按拍板改写；**`RID D4` 处理说明**由「实现与测试落在 Sprint 6」修正为「**机制在 Sprint 4 `3.4`、审计视图在 Sprint 6**」并置 `Implemented`；**Sprint 6 `#1` 加备忘**（本行只做视图，且须覆盖该新动作）。
 - **`config.ts`**：两把已登记键（`PORTAL_SESSION_IDLE_TIMEOUT` / `PORTAL_SESSION_MAX_DURATION`）的**读取位**（正整数校验；**未提供 = 不启用该触发**，不写死默认值）。
-- **随本行修一处既有隐患**：`scripts/portal-mcp-probe.sh` 的 env heredoc **两处反引号会被当命令执行**（往 stderr 打 docker 用法信息）—— 修后复跑该门禁**零行为变化**。
+- **随本行修一处既有隐患**：`scripts/probes/portal-mcp-probe.sh` 的 env heredoc **两处反引号会被当命令执行**（往 stderr 打 docker 用法信息）—— 修后复跑该门禁**零行为变化**。
 - **测试判据修正**：`mcp-bridge.test.ts` 的 `TC-M-L1-17` 原按**审计行数**判「正常转发不误报」，会被合法的 `mcp_session_opened` 打破 ⇒ 改为按**动作**筛（语义判据，且更强）。
 
 **验证**：离线 **334 passed / 31 files** · 覆盖率 **93.47 / 86.84 / 97.72 / 94.64**（阈值 92/85/96/93，**四项均高于改前**）· `make portal-mcp-session-probe` **11/11 断言 PASS** · `make portal-mcp-probe` 退出码 `0`（同时验证 heredoc 修复零行为变化）· `make doc-links` / `make attestation-paths` 通过 · `npx tsc --noEmit` 0 错。
@@ -179,7 +228,7 @@
 - **实测到一条判据陷阱（本轮最有价值的结论）**：`memory_recall` 是**语义混合检索**，`count` = **返回条数**而非精确命中数 —— **从未写入**的标记**同样**会返回相关命中（⇒ `count:0` **永不出现**），同一库里多一条记忆时 `count:1` 会变 `count:2` ⇒ **按 `count` 写的断言必然假失败**。判据一律写「**回包里有没有那个标记**」，并带**反向对照**防空转。**本轮首版的两条断言正是这样假失败的** —— 而**恰恰因为带了反向对照**，才在第一次运行就暴露了它（而不是等交付后偶发假失败）。
 - **落档**：[`mcp/mcp-design.md`](mcp/mcp-design.md) §5.6.2 的 `3.14` 实证块 · [`mcp/mcp-test.md`](mcp/mcp-test.md) §4-F 的 `TC-M-L1-23` 与 `3.6` 落点 · [`sprint-backlog.md`](sprint-backlog.md) 的 `3.14` 行（研究 · `Done`）与 `3.6` 行的开工前置。
 - **覆盖核对（本行范围）**：`3.6` 的另一条验收条件「拒绝路径按预期失败」—— **无令牌**已由 `TC-M-L1-02` 覆盖；**越权库路径**的判据在**离线层**（`3.2` 的 spawn 前断言 fail-closed，发生在 spawn **之前** ⇒ 真上游**无观测面**，如实登记、不硬造真上游断言）。
-- **一处既有脆弱点（不是缺陷，已登记）**：`scripts/portal-mcp-probe.sh` 的召回断言写的是 `count:1`（`tests/fixtures/probe-runner.mts`）—— 它**现在稳**（该脚本每次清理会 `rm -rf /data/users/$HANDLE`，`portal-mcp-probe.sh:59` ⇒ 每次空库），但**判据本身脆**（一旦「一个会话写两条」或清库被去掉就假失败）⇒ 已写入 `3.6` 的范围，顺手改为按标记判。
+- **一处既有脆弱点（不是缺陷，已登记）**：`scripts/probes/portal-mcp-probe.sh` 的召回断言写的是 `count:1`（`tests/fixtures/probe-runner.mts`）—— 它**现在稳**（该脚本每次清理会 `rm -rf /data/users/$HANDLE`，`portal-mcp-probe.sh:59` ⇒ 每次空库），但**判据本身脆**（一旦「一个会话写两条」或清库被去掉就假失败）⇒ 已写入 `3.6` 的范围，顺手改为按标记判。
 
 **验证**：`cd memory.agent-mate.ai/probes/full-chain-probe && npm install && node probe.mjs` → **退出码 `0`**，两轮复跑一致（**7/7 断言 PASS**）。原始输出落 `probes/full-chain-probe/out/`（**不入库**）。
 
@@ -191,7 +240,7 @@
 
 - **跨进程召回判决据**（`admin_portal/tests/fixtures/probe-runner.mts`）：会话 A 写入 → 收尾 → **会话 B（另一个子进程）**用同一标记召回 ⇒ 回包含该标记；**并带反向对照**（从未写入的标记**不出现在**回包里）。
 - **既有召回断言由 `count:1` 改为按标记判**：`memory_recall` 是**语义混合检索**，`count` = **返回条数**（`3.14` 探针实测：从未写入的标记同样有相关命中、库里多一条就 `+1`）⇒ 按 `count` 写的断言**必然假失败**；它此前之所以不红，只是**靠主脚本每次清库**（`rm -rf /data/users/$HANDLE`）维持 —— 这种「靠别处恰好做了某事」的通过是**隐形**的。
-- **顺手修** `scripts/portal-mcp-probe.sh` 两处会误导人的前置提示：`make local-up`（**仓根没有该目标**，起容器是 `scripts/local-up.sh`）与 `cd admin_portal`（**仓根下没有该目录**）—— 用户已实际踩到这两个 `command not found`。
+- **顺手修** `scripts/probes/portal-mcp-probe.sh` 两处会误导人的前置提示：`make local-up`（**仓根没有该目标**，起容器是 `scripts/local-up.sh`）与 `cd admin_portal`（**仓根下没有该目录**）—— 用户已实际踩到这两个 `command not found`。
 
 **验证**：`make portal-mcp-probe` 由 **4 项 → 6 项断言全 PASS、退出码 `0`**（改前基线 **4/4**）· **判据敏感性已证明**（临时删掉该用户的库后重测，**同一判据 PASS → FAIL**）· `make portal-mcp-session-probe` 退出码 `0`（零回归）· 离线 **334 passed / 31 files** · `make doc-links` / `make attestation-paths` 通过 · `npx tsc --noEmit` 0 错。
 
@@ -199,7 +248,7 @@
 
 ### `3.7` 开工准备：`3.15` 探针定档「跨用户隔离」判决据
 
-**为什么**：`3.7`「跨用户隔离」的验收条件是「A/B **经同一门户实例**互不可见」+「两侧均记录**解析后的库路径**」。覆盖核对发现**两条都有缺口** —— `scripts/iso-probe.sh`（Sprint 3，`V2` / `V3` / `V4` 的本地版）已证**上游级**隔离（交叉 `get` / 库路径解析 / 共享主库不变），但那是**用显式 env 直连上游**、**没有经过门户**；`make portal-mcp-session-probe`（`3.3` / `3.4`）虽然经门户起了两个用户的会话，但验的是**进程与文件隔离**，**从没让 B 去召回 A 写的东西**。而「令牌 → handle → 库路径」这一步**恰恰在门户** —— `R1`（致命：多用户隔离可能静默失效）与 `R2`（严重：隔离完全依赖门户一处正确性，无纵深）指向的就是它。⇒ 判据不实测一遍，写进 `mcp-test.md` 就还是**纸面判据**。
+**为什么**：`3.7`「跨用户隔离」的验收条件是「A/B **经同一门户实例**互不可见」+「两侧均记录**解析后的库路径**」。覆盖核对发现**两条都有缺口** —— `scripts/probes/iso-probe.sh`（Sprint 3，`V2` / `V3` / `V4` 的本地版）已证**上游级**隔离（交叉 `get` / 库路径解析 / 共享主库不变），但那是**用显式 env 直连上游**、**没有经过门户**；`make portal-mcp-session-probe`（`3.3` / `3.4`）虽然经门户起了两个用户的会话，但验的是**进程与文件隔离**，**从没让 B 去召回 A 写的东西**。而「令牌 → handle → 库路径」这一步**恰恰在门户** —— `R1`（致命：多用户隔离可能静默失效）与 `R2`（严重：隔离完全依赖门户一处正确性，无纵深）指向的就是它。⇒ 判据不实测一遍，写进 `mcp-test.md` 就还是**纸面判据**。
 
 **做了什么**（**只做开工准备，产品代码一行未动**）：
 
@@ -512,7 +561,7 @@
 - **Sprint 5** → 「全套产品最小 MVP 上线野草云4（生产部署 · 上线验收 · 备份恢复）」：整体承接原 Sprint 6 的部署、接入面与备份内容；**新增**「门户镜像与编排制品」—— 全仓此前**不存在**门户 Dockerfile 与门户 compose（该缺口在设计包期以「假设（可推翻）」登记过，一直未产出），是重排后新识别的最关键缺口。
 - **Sprint 6** → 「门户运营闭环与对外口径定稿」：承接原 Sprint 4 移出的运营、容量、界面与文档收口项，以及原 Sprint 5 的 MCP 侧收尾；其中原 Sprint 4 `4.8` 与原 Sprint 6 `#10`（同一件事的「判据面」与「实测面」）**合并为一行**。
 - **Sprint 7** 不变（升级治理）。
-- **同步面**：RID Registry 与覆盖对照表逐行改指（R1–R3 / D1–D6）· [`product-backlog.md`](./product-backlog.md) 的 31 条 `Sprint` 投影与 5 处关联列链接文字 · [`web-portal/web-stories.md`](./web-portal/web-stories.md) 故事索引 14 行 · [`mcp/mcp-stories.md`](./mcp/mcp-stories.md) / [`mcp/mcp-test.md`](./mcp/mcp-test.md) / [`mcp/mcp-design.md`](./mcp/mcp-design.md) 的落点列与前瞻句 · [`deployment.md`](./deployment.md) · [`architecture.md`](./architecture.md) · [`web-portal/web-design.md`](./web-portal/web-design.md) · [`web-portal/web-test.md`](./web-portal/web-test.md) · [`web-portal/portal-identity-plan.md`](./web-portal/portal-identity-plan.md) · [`web-portal/issues-log.md`](./web-portal/issues-log.md) · [`adr/ADR-009`](./adr/ADR-009-per-user-db-isolation-over-single-db-agent-id.md) · [`adr/ADR-008`](./adr/ADR-008-local-baseline-reuses-production-compose.md) · [`../scripts/limits-probe.sh`](../scripts/limits-probe.sh) 与 [`../scripts/maintain-user-dbs.sh`](../scripts/maintain-user-dbs.sh) 的注释。5 个稳定锚点 id 全部保留、只随行迁移，并显式声明「**id 前缀不等于当前 Sprint 号**」（`s4-audit-view` / `s4-identity-docs` 现落在 Sprint 6）。
+- **同步面**：RID Registry 与覆盖对照表逐行改指（R1–R3 / D1–D6）· [`product-backlog.md`](./product-backlog.md) 的 31 条 `Sprint` 投影与 5 处关联列链接文字 · [`web-portal/web-stories.md`](./web-portal/web-stories.md) 故事索引 14 行 · [`mcp/mcp-stories.md`](./mcp/mcp-stories.md) / [`mcp/mcp-test.md`](./mcp/mcp-test.md) / [`mcp/mcp-design.md`](./mcp/mcp-design.md) 的落点列与前瞻句 · [`deployment.md`](./deployment.md) · [`architecture.md`](./architecture.md) · [`web-portal/web-design.md`](./web-portal/web-design.md) · [`web-portal/web-test.md`](./web-portal/web-test.md) · [`web-portal/portal-identity-plan.md`](./web-portal/portal-identity-plan.md) · [`web-portal/issues-log.md`](./web-portal/issues-log.md) · [`adr/ADR-009`](./adr/ADR-009-per-user-db-isolation-over-single-db-agent-id.md) · [`adr/ADR-008`](./adr/ADR-008-local-baseline-reuses-production-compose.md) · [`../scripts/probes/limits-probe.sh`](../scripts/probes/limits-probe.sh) 与 [`../scripts/maintain-user-dbs.sh`](../scripts/maintain-user-dbs.sh) 的注释。5 个稳定锚点 id 全部保留、只随行迁移，并显式声明「**id 前缀不等于当前 Sprint 号**」（`s4-audit-view` / `s4-identity-docs` 现落在 Sprint 6）。
 - **历史不改**：Sprint 1–3 的回顾正文、各文档变更记录流水、`knowledge/*` 证据、`sdd-scrum-practices.md` 的体例举例按原样保留（该口径与「活跃引用必改」在上一轮 Replan 中已定型）。
 
 **验证**：`make doc-links` → **45 个 Markdown / 1190 条相对链接 / 零悬空**（首次跑曾抓出变更记录里一处通配符链接 `ADR-008-*.md`，已改为纯文本）· 原型断言 **159/159** · `sprint-backlog.md` 内 5 个锚点 id **各定义 1 处** · RID 覆盖对照表 **R1–R3 / D1–D6 每行 4/4 列非空** · 全仓 grep 指向旧落点的**活跃引用为 0**（已排除变更记录与历史叙述）· `product-backlog.md` 的 31 条投影与 `sprint-backlog.md` 逐条核对一致。
@@ -552,7 +601,7 @@
 - **`git mv`**：`specs/sprint-plan.md` → [`sprint-backlog.md`](sprint-backlog.md)（保留 rename 形态与 `git log --follow` 历史）；H1 同步为 `# sprint-backlog — memory.agent-mate.ai 产品化`。
 - **全量同步引用**：按仓内既有改名口径（先例：2026-09-21 的 `sprint_plan.md` → `sprint-plan.md`；更早的 `hk_vps_4/` → `memory.agent-mate.ai/`）同步 **17 个文件** —— specs 内 14 份 + 脚本 3 个。
 - **三类分别处理，防止误改**：① **链接式**（含 **15 处深链接** `sprint-backlog.md#<anchor>`，锚点 id 原样保留）；② **正文提及**（含两处 `related_spec:` front-matter —— `sdd-scrum-practices.md` 与 [`knowledge/docs/spec-doc-conventions.md`](knowledge/docs/spec-doc-conventions.md)；以及 `sdd-scrum-practices.md` 的 §4 单一真源表 / §5 文档清单、[`adr/ADR-010`](adr/ADR-010-specs-single-source-and-doc-structure.md) 的文档结构表）；③ **旧名映射**（刻意不改）。
-- **脚本**：[`../scripts/attestation-paths-check.sh`](../scripts/attestation-paths-check.sh) 的 `SCAN` 数组硬编码路径同步（不改会让该护栏直接失败）；[`../scripts/iso-probe.sh`](../scripts/iso-probe.sh) 与 [`../scripts/link-check.sh`](../scripts/link-check.sh) 的注释指称同步。
+- **脚本**：[`../scripts/attestation-paths-check.sh`](../scripts/attestation-paths-check.sh) 的 `SCAN` 数组硬编码路径同步（不改会让该护栏直接失败）；[`../scripts/probes/iso-probe.sh`](../scripts/probes/iso-probe.sh) 与 [`../scripts/link-check.sh`](../scripts/link-check.sh) 的注释指称同步。
 - **旧名残留收口**：旧名只作为**映射**保留在两处 —— ① **改名记录**（本文件 2026-09-21 节与本次小节 · [`architecture.md`](architecture.md) / `sdd-scrum-practices.md` / [`sprint-backlog.md`](sprint-backlog.md) 各自变更记录）；② **改名口径说明**（[`knowledge/docs/spec-doc-conventions.md`](knowledge/docs/spec-doc-conventions.md) 新增的 guidance 条，需指名写出改名链才能被复核）。其余位置一律已改指新名。`.codebuddy/plans/` 下 18 份历史计划虽含该串，但该目录已被 `.gitignore` 忽略（`git ls-files` 0 条）⇒ 不在仓库内，不改。
 
 **验证**：`make doc-links` 36 文件 / **1029 相对链接 / 0 悬空**（计数为本条写出时刻的快照；同节其它条目内的计数为其自身批次快照，故数值不同） · `make attestation-paths` 五路径通过（`$SPECS/sprint-backlog.md` 已同步）· `make secret-check` 干净 · `git diff --check` 干净 · `git status` 呈 `R` rename 形态 · 全仓 `grep sprint-plan` 残留逐条核为改名记录。
@@ -631,7 +680,7 @@
 
 **做了什么**：
 
-- **改名**：`git mv memory.agent-mate.ai/specs/sprint_plan.md → sprint-plan.md`，按仓内既有改名口径（先例：`hk_vps_4/` → `memory.agent-mate.ai/` 的「引用 227 处 → 0」）全量同步引用，共 **16 个文件** —— specs 内 13 份（[`architecture.md`](architecture.md) · [`change-log.md`](change-log.md) · [`product-backlog.md`](product-backlog.md) · `sdd-scrum-practices.md` · [`web-portal/web-stories.md`](web-portal/web-stories.md) · [`mcp/mcp-test.md`](mcp/mcp-test.md) · [`adr/ADR-006`](adr/ADR-006-public-repo-ip-placeholder-deidentification.md) / [`ADR-010`](adr/ADR-010-specs-single-source-and-doc-structure.md) / [`ADR-011`](adr/ADR-011-doc-style-text-over-icons.md) / [`ADR-013`](adr/ADR-013-sdd-scrum-process-doc-boundaries.md) · [`knowledge/docs/spec-doc-conventions.md`](knowledge/docs/spec-doc-conventions.md)（含 front-matter `related_spec`）· [`knowledge/git-tooling/gotchas.md`](knowledge/git-tooling/gotchas.md) · 本文件）与脚本 3 个（[`../scripts/iso-probe.sh`](../scripts/iso-probe.sh) 注释 · [`../scripts/link-check.sh`](../scripts/link-check.sh) 注释 · [`../scripts/attestation-paths-check.sh`](../scripts/attestation-paths-check.sh) 的 `$SPECS` 文档清单）。旧名残留由 20+ 处降到 **0 处**，只在改名记录里保留旧→新映射。
+- **改名**：`git mv memory.agent-mate.ai/specs/sprint_plan.md → sprint-plan.md`，按仓内既有改名口径（先例：`hk_vps_4/` → `memory.agent-mate.ai/` 的「引用 227 处 → 0」）全量同步引用，共 **16 个文件** —— specs 内 13 份（[`architecture.md`](architecture.md) · [`change-log.md`](change-log.md) · [`product-backlog.md`](product-backlog.md) · `sdd-scrum-practices.md` · [`web-portal/web-stories.md`](web-portal/web-stories.md) · [`mcp/mcp-test.md`](mcp/mcp-test.md) · [`adr/ADR-006`](adr/ADR-006-public-repo-ip-placeholder-deidentification.md) / [`ADR-010`](adr/ADR-010-specs-single-source-and-doc-structure.md) / [`ADR-011`](adr/ADR-011-doc-style-text-over-icons.md) / [`ADR-013`](adr/ADR-013-sdd-scrum-process-doc-boundaries.md) · [`knowledge/docs/spec-doc-conventions.md`](knowledge/docs/spec-doc-conventions.md)（含 front-matter `related_spec`）· [`knowledge/git-tooling/gotchas.md`](knowledge/git-tooling/gotchas.md) · 本文件）与脚本 3 个（[`../scripts/probes/iso-probe.sh`](../scripts/probes/iso-probe.sh) 注释 · [`../scripts/link-check.sh`](../scripts/link-check.sh) 注释 · [`../scripts/attestation-paths-check.sh`](../scripts/attestation-paths-check.sh) 的 `$SPECS` 文档清单）。旧名残留由 20+ 处降到 **0 处**，只在改名记录里保留旧→新映射。
 - **回顾体例收口**：`sdd-scrum-practices.md` §2.3 新增约束 —— `Retrospective` 只有「做得好」「学到」「下轮改进」三组，同一 Sprint 内的多次回顾**合并进这三组**，不新增「补记」类子标题；并据此把 Sprint 3 已有的三段回顾（主块 + 门户故事引用补记 + #5 维护定档补记）**合并为一组**。
 - **归属校正**：门户故事引用收口的回顾由 Sprint 3 迁至 **Sprint 4**；Sprint 4 #0「web-portal 设计」的 `关联文档` 由纯文本清单改为可点击链接，并补「首个增量已落盘、待整体批准」的说明 —— 状态仍为 `ToDo`，因为其验收条件是「用户批准验收」整份门户设计，不因一个增量而关闭。
 
@@ -653,7 +702,7 @@
 
 **验证**：`make doc-links` · `make secret-check` · `make attestation-paths` · `git diff --check` 退出码 0；全仓复核**错指零残留**（旧故事号只出现在历史变更记录里且为纯文本）；每张被改表的 `|` 计数与列数一致；新增 TC ID 全局唯一且连续（L0 到 09、L1 到 13），并与故事索引双向可查。
 
-**边界**：不扫历史变更记录中的旧故事号（历史叙述不等于引用）。「**静默失败点**」编号与故事号**同名不同义**，一律不动：[`deployment.md`](deployment.md) §7.2 的 S1–S3、[`web-portal/web-design.md`](web-portal/web-design.md) §5 的 S4，以及 [`web-portal/web-test.md`](web-portal/web-test.md) 与 [`sprint-backlog.md`](sprint-backlog.md) 中沿用该编号的行；[`../scripts/i18n-probe.sh`](../scripts/i18n-probe.sh) 的测试项标签 `S1–S12` 同理。[`product-backlog.md`](product-backlog.md) 中「本应引用故事号但当前未引用」的条目（#2 / #6 / #11 / #17 / #26 / #29）本轮未动；#14 已引 `S3`，其缺的是 S8 侧（已由 Sprint 5 #6 补上）。如需继续补齐另开。
+**边界**：不扫历史变更记录中的旧故事号（历史叙述不等于引用）。「**静默失败点**」编号与故事号**同名不同义**，一律不动：[`deployment.md`](deployment.md) §7.2 的 S1–S3、[`web-portal/web-design.md`](web-portal/web-design.md) §5 的 S4，以及 [`web-portal/web-test.md`](web-portal/web-test.md) 与 [`sprint-backlog.md`](sprint-backlog.md) 中沿用该编号的行；[`../scripts/probes/i18n-probe.sh`](../scripts/probes/i18n-probe.sh) 的测试项标签 `S1–S12` 同理。[`product-backlog.md`](product-backlog.md) 中「本应引用故事号但当前未引用」的条目（#2 / #6 / #11 / #17 / #26 / #29）本轮未动；#14 已引 `S3`，其缺的是 S8 侧（已由 Sprint 5 #6 补上）。如需继续补齐另开。
 
 ### Sprint 3 #5 收口：每用户库维护行为定档（宿主机 cron + 覆盖面实测）
 
@@ -663,7 +712,7 @@
 - **维护入口落成脚本**：新增 [`../scripts/maintain-user-dbs.sh`](../scripts/maintain-user-dbs.sh)（Bash 3.2；`--dry-run` / `--max-ops` / `--root`；退出码 0 / 1 / 2），并接 `make maintain-user-dbs`。文档只引用脚本路径 —— 只有脚本才能被 cron 稳定调用、被探针静态审计、被路径一致性护栏覆盖。逐 (库, 命令) 独立 `docker exec`，使失败可精确定位到库。
 - **两条硬约束**：每条调用**显式 `--db <绝对路径>`**（源码侧 `--db` 只是 `AI_MEMORY_DB` 的 fallback：不传且 env 缺省时会**静默新建**相对路径 `ai-memory.db`；容器内该 env 指向**主库**）与**显式 `AI_MEMORY_REQUIRE_AGENT_ATTESTATION=0`**（v0.11 起上游缺省翻转为全 surface required）。
 - **失败语义**：单库失败**不中断**、打印可定位信息后继续，最终非零退出供 cron 告警 —— 遇错即停会让排在后面的库永远得不到维护。**环境不可用（容器未运行 / 无法列举用户库）以 `3` 响亮失败**，绝不把「什么都没维护」当成成功：终审时发现首版在容器未运行时 `list_dbs` 返回空集、会以「未发现任何用户库」的样子静默成功（rc=0），正是本项目最忌讳的失败形态，已补前置存活检查与 `list_dbs` 退出码校验。退出码契约：`0` 成功 / `1` 有库失败 / `2` 参数错误 / `3` 环境不可用。
-- **探针**：新增 [`../scripts/gc-probe.sh`](../scripts/gc-probe.sh)（L1.8；退出码 0/10/20/30/40/50/60/70；`--self-test` 负向自测），实跑退出码 0、7 项断言通过。
+- **探针**：新增 [`../scripts/probes/gc-probe.sh`](../scripts/probes/gc-probe.sh)（L1.8；退出码 0/10/20/30/40/50/60/70；`--self-test` 负向自测），实跑退出码 0、7 项断言通过。
 
 **实测得到的三条覆盖面结论**（都已推翻或修正既有假定）：
 
@@ -682,7 +731,7 @@
 
 **结论回写唯一真源**：[`mcp/mcp-design.md`](mcp/mcp-design.md) §5.3（调度定档 + 覆盖面表 + 两条硬约束 + 失败语义 + 边界）· [`mcp/mcp-test.md`](mcp/mcp-test.md) §1 新增 **L1.8** / §2 完成态 / §4-C `TC-GC-01..04` / §5 · [`deployment.md`](deployment.md) §5.3「每库维护」小节 + §14 · [`product-backlog.md`](product-backlog.md) #13（`Implemented`）· [`sprint-backlog.md`](sprint-backlog.md) #5（`Implemented`）+ Sprint 3 Retrospective 补记 · [`knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md`](knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md) 表行 + 教训 21 + Links · 根 `Makefile` 新增 `maintain-user-dbs` 目标并把 `attestation-paths` 描述改为五路径。
 
-**可复跑验证**：`bash memory.agent-mate.ai/scripts/gc-probe.sh`（退出码 0）· `--self-test` · `bash memory.agent-mate.ai/scripts/attestation-paths-check.sh --self-test` · 回归 `mcp-smoke.sh` / `iso-probe.sh` / `limits-probe.sh` · `make doc-links` / `make secret-check` / `make attestation-paths` / `make preflight-test` · `git diff --check`。
+**可复跑验证**：`bash memory.agent-mate.ai/scripts/probes/gc-probe.sh`（退出码 0）· `--self-test` · `bash memory.agent-mate.ai/scripts/attestation-paths-check.sh --self-test` · 回归 `mcp-smoke.sh` / `iso-probe.sh` / `limits-probe.sh` · `make doc-links` / `make secret-check` / `make attestation-paths` / `make preflight-test` · `git diff --check`。
 
 **边界**：生产定时器安装、日志采集与告警留 Sprint 5；HTTP 面与生产通道复验同属 Sprint 5。
 
@@ -720,7 +769,7 @@
 **做了什么**：把上游 `[limits]` 段落进生产模板并给出**行为级**证据，同时把「配置生效」与「行为生效」两件事分开证明。
 
 - **模板（策略：显式等于编译默认）**：`deploy/config.toml.tmpl` 新增 `[limits]`，**写全 7 键且取值等于 ai-memory v0.10.0 编译默认**（`1000` / `104857600` / `5000` / `1000` / `0` / `100000` / `false`），注释说明优先级（env > section > 编译默认）、非正值视为未设、逐 `(agent_id, namespace)` 盖章、CLI 写入不计费、`max_page_size` 与 `max_inflight_requests` 为 HTTP 面专属，以及本地 `config.local.toml` 缺该段时的**行为等价性**。选「写死默认值」而非「留空靠上游」与 `--profile core`、`AI_MEMORY_REQUIRE_AGENT_ATTESTATION=0` 同源：不写就等于把行为交给上游默认值，而改变是**静默**的。
-- **探针（不污染生产默认值）**：新增 [`../scripts/limits-probe.sh`](../scripts/limits-probe.sh)（Bash 3.2；退出码 10/20/30/40/50/60/70；含 `--self-test` 负向自测）。**只经 env 注入小阈值**，在**独立一次性库**（`/data/users/limits-probe/`，退出时按唯一时间戳前缀连同 `deferred-audit` 旁路日志一并清理）上用**每轮全新身份**运行：
+- **探针（不污染生产默认值）**：新增 [`../scripts/probes/limits-probe.sh`](../scripts/probes/limits-probe.sh)（Bash 3.2；退出码 10/20/30/40/50/60/70；含 `--self-test` 负向自测）。**只经 env 注入小阈值**，在**独立一次性库**（`/data/users/limits-probe/`，退出时按唯一时间戳前缀连同 `deferred-audit` 旁路日志一并清理）上用**每轮全新身份**运行：
   1. 三类配额各取一个全新 `agent_id`：`AI_MEMORY_MAX_MEMORIES_PER_DAY=1` → 第 2 条 `memory_store` 被拒；`AI_MEMORY_MAX_STORAGE_BYTES=1` → 首条即被拒；`AI_MEMORY_MAX_LINKS_PER_DAY=1`（会话内 `--profile graph`）→ 第 2 条 `memory_link` 被拒。错误串均含 `QUOTA_EXCEEDED`，并以 `quota-status --namespace global --json`（**刻意去掉注入 env**）交叉核对配额行**仍等于注入值** —— 同时证明「配额行在首次写入时盖章」与「注入阈值确实生效」。
   2. 向量容量：`capacity=1` + `hard_fail=true`，**跨进程**预热 ≥1 条后插入被拒（先断言阻塞预热已落地），同时断言**记忆行仍落库**（`insert` 返回 `void`，不回滚）。
   3. 面归属：`max_page_size=1` / `max_inflight_requests=1` 下 stdio 会话的写入与列表**均正常** ⇒ 二者确为 HTTP 面专属。
@@ -733,7 +782,7 @@
 3. **CLI 一次性写入不计费** —— 用 `ai-memory store` 永远验不出配额失效；只有 daemon 面 MCP 写路径调用 `check_and_record`。
 4. **`quota-status` 查错 namespace 会「自建行 + 报默认值」** —— MCP `memory_store` 默认写入 **`global`** 命名空间，而 `quota-status --namespace <ns>` 对**不存在的** `(agent, namespace)` 会**现场建行**并按当前 env 盖章。首版探针查 `default` 且**带着同一注入 env**，等于自己把值写进了新行 —— 是一条**自证式（恒真）断言**。终审时用「去掉 env 复读」把它试出来，修正为「去掉 env + `--namespace global`」后该断言才真正可失败。
 
-**可复跑验证**：`bash memory.agent-mate.ai/scripts/limits-probe.sh`（退出码 0）· `--self-test` · 回归 `mcp-smoke.sh` / `iso-probe.sh` · `make doc-links` / `make secret-check` / `make attestation-paths` / `make preflight-test` · `git diff --check`。
+**可复跑验证**：`bash memory.agent-mate.ai/scripts/probes/limits-probe.sh`（退出码 0）· `--self-test` · 回归 `mcp-smoke.sh` / `iso-probe.sh` · `make doc-links` / `make secret-check` / `make attestation-paths` / `make preflight-test` · `git diff --check`。
 
 **边界**：HTTP 面超限（`max_page_size` / `max_inflight_requests` 真正触发）本地**无法验证**（容器不发布端口、镜像内无 curl/wget）⇒ 留 Sprint 5 生产通道；生产 SSH 通道的配额复核同属 Sprint 5。
 
@@ -765,11 +814,11 @@
 
 **实现**：tracked 的 [`../deploy/config.toml.tmpl`](../deploy/config.toml.tmpl) 移除顶层 `db`；[`../scripts/local-up.sh`](../scripts/local-up.sh) 从 `config.local.toml` 派生运行时配置时剥离裸键、双引号键和单引号键形式的顶层 `db`，保留 section 内同名键，并用临时文件、原子替换和 `0600` 权限生成 `.env` / `config.toml`；结果含顶层 `db` 时拒绝启动。
 
-**探针**：[`../scripts/iso-probe.sh`](../scripts/iso-probe.sh) 的 V1 现在要求漏设 `AI_MEMORY_DB` 时 `doctor` 非零；只规范化同一次响应中的 `source`，要求绝对路径且不等于 `/data/ai-memory.db`，失败原因属于存储路径；主库记忆计数在 P1a 与 P2 前后均必须可读且不变。P3 复用完整用户环境，方案②对照的伪造写入与归属可见性改为硬断言。
+**探针**：[`../scripts/probes/iso-probe.sh`](../scripts/probes/iso-probe.sh) 的 V1 现在要求漏设 `AI_MEMORY_DB` 时 `doctor` 非零；只规范化同一次响应中的 `source`，要求绝对路径且不等于 `/data/ai-memory.db`，失败原因属于存储路径；主库记忆计数在 P1a 与 P2 前后均必须可读且不变。P3 复用完整用户环境，方案②对照的伪造写入与归属可见性改为硬断言。
 
 **文档同步**：更新 `sprint-backlog.md` 风险 / D2 / V1 / V2 及 Sprint 3 #2–#3 状态；更新 `mcp-design.md`、`mcp-test.md`、`web-portal/web-test.md`、ADR-008/009 的现行归属与验收表述；历史变更日志中的旧编号保留，并将已取消的方案②写路径泄露探针明确标注为取消。
 
-**验证**：`bash memory.agent-mate.ai/scripts/local-up.sh` 成功重建本地服务；`bash memory.agent-mate.ai/scripts/iso-probe.sh` 退出码 **0**。V1 实测 `rc=2`、`source=ai-memory.db` 规范化为 `/ai-memory.db`、共享主库计数不变；V2–V4、P4、P5 与方案②硬断言全部通过。静态夹具覆盖三种顶层 `db` 键形式且通过；脚本语法与 `git diff --check` 通过。
+**验证**：`bash memory.agent-mate.ai/scripts/local-up.sh` 成功重建本地服务；`bash memory.agent-mate.ai/scripts/probes/iso-probe.sh` 退出码 **0**。V1 实测 `rc=2`、`source=ai-memory.db` 规范化为 `/ai-memory.db`、共享主库计数不变；V2–V4、P4、P5 与方案②硬断言全部通过。静态夹具覆盖三种顶层 `db` 键形式且通过；脚本语法与 `git diff --check` 通过。
 
 **边界**：生产 SSH 通道复验仍属 Sprint 5 #8；有效但错误他库路径的门户 spawn 前置断言仍属 Sprint 4 #7；每库 `gc` / `curator --once` 覆盖面仍属 Sprint 3 #5。
 
@@ -819,7 +868,7 @@
 | 决议 | 结论 | 落点 |
 | --- | --- | --- |
 | 档位 | 对外 = `core`（8 项）；管理员入口 = `admin`（22 项） | [`mcp/mcp-design.md`](mcp/mcp-design.md) §8.1 / §8.3 + 四处模板（[`deployment.md`](deployment.md) §4.3 · [`mcp/mcp-design.md`](mcp/mcp-design.md) §5.1–§5.2 · [`web-portal/web-design.md`](web-portal/web-design.md) §3.3 · [`mcp/mcp-test.md`](mcp/mcp-test.md) §3） |
-| i18n 范围 | **部分支持**（存储与语义召回可用；关键词通路受 FTS5 `unicode61` 限制、简繁不归一；无任何配置项） | `product-backlog.md` #10（Done）· [`mcp/mcp-design.md`](mcp/mcp-design.md) §2 / §9 J4 · [`mcp/mcp-test.md`](mcp/mcp-test.md) §1 L1.6 / §4-E · 探针 [`../scripts/i18n-probe.sh`](../scripts/i18n-probe.sh) |
+| i18n 范围 | **部分支持**（存储与语义召回可用；关键词通路受 FTS5 `unicode61` 限制、简繁不归一；无任何配置项） | `product-backlog.md` #10（Done）· [`mcp/mcp-design.md`](mcp/mcp-design.md) §2 / §9 J4 · [`mcp/mcp-test.md`](mcp/mcp-test.md) §1 L1.6 / §4-E · 探针 [`../scripts/probes/i18n-probe.sh`](../scripts/probes/i18n-probe.sh) |
 | LLM 选择 | `tier = smart` + `qwen-plus` + `qwen3.7-text-embedding`（`dim = 1024`）+ 显式 `base_url` | [`architecture.md`](architecture.md) §2.1 #3/#4 · [`adr/ADR-007`](adr/ADR-007-qwen-private-maas-endpoint-and-measured-embedding-dim.md) · [`deployment.md`](deployment.md) §5.3 |
 | 备份选择 | OSS 私有桶（香港 + SSE）+ 每日外迁 + sha256 校验 + RPO ≤ 24h / RTO ≤ 2h | `product-backlog.md` #9 · [`deployment.md`](deployment.md) §8 |
 
@@ -833,7 +882,7 @@
 | 工具说明改为**按档位** | 原「按族」的 8 个小节取消，改为 **6 张档位详表**：`core` 8 / `admin` 22 / `graph` 20 / `power` 57 / `full` 101 / 自定义 `core,lifecycle` 14；**每张表只列本档新增**（上一档已列过的不重复），首列为**全档连续编号**（`core` 1–8 / `admin` 9–22 / `graph` 23–34 / `power` 35–83 / `full` 84–101；自定义 `core,lifecycle` 沿用 9–14），其余列固定为「工具 / 做什么 / 什么时候用 / **示例**」 |
 | 例子进表格 | 原独立的「一个完整的例子」章节**删除**，示例并入表格的「示例」列（一句自然语言用法） |
 
-工具数与成员**以运行时实测为准**，非手工整理：档位计数用 [`../scripts/profile-probe.sh`](../scripts/profile-probe.sh)（7 档全绿），成员清单用逐档 `tools/list`，功能说明用 `memory_capabilities` 的 verbose drilldown（8 族，101/101 取到完整 `docs`）—— 裸 `tools/list` 的 `description` 是被截断的短描述，不可用于对外说明。
+工具数与成员**以运行时实测为准**，非手工整理：档位计数用 [`../scripts/probes/profile-probe.sh`](../scripts/probes/profile-probe.sh)（7 档全绿），成员清单用逐档 `tools/list`，功能说明用 `memory_capabilities` 的 verbose drilldown（8 族，101/101 取到完整 `docs`）—— 裸 `tools/list` 的 `description` 是被截断的短描述，不可用于对外说明。
 
 **三、[`sprint-backlog.md`](sprint-backlog.md) 体例改造**
 
@@ -854,7 +903,7 @@
 - **每个 Sprint 后新增 `Retrospective` 章节**（本轮学到 / 下轮改进）：Sprint 1 与 Sprint 2 写实际内容（含「`tools/list` 短描述不可用于对外说明」「`--profile` 不写会静默等于 core、口径须四处一致」「先想做什么再选档」「研究类条目以只读探针 + 退出码契约为起点」「R1 只能靠负向验证」），Sprint 3–6 留占位待填。
 - **#11 扩展**：事项追加上述两处改造，验收条件加「档位表工具数与探针实测一致 / 无 emoji / 相对链接可解析 / 对外示例一律占位符」，状态置「进行中」。
 
-**可复跑验证**：`make doc-links`（相对链接）· `make secret-check`（无真实地址与密钥）· `make preflight-test` · `bash memory.agent-mate.ai/scripts/profile-probe.sh`（7 档计数）。
+**可复跑验证**：`make doc-links`（相对链接）· `make secret-check`（无真实地址与密钥）· `make preflight-test` · `bash memory.agent-mate.ai/scripts/probes/profile-probe.sh`（7 档计数）。
 
 ### 模板定档落盘 + 用户版能力文档（Sprint 2 #9 收尾）
 
@@ -885,7 +934,7 @@
 | 对外（SSH + 门户，**统一**） | `core` | 8 | 最小面；不引入治理 / 图谱 / 自治编排面；代价见下方「已知限制」 |
 | 管理员入口（**独立**模板） | `full` | 101 | 排障需要 Meta 族（`memory_stats` / `memory_agent_list` / `memory_recall_observations`）与 Archive（`memory_archive_stats`）—— `admin`（22）档看不到这些；该通道仅管理员本人使用，提示词开销可接受 |
 
-**实测**（可复跑探针 [`../scripts/profile-probe.sh`](../scripts/profile-probe.sh)：隔离库 `/data/users/profile-probe/`、只读、每档独立进程、退出码 0）：
+**实测**（可复跑探针 [`../scripts/probes/profile-probe.sh`](../scripts/probes/profile-probe.sh)：隔离库 `/data/users/profile-probe/`、只读、每档独立进程、退出码 0）：
 
 | 档位 | 期望 | 实测 | 关键工具归属（实测） |
 | --- | --- | --- | --- |
@@ -922,7 +971,7 @@
 | 按 id 直取（`memory_get`） | 支持 | 支持 | 支持 |
 
 - **源码依据**：`memories_fts` 建表 `USING fts5(…)` 未指定 `tokenize=` → 默认分词器 `unicode61`（不做 CJK 分词、不做简繁归一）；`sanitize_fts_query`（`src/storage/mod.rs:7030`）剥除全部 FTS5 特殊字符（无通配）、逐词元短语化、隐式 AND；`[mcp]` 配置段仅 profile / allowlist / profile_hint_in_errors —— **无任何语言 / 分词 / 检索配置项**。
-- **复现**：`bash memory.agent-mate.ai/scripts/i18n-probe.sh`（隔离库 `/data/users/i18n-probe/`，不碰主库与 iso 库；三阶段分进程；退出码 0/10/20/30/40/50；`I18N_PROBE_STRICT=1` 把语言边界当断言防上游漂移）。首跑 `1789958920-48352` / 默认复跑 `1789959024-49737` / STRICT 复跑 `1789959038-49972` 全绿（含 CONFLICT 幂等分支）。交叉验证：Cursor `ai-memory-local` 客户端直调结论一致（标记 `i18n-cross-20260921`）。
+- **复现**：`bash memory.agent-mate.ai/scripts/probes/i18n-probe.sh`（隔离库 `/data/users/i18n-probe/`，不碰主库与 iso 库；三阶段分进程；退出码 0/10/20/30/40/50；`I18N_PROBE_STRICT=1` 把语言边界当断言防上游漂移）。首跑 `1789958920-48352` / 默认复跑 `1789959024-49737` / STRICT 复跑 `1789959038-49972` 全绿（含 CONFLICT 幂等分支）。交叉验证：Cursor `ai-memory-local` 客户端直调结论一致（标记 `i18n-cross-20260921`）。
 - **工程口径**：中文检索一律走 `memory_recall`；关键词通路只用于 ASCII 标记与中文整段引用。
 - **#6 key 验证**：`qwen-verify.sh --key` → `embed_model=qwen3.7-text-embedding-flash`、`dim=1024`（同工作空间、同模型）；另以 `-e DASHSCOPE_API_KEY` 覆盖注入隔离会话复核 —— 写入成功 + 跨进程召回 `mode=hybrid`（embedder 未降级）、stderr 无鉴权失败。
 - **回写**：[`product-backlog.md`](product-backlog.md) #10（ToDo → Done；改动授权来源 = 该行验收条件「给出明确结论并回写本行描述」）· [`sprint-backlog.md`](sprint-backlog.md) #6/#8 + 变更记录 · [`mcp/mcp-test.md`](mcp/mcp-test.md) §1 L1.6 + §4-E（TC-I18N-01..06）+ §5 · [`mcp/mcp-design.md`](mcp/mcp-design.md) §2 能力边界 + §9 契约点 J4 + §10 · [`knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md`](knowledge/upstream-ai-memory/upstream-facts-and-gotchas.md) 多语言专表 + 教训 #10 升级 · [`architecture.md`](architecture.md) §4.1 + §7。
@@ -1053,7 +1102,7 @@
 
 ## 回归基线（改名或增删文档后必跑）
 
-`make doc-links` · `make secret-check` · `make preflight-test` · `bash memory.agent-mate.ai/scripts/iso-probe.sh`（exit 0 为准入）
+`make doc-links` · `make secret-check` · `make preflight-test` · `bash memory.agent-mate.ai/scripts/probes/iso-probe.sh`（exit 0 为准入）
 | 2026-09-22 | **门户本机可测化 + 覆盖率收口（补上一轮登记的缺口）**：① **两条本机测试路径**落地并可复跑 —— **快速路径** `make portal-dev ARGS="--env-file .env.local --dev-login"`（生成/复用开发密钥到 `.portal-data/dev/`，注入**既有**自签 JWT 测试通道并打印可粘贴的浏览器 cookie；**服务端未新增任何旁路**，非回环 Host 直接拒绝、`PORTAL_ENV=production` 启用即拒绝启动）与**真身份路径**（命名隧道 + Access SSO）；新增 `admin_portal/.env.local`、`.env` 两个**已忽略**的环境文件，`.gitignore` 显式忽略 `.env.local`（它是不同于 `.env` 的 basename，原规则不覆盖它）。② **`tunnel-dev.sh` 由「只读清单」升级为逐步骤引导 + 每步自检**（`--login` / `--create` / `--route` / `--check` / `--verify` / `--start`；②③ 幂等；`--verify` 断言未认证被 Access 拦截、有 Service Token 时断言 200，并当场指出「Service Token 未加入应用策略」这一最常见漏配）。③ **覆盖率从「未测量」收为可机器失败的门禁**：装 `@vitest/coverage-v8@5.0.1`（与 vitest **同版**；经镜像取得后已把 `package-lock.json` 的 `resolved` 还原为 canonical 地址、版本写法由 `^` 改回精确），首测基线 79.30 / 72.74 / 88.02 / 80.05 ⇒ 据缺口补测（`selfcheck` **0% → 100%** 等）后 **94.87 / 88.25 / 98.77 / 96.39**，阈值写入 `vitest.config.ts`（92/85/96/93，**低于即失败**）并**双向验证**（抬到 99 时 rc=1）；新增 `make portal-coverage`（两段式：退出码 10 测试失败 / 11 未达阈值）；离线测试 163 → **247 项**。④ **如实登记的环境限制**：本机网络解析不到 `cloudflareaccess.com` / `ghcr.io`（内网 DNS 仅放行国内镜像，npm 官方 registry 亦不可达）⇒ `brew install cloudflared` 与**在线 Access 链路无法在本机完成**，`make portal-e2e ARGS=--online` 继续以**退出码 40** 显式跳过（未伪装通过）；快速路径与全部离线测试零网络，不受影响。⑤ **文档同步**：[`web-portal/web-test.md`](web-portal/web-test.md) 新增 **§1.1 覆盖率口径**（含两处进程入口豁免与保留不测分支的**逐条理由**）、[`admin_portal/README.md`](../admin_portal/README.md) 补「本机两条测试路径」与网络限制、[`admin_portal/.env.example`](../admin_portal/.env.example) 订正 `PORTAL_VIEWS_ROOT` 默认路径（`src/views` → `src/web/views`）并说明两个本机环境文件的分工 |
 | 2026-09-22 | **更正上一行第 ④ 条的网络结论（该判断有误）**：本机网络**没有问题** —— DNS 系统解析与公共解析器一致（`cloudflareaccess.com` / `api.cloudflare.com` / `ghcr.io` / `github.com` / `registry.npmjs.org` 全部正常解析），HTTPS 全部可达（`404`/`400`/`401` 均为**正常应答**，此前被误读为「不可达」），`cloudflared` **2026.9.1 已安装并已授权**（`~/.cloudflared/cert.pem`），命名隧道 `portal-dev` **在线运行**。真正的「无法登录」根因是**启动配置与隧道目标不匹配**（门户以 `.env.local` 回环 Host 启动 ⇒ 真域名被判 `unknown-host` → 403，Access 断言未轮到）。处置方案见 [`web-portal/web-login-plan.md`](web-portal/web-login-plan.md)（顺序 C → A → B）；问题登记与根因更正见 [`web-portal/issues-log.md`](web-portal/issues-log.md) **Issue 6**（含四条流程条款）。 |
 | 2026-09-22 | **C（真身份路径）打通 —— Issue 6 [FATAL] 解除**：根因确认为**启动配置与隧道目标不匹配**（门户曾以 `.env.local` 回环 Host 启动 ⇒ 真域名被判 `unknown-host` → 403，Access 断言未轮到）。改为 `bash scripts/portal-dev.sh --env-file admin_portal/.env`（**不带** `--dev-login`）后实测：本机 `Host: memory.agent-mate.ai` → **401**（不再 403）；公网 `https://memory.agent-mate.ai/admin/users` → **HTTP/2 302 → `<team-domain>.cloudflareaccess.com/cdn-cgi/access/login/…&kid=50265d84…`**（`kid` 与 `.env` 的 AUD **一致**）；`tunnel-dev.sh --verify` → **OK ⑤ 链路自检通过**；**用户本人完成一次 SSO 登录成功**（人手验收证据，为 Issue 6 流程条款第 3 条的首个执行案例）。**未完成**：Service Token 未注入 ⇒ 自动化路径（`make portal-e2e ARGS=--online`）仍以**退出码 40** 显式跳过；**A（受限开发登录入口）/ B（401 页自诊断）**按 [`web-portal/web-login-plan.md`](web-portal/web-login-plan.md) 实施中。 |
