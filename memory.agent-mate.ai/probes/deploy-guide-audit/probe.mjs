@@ -16,13 +16,21 @@
  *
  * ## 三侧真源（本探针的比对面）
  *
- *   · **代码侧**：`admin_portal/src/**` 里出现的 `PORTAL_*` 键 —— 门户**真正会读**的那一套；
+ *   · **代码侧**：`admin_portal/src/**` 里**真读取**的 `PORTAL_*` 键 —— 门户**真正会读**的那一套；
+ *     口径（2026-09-25 收窄）：只认三种**真读取**形态 —— ① zod schema 键 `PORTAL_X:` ② `raw.X`
+ *     ③ `process.env.X`。旧口径是扫源码**全文**抽键，会把**注释 / 字符串里的将来键名**也算成
+ *     「会读的键」⇒ `A2` 假红（实测：`PORTAL_CONTACT_EMAIL` 只在注释里出现，却让门禁在 HEAD 上红）；
+ *     「靠改注释消红」这个反向风险由 `A2b`（未解释令牌 + 带理由白名单 + 陈旧白名单检查）兜住。
  *   · **部署侧**：`deploy/docker-compose.prod.yml` + `deploy/*.env*.example` 里定义的键 —— 运维**真正会填**的那一套；
  *   · **文档侧**：`specs/deployment.md` + `deploy/README.md` 里出现的全大写键 —— 指南**要求读者知道**的那一套。
  *
  * ## 判据口径
  *
- *   · `[A*]` = **断言**（决定退出码）：三侧都抽到非空 · 指南引用的路径都存在 · §5.4 的「逐键一致」成立；
+ *   · `[A*]` = **断言**（决定退出码）：三侧都抽到非空（`A1`）· 会读的键都被登记（`A2`）· `raw.X`
+ *     引用都有 schema 声明（`A2a`）· 源码里出现的每个 `PORTAL_*` 令牌都被解释（`A2b`）· 指南引用的
+ *     路径都存在（`A3`）· §5.4 的「逐键一致」成立（`A4`）· compose 结构底线（`A5`）；
+ *   · `[S*]` = **判据自检**（决定退出码）：注入样本验「三种真读取形态**抽得到**」（`S1`，防假红）与
+ *     「注释里的键名**抽不到**、且必须被 `A2b` 拦下」（`S2`，防假绿）；
  *   · `[F]` = **发现**（不参与退出码）：代码读但三处都没登记的键 · 文档提到但真源不认的键 ——
  *     探针的职责是**把事实钉死**，不是替文档判对错。
  *
@@ -66,13 +74,56 @@ const walk = (dir) =>
 const KEYS = /(?<![A-Z0-9_<])([A-Z][A-Z0-9]*_[A-Z0-9_]{2,})(?![A-Z0-9_>])/g;
 const keysIn = (text) => new Set([...text.matchAll(KEYS)].map((m) => m[1]));
 
+/**
+ * 「**真正会读**」的实现口径（2026-09-25 收窄；本仓现状：`config.ts` 是唯一入口 ——
+ * 全文 `process.env.*` 0 处、`raw.*` 43 处、`raw = RawEnvSchema.safeParse(env).data`）。
+ * 三种形态**逐行**匹配（不跨行、不吞字符串），这样注释里的键名不会被当成读取：
+ *   ① `PORTAL_X:` —— zod schema 的对象键（`RawEnvSchema`）
+ *   ② `raw.PORTAL_X` —— 解析后的引用
+ *   ③ `process.env.PORTAL_X` —— 直读环境变量（当前 0 处，留作防回归）
+ */
+const READ_PATTERNS = [
+  /^\s*(PORTAL_[A-Z0-9_]+)\s*:/g,
+  /\braw\.(PORTAL_[A-Z0-9_]+)\b/g,
+  /\bprocess\.env\.(PORTAL_[A-Z0-9_]+)\b/g,
+];
+const readKeysIn = (text) => {
+  const out = { schema: new Set(), raw: new Set(), env: new Set() };
+  const [RE_SCHEMA, RE_RAW, RE_ENV] = READ_PATTERNS;
+  for (const line of text.split('\n')) {
+    for (const m of line.matchAll(RE_SCHEMA)) out.schema.add(m[1]);
+    for (const m of line.matchAll(RE_RAW)) out.raw.add(m[1]);
+    for (const m of line.matchAll(RE_ENV)) out.env.add(m[1]);
+  }
+  return out;
+};
+
+/**
+ * `A2b` 的白名单：**源码里出现、但不是真读取、且允许存在**的令牌 —— 每条**必须带理由**。
+ * 它同时把「靠改注释消红」这条路堵住：解释要留在这里，且条目必须**仍被引用**（否则报陈旧）。
+ */
+const UNEXPLAINED_OK = {
+  PORTAL_CONTACT_EMAIL: '注释里的**将来键名**（`#4.2` 交付的「待配置化」登记：当前无配置键承载它，如需按部署改地址再加）',
+};
+const unexplainedOf = (tokens, reads, allow = UNEXPLAINED_OK) =>
+  [...tokens].filter((key) => !reads.has(key) && !(key in allow)).sort();
+
 // ---------------------------------------------------------------- 代码侧：门户真正会读的 PORTAL_* 键
+// 两条通道：`portalKeys` = 真读取（判 `A2`）· `allTokens` = 源码里出现过的全部令牌（判 `A2b`）
 const portalKeys = new Set();
+const allTokens = new Set();
+const schemaKeys = new Set();
+const rawRefs = new Set();
+const envRefs = new Set();
 for (const file of walk(path.join(PORTAL, 'src'))) {
   if (!/\.ts$/.test(file)) continue;
-  for (const key of keysIn(fs.readFileSync(file, 'utf8'))) {
-    if (key.startsWith('PORTAL_')) portalKeys.add(key);
-  }
+  const text = fs.readFileSync(file, 'utf8');
+  const read = readKeysIn(text);
+  for (const key of [...read.schema, ...read.raw, ...read.env]) portalKeys.add(key);
+  for (const key of read.schema) schemaKeys.add(key);
+  for (const key of read.raw) rawRefs.add(key);
+  for (const key of read.env) envRefs.add(key);
+  for (const key of keysIn(text)) if (key.startsWith('PORTAL_')) allTokens.add(key);
 }
 
 // ---------------------------------------------------------------- 部署侧：**全部** compose + *.env*.example
@@ -148,6 +199,68 @@ check(
   unregistered.length === 0 ? '无遗漏' : `遗漏 ${unregistered.length} 个`,
 );
 for (const key of unregistered) finding('代码会读、但 compose 与 *.env.example 与指南**都没有**这个键', key);
+
+// ---- `A2` 的两条派生断言（收窄口径之后的守门人）------------------------------------
+// `A2a`：「读了却没声明」—— `raw.X` 必须都能在 `RawEnvSchema` 里找到。这是「配置契约缺一块」的
+// 最早信号（`raw.X` 为 undefined 时往往只在下游出现怪行为，而不是启动期响亮失败）。
+const undeclared = [...rawRefs].filter((key) => !schemaKeys.has(key)).sort();
+check(
+  'A2a',
+  undeclared.length === 0,
+  '`raw.X` 引用都能在 `RawEnvSchema` 里找到声明（读了却没声明 ⇒ 配置契约缺一块）',
+  undeclared.length ? `缺声明：${undeclared.join(', ')}` : `${rawRefs.size} 个引用全部有声明`,
+);
+for (const key of undeclared) finding('代码用 `raw.X` 读了、但 `RawEnvSchema` 里没有这个键的声明', key);
+const unusedSchema = [...schemaKeys].filter((key) => !rawRefs.has(key)).sort();
+info(
+  unusedSchema.length
+    ? `schema 里声明但未见 raw. 引用的键 ${unusedSchema.length} 个（可选键有默认值分支，属正常）：${unusedSchema.join(', ')}`
+    : 'schema 里的每个键都有 raw. 引用',
+);
+
+// `A2b`：「未解释令牌」—— 收窄口径会把「注释里的键名」挡在 `A2` 之外，于是**新的风险**是有人靠改
+// 注释「消红」：因此要求源码里出现的每个 `PORTAL_*` 令牌**要么是真读取、要么在白名单里带理由**，
+// 且白名单条目必须**仍被引用**（注释删了却忘删白名单 ⇒ 陈旧，同样报错）。
+const unexplained = unexplainedOf(allTokens, portalKeys);
+const stale = Object.keys(UNEXPLAINED_OK).filter((key) => !allTokens.has(key)).sort();
+check(
+  'A2b',
+  unexplained.length === 0 && stale.length === 0,
+  '源码里出现的每个 `PORTAL_*` 令牌**要么是真读取、要么在白名单里带理由**（防「靠改注释消红」）',
+  [
+    unexplained.length ? `未解释：${unexplained.join(', ')}` : `未解释 0 个（白名单 ${Object.keys(UNEXPLAINED_OK).length} 条）`,
+    stale.length ? `陈旧白名单：${stale.join(', ')}` : '无陈旧白名单条目',
+  ].join(' · '),
+);
+for (const key of unexplained)
+  finding('源码里出现、但**既非真读取、也不在白名单**的 `PORTAL_*` 令牌（新写的注释键名？请在白名单里解释）', key);
+for (const key of stale) finding('白名单里的条目**已不再被引用**（注释删了、白名单没删 ⇒ 陈旧）', key);
+
+// ---- 判据自检：注入样本，验两个失效方向（正对照防假红 · 反对照防假绿）----------------
+const SAMPLE = [
+  '  PORTAL_FOO_BAR: z.string().optional(),', // ① schema 键
+  'const x = raw.PORTAL_FOO_BAR;', // ② raw 引用
+  'process.env.PORTAL_BAZ_QUX;', // ③ process.env 直读
+  '* 如需可再加 `PORTAL_COMMENT_ONLY`（注释里的将来键名）', // 只出现在注释里
+].join('\n');
+const sampleRead = readKeysIn(SAMPLE);
+check(
+  'S1',
+  sampleRead.schema.has('PORTAL_FOO_BAR') &&
+    sampleRead.raw.has('PORTAL_FOO_BAR') &&
+    sampleRead.env.has('PORTAL_BAZ_QUX'),
+  '正对照：三种真读取形态注入后**必须**被抽到（否则会漏真读取 ⇒ 假红）',
+  `schema=[${[...sampleRead.schema].join(', ')}] · raw=[${[...sampleRead.raw].join(', ')}] · env=[${[...sampleRead.env].join(', ')}]`,
+);
+const sampleTokens = new Set([...keysIn(SAMPLE)].filter((key) => key.startsWith('PORTAL_')));
+const sampleReads = new Set([...sampleRead.schema, ...sampleRead.raw, ...sampleRead.env]);
+const sampleCaught = unexplainedOf(sampleTokens, sampleReads, {});
+check(
+  'S2',
+  !sampleReads.has('PORTAL_COMMENT_ONLY') && sampleCaught.includes('PORTAL_COMMENT_ONLY'),
+  '反对照：注释里的键名**抽不到**，且必须被 `A2b` 拦下（否则会误抽注释 ⇒ 假绿 / 存在消红通道）',
+  `注释令牌未进读取=${!sampleReads.has('PORTAL_COMMENT_ONLY')} · A2b 拦下注释令牌=${sampleCaught.includes('PORTAL_COMMENT_ONLY')}`,
+);
 
 // Q4：文档提到、但真源（代码 / 部署）都不认的键 ⇒ 陈旧或属上游 config（需人工判，故只作发现）
 const docOnly = [...docKeys]
