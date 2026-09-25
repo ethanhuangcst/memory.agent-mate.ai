@@ -12,7 +12,7 @@ related_spec: memory.agent-mate.ai/specs/web-portal/web-design.md
 related:
   - memory.agent-mate.ai/specs/mcp/mcp-design.md
   - memory.agent-mate.ai/specs/mcp/mcp-test.md
-  - memory.agent-mate.ai/scripts/profile-probe.sh
+  - memory.agent-mate.ai/scripts/probes/profile-probe.sh
 ---
 
 # 记忆服务能做什么（能力一览 · 用户版）
@@ -264,5 +264,5 @@ related:
 
 - 技术口径（档位定义、实测工具数、决议与理由）：[`./mcp-design.md`](./mcp-design.md) §8
 - 测试与验收（各档工具数断言、客户端接入配置）：[`./mcp-test.md`](./mcp-test.md)
-- 档位实测探针（可复跑）：[`../../scripts/profile-probe.sh`](../../scripts/profile-probe.sh)
+- 档位实测探针（可复跑）：[`../../scripts/probes/profile-probe.sh`](../../scripts/probes/profile-probe.sh)
 - 门户接入指引页面（本页内容的落地位置）：[`../web-portal/web-design.md`](../web-portal/web-design.md)

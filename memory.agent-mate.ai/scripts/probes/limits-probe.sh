@@ -9,7 +9,7 @@
 # insert 返回 void，故以准确 ERROR 日志断言；该日志 target 是 `hnsw.eviction`，默认过滤器
 # `ai_memory=info` 不覆盖它，故触顶会话须显式放宽 RUST_LOG。
 #
-# 用法：bash memory.agent-mate.ai/scripts/limits-probe.sh [--self-test]
+# 用法：bash memory.agent-mate.ai/scripts/probes/limits-probe.sh [--self-test]
 # 退出码：0 全通过；10 前置；20 配置；30 写入量；40 存储；50 链接；60 向量；70 stdio。
 set -euo pipefail
 
@@ -97,7 +97,7 @@ command -v python3 >/dev/null 2>&1 || die 10 "宿主机缺少 python3"
 docker exec -u 0 "$CONTAINER" sh -c "mkdir -p '${BASE_DIR}' && chown -R aimem:aimem '${BASE_DIR}'" \
   || die 10 "无法准备一次性测试库目录 ${BASE_DIR}"
 
-TEMPLATE="$(cd "$(dirname "$0")/../deploy" && pwd)/config.toml.tmpl"
+TEMPLATE="$(cd "$(dirname "$0")/../../deploy" && pwd)/config.toml.tmpl"  # scripts/probes/ ⇒ 仓根为上溯三级（ADR-021 目录分层后）
 [ -f "$TEMPLATE" ] || die 20 "找不到 config.toml.tmpl"
 python3 - "$TEMPLATE" <<'PY' || exit 20
 import re, sys

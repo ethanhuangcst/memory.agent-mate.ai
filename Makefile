@@ -16,8 +16,8 @@ PORTAL_TEST := memory.agent-mate.ai/scripts/portal-test.sh
 PORTAL_E2E := memory.agent-mate.ai/scripts/portal-e2e.sh
 PORTAL_TUNNEL := memory.agent-mate.ai/scripts/tunnel-dev.sh
 PORTAL_COVERAGE := memory.agent-mate.ai/scripts/portal-coverage.sh
-PORTAL_MCP_PROBE := memory.agent-mate.ai/scripts/portal-mcp-probe.sh
-PORTAL_MCP_SESSION_PROBE := memory.agent-mate.ai/scripts/portal-mcp-session-probe.sh
+PORTAL_MCP_PROBE := memory.agent-mate.ai/scripts/probes/portal-mcp-probe.sh
+PORTAL_MCP_SESSION_PROBE := memory.agent-mate.ai/scripts/probes/portal-mcp-session-probe.sh
 PORTAL_ACCEPTANCE := memory.agent-mate.ai/scripts/portal-acceptance.sh
 DEPLOY_GUIDE_AUDIT := memory.agent-mate.ai/probes/deploy-guide-audit/probe.mjs
 # 本机快速路径的环境文件（回环 Host + PORTAL_TEST_JWT_EMAIL），已 gitignore。

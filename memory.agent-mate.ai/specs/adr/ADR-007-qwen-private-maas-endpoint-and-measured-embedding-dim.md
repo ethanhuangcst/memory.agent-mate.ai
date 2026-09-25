@@ -28,7 +28,7 @@ ai-memory 的 `smart` 档依赖三类模型能力：对话（`[llm].model`）、
    | 嵌入备选 | 同上 | `qwen3.7-text-embedding-flash` | 可用，同为 1024 维 |
 
    `[llm.auto_tag]` **只写 `model`，绝不写 `backend`**（写 `ollama` 会在无 Ollama 的机器上静默打挂 auto_tag / 查询扩展 / 矛盾检测）。
-3. **维度一律实测**：新增 `memory.agent-mate.ai/scripts/qwen-verify.sh`，探测端点 `/models` → 真实 chat → `json_object` → embeddings，并以响应向量长度作为 `dim`。
+3. **维度一律实测**：新增 `memory.agent-mate.ai/scripts/probes/qwen-verify.sh`，探测端点 `/models` → 真实 chat → `json_object` → embeddings，并以响应向量长度作为 `dim`。
 4. **本地部署**新建 gitignored 的 `memory.agent-mate.ai/deploy/.env.local` + `config.local.toml`；生产侧 `config.toml.tmpl` 保持同结构、端点用占位符 `<QWEN_BASE_URL>`。
 5. **脱敏延申**：MaaS 主机名含 workspace 标识，与公网 IP 同属可被探测的信息 —— 被跟踪文件一律写 `<QWEN_BASE_URL>`，`secret-check.sh` 增加通用模式 `*.maas.aliyuncs.com` 拦截。
 

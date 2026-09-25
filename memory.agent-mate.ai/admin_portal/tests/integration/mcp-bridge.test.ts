@@ -14,7 +14,7 @@
  * 本测试验证的是**桥**（HTTP(Streamable) ⇄ stdio），不是上游 ai-memory 本身。
  * 用真上游要 docker + linux 二进制 ⇒ 测试不再离线。这里用
  * `tests/fixtures/fake-upstream.mjs`（最小 stdio MCP server）⇒ **零外部依赖、可重复**；
- * 真上游由交付前的一次性脚本 `scripts/portal-mcp-probe.sh` 覆盖。
+ * 真上游由交付前的一次性脚本 `scripts/probes/portal-mcp-probe.sh` 覆盖。
  *
  * ## 本机方式（方案 B）
  *

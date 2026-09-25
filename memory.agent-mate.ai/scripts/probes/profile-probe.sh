@@ -28,7 +28,7 @@
 #
 # 密钥纪律：本脚本不读 env 文件、不打印密钥；仅打印工具名与响应片段。
 #
-# 用法：bash memory.agent-mate.ai/scripts/profile-probe.sh
+# 用法：bash memory.agent-mate.ai/scripts/probes/profile-probe.sh
 # 退出码：0 全通过；10 前置失败；20 会话/握手失败；30 工具数断言失败；40 工具归属断言失败；
 #         50 探针自身异常
 set -euo pipefail

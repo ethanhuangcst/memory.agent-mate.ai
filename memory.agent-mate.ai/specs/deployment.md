@@ -107,7 +107,7 @@ command="docker exec -i -e AI_MEMORY_DB=/data/users/alice/ai-memory.db -e AI_MEM
 ```
 
 > **档位口径（2026-09-21 定稿，决议与理由见 [`mcp/mcp-design.md`](./mcp/mcp-design.md) §8.3）**：用户通道 = **`--profile core`（8 项，最小面）**；管理员入口 = **`--profile admin`（22 项，含删除 / 遗忘 / 治理）**，两条模板**分开维护**，不混用。
-> **不写 `--profile` 的风险**：不传该参数时上游默认就是 `core` 且**不报错、不告警**（实测，探针 [`../scripts/profile-probe.sh`](../scripts/profile-probe.sh)）⇒ 用户行的 `core` 是**显式声明**（防静默漂移），管理员行的 `admin` 是**实质授权**（不加就只剩 8 项）。
+> **不写 `--profile` 的风险**：不传该参数时上游默认就是 `core` 且**不报错、不告警**（实测，探针 [`../scripts/probes/profile-probe.sh`](../scripts/probes/profile-probe.sh)）⇒ 用户行的 `core` 是**显式声明**（防静默漂移），管理员行的 `admin` 是**实质授权**（不加就只剩 8 项）。
 > 改档位必须重连才生效（harness 不支持延迟注册）。
 
 > 逐行追加 = 最小侵入、易审计、可回滚（**不要**整文件重写，一次拼错会连带整个文件失效）。
@@ -178,7 +178,7 @@ sudo docker exec -u 0 ai-memory-mcp install -d -m 0700 /data/users/alice/keys
 | | `api_key_env` | `DASHSCOPE_API_KEY` | 只写**环境变量名**，不是 key 本身（内联 `api_key` 会在解析期被拒） |
 | `[llm.auto_tag]` | `model` | `qwen-turbo` | **只写 model**；其余字段逐字段继承 `[llm]` |
 | `[embeddings]` | `backend` | `qwen` | smart 档 preset 默认走 Ollama 的 Nomic ⇒ **必须显式覆盖** |
-| | `model` | `qwen3.7-text-embedding` | 端点 `/models` 实测存在（[`../scripts/qwen-verify.sh`](../scripts/qwen-verify.sh)） |
+| | `model` | `qwen3.7-text-embedding` | 端点 `/models` 实测存在（[`../scripts/probes/qwen-verify.sh`](../scripts/probes/qwen-verify.sh)） |
 | | `dim` | `1024` | **静态常量**，见下方提示 |
 | | `base_url` | `<QWEN_BASE_URL>` | 与 `[llm]` 同一私有 MaaS 端点 |
 | | `backfill_batch` | `100` | 回填批次（上游界 `1..=10000`，越界回落 100 并告警） |
@@ -262,7 +262,7 @@ Host ai-memory
 ```bash
 bash scripts/local-up.sh       # 拉起本地 ai-memory
 bash scripts/mcp-smoke.sh      # MCP 协议冒烟（握手 → 工具 → 记忆写入 → 跨进程语义召回）
-bash scripts/iso-probe.sh      # 多用户隔离探针（A/B/C 组，P1a–P6），exit 0 为准入条件
+bash scripts/probes/iso-probe.sh      # 多用户隔离探针（A/B/C 组，P1a–P6），exit 0 为准入条件
 make curl-probe                # 参考用：直连容器 HTTP API 探针（生产无此通道）
 ```
 
@@ -556,7 +556,7 @@ bash scripts/pin-update.sh <ref> [--force]          # 更新锁文件（--force 
 | 2026-09-21 | **补 `[limits]` 容量与配额（Sprint 3 #4）**：§5.3 新增七键表（显式等于 v0.10.0 编译默认）与优先级 / 逐行盖章 / HTTP 面专属说明；模板 [`../deploy/config.toml.tmpl`](../deploy/config.toml.tmpl) 同步落盘；行为证据见 [`mcp/mcp-test.md`](./mcp/mcp-test.md) §4-D TC-LIMIT |
 | 2026-09-20 | **specs 整合**：`dev-plan.md` / `deployment_strategy.md` / `deploy/README.md` / `deploy/deployment-plan.md` 并入本文档；订正三处历史不一致 —— ① 健康探测**不用 curl**（镜像无 curl，改判 serve 日志 + `doctor`）；② 备份外迁频率统一为**每日**；③ 占位符统一 `<VPS4_IP>`（原文 `<vps4>` 混用）。删除 dev-plan 中误提的 gitleaks（本项目用 `make secret-check`） |
 | 2026-09-21 | **§4.4 改为「用户目录属主引导」**：一次性 `install -d -m 2775 -o root -g 999 /data/users`（setgid）使非 root 门户可自建 `0700` 用户目录，并**删除**原 `NOPASSWD: docker exec -u 0` root 规则（`aimem-ssh` 密钥一律带 forced command，不需要 sudo）；§4.5 改为「root 手工操作，保底」。§12.2 补门户 stack 的挂载/密钥/启动自检前置。§7.2 补 S1 的门户侧新触发路径（缺 `DASHSCOPE_API_KEY` ⇒ 401 + linear scan，工具仍成功）。依据 [`architecture.md`](./architecture.md) §2.3 与 [`knowledge/web-portal/portal-launch-mechanism.md`](./knowledge/web-portal/portal-launch-mechanism.md) |
-| 2026-09-21 | **§4.3 强制命令定档**：主人（默认库 = **管理员入口**）行 → `--profile admin`（22 项）；用户（一用户一库）行 → `--profile core`（8 项，显式声明 —— 不传时默认也是 core 且**不报错**）；补「档位口径」注与「改档须重连」。决议与理由 [`mcp/mcp-design.md`](./mcp/mcp-design.md) §8.3；实测依据 [`../scripts/profile-probe.sh`](../scripts/profile-probe.sh)（7 档全绿）；对外用户版说明 [`mcp/mcp-capabilities.md`](./mcp/mcp-capabilities.md) |
+| 2026-09-21 | **§4.3 强制命令定档**：主人（默认库 = **管理员入口**）行 → `--profile admin`（22 项）；用户（一用户一库）行 → `--profile core`（8 项，显式声明 —— 不传时默认也是 core 且**不报错**）；补「档位口径」注与「改档须重连」。决议与理由 [`mcp/mcp-design.md`](./mcp/mcp-design.md) §8.3；实测依据 [`../scripts/probes/profile-probe.sh`](../scripts/probes/profile-probe.sh)（7 档全绿）；对外用户版说明 [`mcp/mcp-capabilities.md`](./mcp/mcp-capabilities.md) |
 | 2026-09-22 | **Sprint 编号随 Replan 改指**：§5.3 生产定时器、端到端验收脚本、`/data/backups` 备份脚本目录三处的 Sprint 由旧 Sprint 5 改为 **Sprint 6** |
 | 2026-09-24 | **云资源清单落点 + 备份目标写实 + 两处指称校正**：① 新增 **§1.1 云资源准备清单**（唯一真源，7 项外部资源）；Sprint 5 `#8` 的指针由 `deploy/README.md`（该文件**并无**此清单）改指 §1.1；② §8 外迁目标由「OSS 兼容对象存储」写实为**阿里云 OSS 私有桶**，region 标 **待核查**并给出核查命令；③ §5.3 的「留 Sprint 5」改为**条目级**指称 `#10`，与该行承接的「生产定时器安装 / 日志采集 / 告警」互指（此前该生产项在任何 Sprint 都无承接条目）；④ **订正上一条（2026-09-22）**：其「改为 Sprint 6」的改指已被 2026-09-23 重排取代 —— 生产上线与备份恢复整体回到 Sprint 5，故正文三处「Sprint 5」自始正确，本次未改正文。依据与过程见 [`change-log.md`](./change-log.md) 2026-09-24 |
 | 2026-09-24 | **三段外部前置的逐步指南（Sprint 4 `4.4`）**：① 新增 **§12.5**（CF Access 8 步 · SSH 密钥对与 forced command 7 步 · 对象存储私有桶与 RAM 子账号 5 步 · 门户 `PORTAL_*` 真源表 · 收口验证 5 项），每步「**做什么 → 期望 → 验证 → 不符怎么办**」四件套、示例一律占位符；② **门户 stack 真源入仓**（同样服务于本行，文件在 [`../deploy/portal.compose.yml`](../deploy/portal.compose.yml)）：21 个 `PORTAL_*` 键从「只写在设计文档 §12.9」变为**部署真源**；③ 本节引用的键 / 路径 / 承诺由门禁 `make deploy-doc-audit` 把住（判据 `A2` 即由「红」转「绿」）。依据见 [`change-log.md`](./change-log.md) 2026-09-24 的 `4.4` 交付小节；`§1.1` / `§8` / `§12.2` 正文**未改**（本行只新增 §12.5）。 |

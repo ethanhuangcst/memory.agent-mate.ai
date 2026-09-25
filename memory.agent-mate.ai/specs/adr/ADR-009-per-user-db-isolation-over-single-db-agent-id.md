@@ -23,7 +23,7 @@ Sprint 2 #5 的验收要求给出「多用户隔离是否可实现」的明确�
 3. **排除方案②（单库 + 每用户 `AI_MEMORY_AGENT_ID`）**：其写路径无授权边界（见 Context 2），不得用于多用户；仅可用于**互信**小团队或单人多设备场景。
 4. **不新增 OS 账号**：单 OS 账号 + N 把密钥 + N 行 forced command；记忆身份与库都不依赖登录账号（容器内恒为 `aimem`）。
 5. **上线硬前提 D1 + D2**：spawn 前 fail-closed 断言（`AI_MEMORY_DB` 非空 + 以 `/data/users/` 开头 + 含该 handle）+ **移除 `config.toml` 的 `db` 键**（该键是"漏设 → 静默落主库"的唯一落点，移除后漏设退化为相对路径 → fail-loud）。D3（一会话一子进程、禁池化）/ D4（审计含解析出的库路径）/ D5（负向验收不过则阻断上线）为配套。
-6. **探针常设**：`memory.agent-mate.ai/scripts/iso-probe.sh` 作为该决策的常设回归证据（A 负向解析链 / B 方案③双用户隔离 / C 方案②对照；语义化退出码；可重复运行，含 near-duplicate CONFLICT 幂等分支）。本决策的每一条都可以被它重跑证伪。
+6. **探针常设**：`memory.agent-mate.ai/scripts/probes/iso-probe.sh` 作为该决策的常设回归证据（A 负向解析链 / B 方案③双用户隔离 / C 方案②对照；语义化退出码；可重复运行，含 near-duplicate CONFLICT 幂等分支）。本决策的每一条都可以被它重跑证伪。
 
 ## Rationale
 

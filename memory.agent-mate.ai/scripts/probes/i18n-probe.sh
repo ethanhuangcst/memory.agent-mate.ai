@@ -32,7 +32,7 @@
 #
 # 密钥纪律：本脚本不读 env 文件、不打印密钥；仅打印 MCP 响应片段与路径。
 #
-# 用法：bash memory.agent-mate.ai/scripts/i18n-probe.sh
+# 用法：bash memory.agent-mate.ai/scripts/probes/i18n-probe.sh
 # 退出码：0 全通过；10 前置失败；20 握手 / 工具清单断言失败；30 写入失败；40 检索断言失败；
 #         50 探针自身异常
 set -euo pipefail

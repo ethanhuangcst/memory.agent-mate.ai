@@ -115,7 +115,7 @@ docker run --rm -i --platform linux/amd64 -u 999:999 -v <vol>:/data --env-file d
 
 ### E6 α 的机制在本仓已被现有探针覆盖
 
-[`scripts/mcp-smoke.sh`](../../../scripts/mcp-smoke.sh) 与 [`scripts/iso-probe.sh`](../../../scripts/iso-probe.sh) 的会话调用即
+[`scripts/mcp-smoke.sh`](../../../scripts/mcp-smoke.sh) 与 [`scripts/probes/iso-probe.sh`](../../../scripts/probes/iso-probe.sh) 的会话调用即
 `docker exec -i [-e AI_MEMORY_DB=… ] ai-memory-mcp ai-memory mcp --tier smart`。
 
 ⇒ α 不是「未验证的备选」，而是**已经在跑的机制**（差别只在「由谁发起」：SSH forced command / 门户经 socket）。

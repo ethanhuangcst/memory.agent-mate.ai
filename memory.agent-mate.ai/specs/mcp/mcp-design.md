@@ -63,7 +63,7 @@
 | 默认 `scope` | 注意：写入**默认即 `private`** | `src/mcp/tools/list.rs:251-252` |
 | 静态加密 | `AI_MEMORY_ENCRYPT_AT_REST=1` → 按 agent 的 X25519 ECDH + ChaCha20-Poly1305（per-node at-rest） | `src/encryption/mod.rs:1-20` |
 | 按 agent 配额 | `agent_quotas` / `ai-memory quota-status` | `src/cli/commands/quota_status.rs` |
-| 记忆内容多语言 | **部分支持** —— 存储与语义通路**不限语言**（简中 / 繁中 / 英文写入、`memory_recall` 语义召回 `mode=hybrid`、`memory_get` 按 id 直取均可用）；`memory_search` 关键词通路受 FTS5 默认分词器（`unicode61`，建表未指定 `tokenize=`）限制：只认**完整词元**（英文 = 单词、中文 = 标点/空白界定的整段），词元内子串与**简繁交叉**一律不命中；**无任何配置项**。工程口径：中文检索走 `memory_recall`，关键词通路只用于 ASCII 标记与整段引用 | 探针 [`../../scripts/i18n-probe.sh`](../../scripts/i18n-probe.sh)（L1.6，[`./mcp-test.md`](./mcp-test.md) §4-E）；源码依据本文件 §9 J4 |
+| 记忆内容多语言 | **部分支持** —— 存储与语义通路**不限语言**（简中 / 繁中 / 英文写入、`memory_recall` 语义召回 `mode=hybrid`、`memory_get` 按 id 直取均可用）；`memory_search` 关键词通路受 FTS5 默认分词器（`unicode61`，建表未指定 `tokenize=`）限制：只认**完整词元**（英文 = 单词、中文 = 标点/空白界定的整段），词元内子串与**简繁交叉**一律不命中；**无任何配置项**。工程口径：中文检索走 `memory_recall`，关键词通路只用于 ASCII 标记与整段引用 | 探针 [`../../scripts/probes/i18n-probe.sh`](../../scripts/probes/i18n-probe.sh)（L1.6，[`./mcp-test.md`](./mcp-test.md) §4-E）；源码依据本文件 §9 J4 |
 
 > **Ed25519 身份 ≠ 授权**：`metadata.agent_id` 是**自述值**，任何调用者可填，不得单独作授权闸门（只用于溯源/审计/过滤）。
 
@@ -339,7 +339,7 @@ aimem-ssh ALL=(root) NOPASSWD: /usr/bin/docker exec -i ai-memory-mcp ai-memory m
 > | **「写入真的落进用户库」可以用「换一个进程仍能召回」判死** | 会话 A（进程 1）写入唯一标记 → 收尾 → 会话 B（进程 2，**不同 pid**）召回 ⇒ 回包含该标记。**同会话内的召回不足以证明落库**（可能是该进程内存索引给的）—— 这正是既有 `make portal-mcp-probe` 的覆盖缺口 |
 > | **判据不依赖「先 `terminateSession`」** | 直接 `close()`（不 terminate）后，新会话**仍能**召回 ⇒ e2e 不必强制优雅收尾，判据更稳 |
 > | **禁止按 `memory_recall` 的 `count` 判（本轮实测到的陷阱）** | 该工具是**语义混合检索**，`count` = **返回条数**：**从未写入**的标记同样会返回相关命中（⇒ `count:0` **永不出现**）；同一库里多一条记忆时 `count:1` 会变 `count:2`。**判据一律写「回包里有没有那个标记」**，并带**反向对照**防止空转 |
-> | **一处既有脆弱点（不是缺陷，已登记）** | `scripts/portal-mcp-probe.sh` 的召回断言写的是 `count:1`（`tests/fixtures/probe-runner.mts`）。它**现在稳**（该脚本每次清理时 `rm -rf /data/users/$HANDLE`，见 `portal-mcp-probe.sh:59` ⇒ 每次空库），但判据本身**脆**：一旦「一个会话写两条」或清库被去掉就会假失败 ⇒ `3.6` 顺手改为按标记判 |
+> | **一处既有脆弱点（不是缺陷，已登记）** | `scripts/probes/portal-mcp-probe.sh` 的召回断言写的是 `count:1`（`tests/fixtures/probe-runner.mts`）。它**现在稳**（该脚本每次清理时 `rm -rf /data/users/$HANDLE`，见 `portal-mcp-probe.sh:59` ⇒ 每次空库），但判据本身**脆**：一旦「一个会话写两条」或清库被去掉就会假失败 ⇒ `3.6` 顺手改为按标记判 |
 >
 > **由上述结论导出的判据口径（`3.6` 直接照用）**：① 全链路的判据 = **跨进程召回**（不是同会话召回）；② 一切召回类断言按**标记文本**判，**不按 `count`**；③ 每条召回判据都要有**反向对照**。用例为 [`../mcp/mcp-test.md`](../mcp/mcp-test.md) §4-F 的 `TC-M-L1-23`，跑法见同文件 §4-G。
 
@@ -516,7 +516,7 @@ launch:
 | `power` | Core + Power | 56 | **57** |
 | `full` | 全部族 | 101 | **101** |
 
-> **实测（2026-09-21，v0.10.0）**：探针 [`../../scripts/profile-probe.sh`](../../scripts/profile-probe.sh)（每档独立进程，只发 `initialize` + `tools/list` + 一次 `memory_capabilities`）实测注册数 —— `core=8` / `graph=20` / `admin=22` / `power=57` / `full=101`，与上表**逐档一致**；自定义 `core,lifecycle=14`（新增 Lifecycle 6 项，含 `memory_delete` / `memory_forget` / `memory_gc`，不含治理与自治面）；**默认档（不传 `--profile`）= 8 项，与 `core` 一致且不报错**。生效形式：`--profile` CLI flag，与 `--tier smart` **并存有效**（无需回退 env）。
+> **实测（2026-09-21，v0.10.0）**：探针 [`../../scripts/probes/profile-probe.sh`](../../scripts/probes/profile-probe.sh)（每档独立进程，只发 `initialize` + `tools/list` + 一次 `memory_capabilities`）实测注册数 —— `core=8` / `graph=20` / `admin=22` / `power=57` / `full=101`，与上表**逐档一致**；自定义 `core,lifecycle=14`（新增 Lifecycle 6 项，含 `memory_delete` / `memory_forget` / `memory_gc`，不含治理与自治面）；**默认档（不传 `--profile`）= 8 项，与 `core` 一致且不报错**。生效形式：`--profile` CLI flag，与 `--tier smart` **并存有效**（无需回退 env）。
 
 - **两个易算错的点**：① `memory_capabilities` 属 `Meta` 族但被列为 `ALWAYS_ON_TOOLS`，**所有档位**都加载 ⇒ 除 `full` 外各档**实际注册数 = 族计数 + 1**；② **默认档位是 `core` 不是 `full`** —— 模板不显式写 `--profile full` 就只暴露 8 项，**且不报错**。
 - 自定义档位：`--profile core,graph,archive`（逗号分隔族列表）。
@@ -545,7 +545,7 @@ launch:
 |---|---|---|
 | 1 | 对用户暴露哪一档 | **已定（2026-09-21）**：对外（SSH 与门户**统一**）= **`core`（8 项）**；管理员另设入口 = **`admin`（22 项）**，两条模板分离。理由：对外取最小面（不开放删除，代价见 #4）；管理员通道要在同一入口里做删除 / 遗忘 / 清理与治理审批（Lifecycle + Governance）—— `core` 做不到；而 Meta / Archive 族（`memory_stats` / `memory_agent_list` / `memory_archive_stats`）属 `full` 档，**不随 `admin` 开放**（管理员若确需只读统计类工具，另开条目评估）。**模板已落盘（2026-09-21 收尾，原「移交 Backlog #12（把 `--profile` 写入门户 / SSH 模板）」提前完成 —— 该工作当时挂在旧的 Sprint 3 #2 名下，现行 #2 已改指 D2，故按条目名引用）**：SSH 主人行 `admin` + 用户行 `core`（[`../deployment.md`](../deployment.md) §4.3）、完整配方（本文 §5.1 `admin` / §5.2 `core`）、门户 `launch.argv`（[`../web-portal/web-design.md`](../web-portal/web-design.md) §3.3）、本地客户端条目（[`./mcp-test.md`](./mcp-test.md) §3） |
 | 2 | 门户模板与 SSH 模板是否统一档位 | **已定**：统一为 `core`（同上 #1）；管理员入口（`admin`）单独一条，不与用户通道混用 |
-| 3 | 选档后如何验收 | 用 `initialize` + `tools/list` 实测计数 —— 能力已由 [`../../scripts/profile-probe.sh`](../../scripts/profile-probe.sh) 提供（7 档全绿）；**TC-TIER-01 / 02 已完成 2026-09-21**（各档计数实测 + `memory_capabilities` 交叉一致；四处模板均已含 `--profile`），登记在 [`./mcp-test.md`](./mcp-test.md) §4-C |
+| 3 | 选档后如何验收 | 用 `initialize` + `tools/list` 实测计数 —— 能力已由 [`../../scripts/probes/profile-probe.sh`](../../scripts/probes/profile-probe.sh) 提供（7 档全绿）；**TC-TIER-01 / 02 已完成 2026-09-21**（各档计数实测 + `memory_capabilities` 交叉一致；四处模板均已含 `--profile`），登记在 [`./mcp-test.md`](./mcp-test.md) §4-C |
 | 4 | `core` 档**不含删除类工具**（`memory_delete` / `memory_forget` / `memory_gc`） | **已知限制，本轮接受**：用户无法自行删除或遗忘自己的记忆。若要开放删除，**最小增量档位是 `core,lifecycle`（实测 14 项）**，不是 `admin`（22）或 `full`（101）——后者会同时引入治理面与自治编排面。是否开放、何时开放另开条目评估，**不在 #9 结论内** |
 
 ---
@@ -665,7 +665,7 @@ launch:
 | J1 | `CURRENT_SCHEMA_VERSION`：v0.10.0 = **80**（clone `main` = **81**）；文档滞后写 78 | 中 | 仅作「是否发生前向迁移」的信号；**文档不可用于版本判断** | `src/storage/migrations.rs:859` |
 | J2 | 迁移**前向-only**，v34 / v50 / v54 三个阶梯臂**不可逆** | 高 | 不可逆迁移后无法靠改回旧二进制降级 | `:1502-1519` |
 | J3 | 注意：**旧二进制启动于「比自身更新的库」时不会报错**（`migrate()` 在 `version >= CURRENT` 直接 `return Ok(())`；全 `src` 无「库过新则拒绝」逻辑） | 高·静默 | **回滚只改 `IMAGE_TAG` 是危险的**：旧二进制照常启动并操作不认识的 schema → **静默数据损坏**。⇒ **回滚必须用 pre-migration 快照覆盖 DB** | `:1507-1509`；全 src grep 无命中（2026-09-20 核实） |
-| J4 | **FTS5 全文索引用默认分词器 `unicode61`**：建表 `USING fts5(title, content, tags, content=memories, content_rowid=rowid)` **未指定 `tokenize=`** —— 不做 CJK 分词、不做简繁归一；查询串经 `sanitize_fts_query`（按空白切分、剥除全部 FTS5 特殊字符即**无通配**、逐词元短语化、隐式 AND）；`[mcp]` 段无任何语言 / 分词 / 检索配置键 | 高·静默 | 若上游改用 CJK 分词器 / 简繁归一 / 增加相关配置 → 「中文关键词只能整段命中、简繁不互通」的边界变化，依赖此行为的断言与文档口径**静默漂移** | 建表语句 `src/storage/mod.rs`（`memories_fts`，触发器同步入库）；`sanitize_fts_query` `src/storage/mod.rs:7030`；行为探针 [`../../scripts/i18n-probe.sh`](../../scripts/i18n-probe.sh)（`I18N_PROBE_STRICT=1` 把边界当断言，2026-09-21 实测全绿） |
+| J4 | **FTS5 全文索引用默认分词器 `unicode61`**：建表 `USING fts5(title, content, tags, content=memories, content_rowid=rowid)` **未指定 `tokenize=`** —— 不做 CJK 分词、不做简繁归一；查询串经 `sanitize_fts_query`（按空白切分、剥除全部 FTS5 特殊字符即**无通配**、逐词元短语化、隐式 AND）；`[mcp]` 段无任何语言 / 分词 / 检索配置键 | 高·静默 | 若上游改用 CJK 分词器 / 简繁归一 / 增加相关配置 → 「中文关键词只能整段命中、简繁不互通」的边界变化，依赖此行为的断言与文档口径**静默漂移** | 建表语句 `src/storage/mod.rs`（`memories_fts`，触发器同步入库）；`sanitize_fts_query` `src/storage/mod.rs:7030`；行为探针 [`../../scripts/probes/i18n-probe.sh`](../../scripts/probes/i18n-probe.sh)（`I18N_PROBE_STRICT=1` 把边界当断言，2026-09-21 实测全绿） |
 
 ### K. 凭证与授权面
 
@@ -682,7 +682,7 @@ launch:
 
 ### L. 容量与配额（`[limits]`，2026-09-21 本地实测）
 
-> 我方**只依赖其中 4 类强制行为**（写入量 / 存储字节 / 链接 / 向量容量）；另 2 键是 **HTTP 面专属**（stdio MCP 不经过），1 键是触顶策略开关。行为证据：[`../../scripts/limits-probe.sh`](../../scripts/limits-probe.sh)。
+> 我方**只依赖其中 4 类强制行为**（写入量 / 存储字节 / 链接 / 向量容量）；另 2 键是 **HTTP 面专属**（stdio MCP 不经过），1 键是触顶策略开关。行为证据：[`../../scripts/probes/limits-probe.sh`](../../scripts/probes/limits-probe.sh)。
 
 | # | 依赖什么 | 敏感度 | 错了会怎样 | 上游位置 |
 |---|---|---|---|---|
@@ -725,8 +725,8 @@ launch:
 | 2026-09-20 | **specs 整合**：`multiuser_isolation.md` 全文（结论/冻结/D–V/能力边界/四档/配方/五坑/验收）+ `mcp_tool_inventory.md`（档位与工具清单、计数核对）+ 旧 `mcp-test.md` §0 传输形态核实 + `upstream_coupling_surface.md` 全量契约点，并入本文档；上游文档缺陷 6 条移入 [`../architecture.md`](../architecture.md) §4.2 |
 | 2026-09-20 | 订正：档位工具数统一写**实际注册数**（core=8 / graph=20 / admin=22 / power=57 / full=101），族计数另列；`minimal` 档位为笔误，正确是 `full`；`memory_capabilities` 已加 always-on 注；`capability init` 标注为 v1.0.0 特性；schema 版本并写 80（制品层）/81（参考层） |
 | 2026-09-21 | **§0.1 冻结机制「属主」行补前置**：2026-09-21 起门户路径由门户以 `aimem` 身份自建 `0700` 用户目录，**前置**为 `/data/users` = `root:aimem 2775`（setgid 一次性引导，[`../deployment.md`](../deployment.md) §4.4）；`docker exec -u 0 … mkdir/chown` 形式仅保留给 root 手工操作。背景：门户启动机制定稿 β′（[`../adr/ADR-012`](../adr/ADR-012-portal-launch-mechanism-no-docker-socket.md)），证据 [`../knowledge/web-portal/portal-launch-mechanism.md`](../knowledge/web-portal/portal-launch-mechanism.md) E3 |
-| 2026-09-21 | **多语言能力边界落盘（Sprint 2 #8）**：§2 新增「记忆内容多语言」行（部分支持——存储 / 语义通路不限语言；关键词通路按 FTS5 `unicode61` 完整词元匹配、简繁不互通、无配置项）；§9 新增契约点 **J4**（分词器行为 + `sanitize_fts_query` + 探针方式），供上游升级预检核对。依据：探针 [`../../scripts/i18n-probe.sh`](../../scripts/i18n-probe.sh)（L1.6，三语言 × 三通路矩阵 + STRICT 边界断言）+ 源码复核；用例登记 [`./mcp-test.md`](./mcp-test.md) §4-E |
-| 2026-09-21 | **档位定档收口（Sprint 2 #9）**：§8.1 补**实测**引文（探针 [`../../scripts/profile-probe.sh`](../../scripts/profile-probe.sh)：`core=8` / `graph=20` / `admin=22` / `power=57` / `full=101` / `core,lifecycle=14` / 默认档 `=8`，`--profile` 与 `--tier` 并存有效）；§8.3 由「待决策」改为「档位决议与开放问题」——#1 已定（对外 `core`、管理员 `full`，模板落盘归 Sprint 3 #2）、#2 已定（两条用户通道统一 `core`）、#3 验收方式落到 profile-probe、新增 #4（core 不含删除 = 已知限制，开放删除的最小增量是 `core,lifecycle`） |
+| 2026-09-21 | **多语言能力边界落盘（Sprint 2 #8）**：§2 新增「记忆内容多语言」行（部分支持——存储 / 语义通路不限语言；关键词通路按 FTS5 `unicode61` 完整词元匹配、简繁不互通、无配置项）；§9 新增契约点 **J4**（分词器行为 + `sanitize_fts_query` + 探针方式），供上游升级预检核对。依据：探针 [`../../scripts/probes/i18n-probe.sh`](../../scripts/probes/i18n-probe.sh)（L1.6，三语言 × 三通路矩阵 + STRICT 边界断言）+ 源码复核；用例登记 [`./mcp-test.md`](./mcp-test.md) §4-E |
+| 2026-09-21 | **档位定档收口（Sprint 2 #9）**：§8.1 补**实测**引文（探针 [`../../scripts/probes/profile-probe.sh`](../../scripts/probes/profile-probe.sh)：`core=8` / `graph=20` / `admin=22` / `power=57` / `full=101` / `core,lifecycle=14` / 默认档 `=8`，`--profile` 与 `--tier` 并存有效）；§8.3 由「待决策」改为「档位决议与开放问题」——#1 已定（对外 `core`、管理员 `full`，模板落盘归 Sprint 3 #2）、#2 已定（两条用户通道统一 `core`）、#3 验收方式落到 profile-probe、新增 #4（core 不含删除 = 已知限制，开放删除的最小增量是 `core,lifecycle`） |
 | 2026-09-21 | **模板定档落盘 + 用户版能力文档（Sprint 2 #9 收尾）**：① §5.1（管理员自用场景）→ `--profile admin`、§5.2（用户场景）→ `--profile core`，并补「改档须重连」注；② §8.3 #1 管理员入口由 `full`（101）改定 `admin`（22）（Meta / Archive 族不随 admin 开放），并标注**模板已落盘**（SSH 主人行 + 用户行 [`../deployment.md`](../deployment.md) §4.3 · 门户 `launch.argv` [`../web-portal/web-design.md`](../web-portal/web-design.md) §3.3 · 本地客户端条目 [`./mcp-test.md`](./mcp-test.md) §3），#3 的 TC-TIER-01/02 标为已完成；③ §8 顶部登记面向最终用户的通俗版 [`./mcp-capabilities.md`](./mcp-capabilities.md)（门户接入指引页唯一内容源） |
 | 2026-09-21 | **§8 引文同步（能力文档体例定稿）**：面向最终用户的 [`./mcp-capabilities.md`](./mcp-capabilities.md) 体例定为「6 张档位表 + 每张只列本档新增 + 编号全档连续 1–101 + 示例列」；§8 顶部引文随之更新（不再提「一个完整例子」，补编号口径）。同步：`../web-portal/web-stories.md` AC6.4 与 `../change-log.md` 同日小节 |
 | 2026-09-22 | **Sprint 编号随 Replan 改指**：D1 / D3 与两处未决前提的会话桥落点 → `Sprint 4 PSP-W2「端到端接入」`；D4 审计落点 → `Sprint 4 PSP-W3「可运维、可发布」`；D2 / D5 与验收清单的生产落点 → `Sprint 6`（含 `#5` 备份脚本 / `#7` 门户部署 / `#9` 备份与恢复落地，及「上线验收」）；sudoers 实测与归档清理调度 → `Sprint 6 前`。D1–D5 的结论文字未改 |

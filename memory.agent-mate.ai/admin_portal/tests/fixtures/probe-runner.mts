@@ -1,5 +1,5 @@
 /**
- * 「真上游」端到端探针的执行体（被 `scripts/portal-mcp-probe.sh` 调用）。
+ * 「真上游」端到端探针的执行体（被 `scripts/probes/portal-mcp-probe.sh` 调用）。
  *
  * 与 `tests/integration/mcp-bridge.test.ts` 的分工：
  *  - 集成测试用**假上游**（`fake-upstream.mjs`）⇒ 完全离线、可重复，验的是**桥**；

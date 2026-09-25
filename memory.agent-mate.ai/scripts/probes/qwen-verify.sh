@@ -21,7 +21,7 @@
 set -euo pipefail
 
 readonly SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-readonly REPO_ROOT="$(cd -- "$SCRIPT_DIR/../.." && pwd)"
+readonly REPO_ROOT="$(cd -- "$SCRIPT_DIR/../../.." && pwd)"  # scripts/probes/ ⇒ 仓根为上溯三级（ADR-021 目录分层后）
 readonly DEFAULT_SECRETS="$REPO_ROOT/memory.agent-mate.ai/secrets.local.hk_vps_4.md"
 # 兜底候选：DashScope 公开嵌入模型族；/models 探测到的候选会排在前面
 readonly FALLBACK_EMBED_MODELS=(text-embedding-v4 text-embedding-v3 text-embedding-v2 text-embedding-v1)

@@ -15,7 +15,7 @@
 # **预建**两个测试用户目录；生产的 β′ 形态（门户在容器内 spawn）没有这个错位。
 #
 # 用法：
-#   bash memory.agent-mate.ai/scripts/portal-mcp-session-probe.sh
+#   bash memory.agent-mate.ai/scripts/probes/portal-mcp-session-probe.sh
 #   PROBE_PORT=8899 PROBE_CONTAINER=ai-memory-mcp bash ...
 #
 # 退出码契约（与仓内其它脚本同范式）：
@@ -30,7 +30,7 @@
 
 set -uo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"  # scripts/probes/ ⇒ 仓根为上溯三级（ADR-021 目录分层后）
 REPO="$(cd "$ROOT/memory.agent-mate.ai" && pwd)"
 PORTAL="$REPO/admin_portal"
 CONTAINER="${PROBE_CONTAINER:-ai-memory-mcp}"

@@ -5,7 +5,7 @@
  * 为什么需要它：集成测试要验证的是**桥**（HTTP(Streamable) ⇄ stdio 的部分），
  * 而不是上游 ai-memory 本身。用真上游需要 docker + linux 二进制 ⇒ 测试不再离线、
  * 且依赖本机是否装着容器。假上游让桥的测试**完全离线、可重复**；
- * 「真上游」由交付前的一次性端到端脚本（`scripts/portal-mcp-probe.sh`）负责。
+ * 「真上游」由交付前的一次性端到端脚本（`scripts/probes/portal-mcp-probe.sh`）负责。
  *
  * 它同时把桥注入的环境变量写进 stderr 与一份 JSON 文件，供测试断言
  * 「身份与库路径确实按用户注入」（这是 `MS1 AC-M1.3` 的离线等价物）。

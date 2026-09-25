@@ -89,7 +89,7 @@ src/storage/migrations.rs:1507
 | harness 延迟注册 | 客户端回报 `your_harness_supports_deferred_registration: false` → `memory_load_family` 对 Cursor **无效**，档位只能在启动参数 `--profile` 定死 | manifest 原文 |
 | 功能边界（v0.10.0） | `compaction.enabled=false`（v0.8+ 规划）、`transcripts.enabled=false`、`reranker_active="off"`（无 cross-encoder）、`recall_mode_active="hybrid"`、`embedding_dim=1024` | capabilities manifest |
 
-**多用户隔离（2026-09-20 实测，v0.10.0，本地基线容器；可重复探针 `memory.agent-mate.ai/scripts/iso-probe.sh`）**
+**多用户隔离（2026-09-20 实测，v0.10.0，本地基线容器；可重复探针 `memory.agent-mate.ai/scripts/probes/iso-probe.sh`）**
 
 | 事实 | 实测结论 | 证据 |
 | --- | --- | --- |
@@ -100,9 +100,9 @@ src/storage/migrations.rs:1507
 | 写路径授权边界 | **不存在**：`memory_store` 顶层 `agent_id` 参数可指定他人身份写入**成功**（响应回显该身份），随后该行在原属主检索中可见 | 探针 P6；`src/mcp/tools/store/tests.rs:46/1191` |
 | 读路径授权边界 | 存在但**只认 env**（`AI_MEMORY_AGENT_ID`，不接受工具参数）；同库下 B 读不到 A 的 private 行 | 探针 P6；`src/identity/mod.rs:160/333-345` |
 | 用户库目录 | 属主必须是容器进程用户 `aimem:aimem`；创建须 `docker exec -u 0 … mkdir` + `chown` | 探针 P0/P2 |
-| 每用户库的后台维护 | compose 常驻 serve/curator **只服务默认库**；`ai-memory --db <path> stats` 调用形态可用。**覆盖面（2026-09-21 实测）**：`gc` 负责 TTL 驱逐且**已覆盖 WAL 回收**（CLI 写命令 post-run `wal_checkpoint(TRUNCATE)`）；但 TTL 驱逐**并非 `gc` 独有**（`store`/`list`/`recall`/`import` 与 MCP `memory_recall` 经 `db::gc_if_needed` 惰性清扫）；`archive_on_gc` 默认 true ⇒ 过期行进 `archived_memories`（`ttl_expired`）而非硬删 | 探针 P5 + `memory.agent-mate.ai/scripts/gc-probe.sh`（L1.8）；`specs/mcp/mcp-design.md` §5.3 |
+| 每用户库的后台维护 | compose 常驻 serve/curator **只服务默认库**；`ai-memory --db <path> stats` 调用形态可用。**覆盖面（2026-09-21 实测）**：`gc` 负责 TTL 驱逐且**已覆盖 WAL 回收**（CLI 写命令 post-run `wal_checkpoint(TRUNCATE)`）；但 TTL 驱逐**并非 `gc` 独有**（`store`/`list`/`recall`/`import` 与 MCP `memory_recall` 经 `db::gc_if_needed` 惰性清扫）；`archive_on_gc` 默认 true ⇒ 过期行进 `archived_memories`（`ttl_expired`）而非硬删 | 探针 P5 + `memory.agent-mate.ai/scripts/probes/gc-probe.sh`（L1.8）；`specs/mcp/mcp-design.md` §5.3 |
 
-**多语言检索（2026-09-21 实测，v0.10.0，本地基线容器；可重复探针 `memory.agent-mate.ai/scripts/i18n-probe.sh`，`I18N_PROBE_STRICT=1` 把边界当断言）**
+**多语言检索（2026-09-21 实测，v0.10.0，本地基线容器；可重复探针 `memory.agent-mate.ai/scripts/probes/i18n-probe.sh`，`I18N_PROBE_STRICT=1` 把边界当断言）**
 
 结论矩阵（简中 / 繁中 / 英文 × 通路；双通路交叉验证：`docker exec` 探针 + Cursor `ai-memory-local` 客户端直调结论一致）：
 
@@ -117,7 +117,7 @@ src/storage/migrations.rs:1507
 
 源码依据：`memories_fts` 建表 `USING fts5(title, content, tags, content=memories, content_rowid=rowid)` **无 `tokenize=`**（写入侧由 AFTER INSERT/UPDATE/DELETE 触发器同步入库，索引入库不受语言限制）；`sanitize_fts_query`（`src/storage/mod.rs:7030`）按空白切分、剥除全部 FTS5 特殊字符、逐词元短语化、隐式 AND；`[mcp]` 配置段仅 `profile` / `allowlist` / `profile_hint_in_errors` —— **无任何语言 / 分词 / 检索配置项**。客户端交叉证据标记 `i18n-cross-20260921`（主库 id `de386c65-…5680`）。用例登记 `specs/mcp/mcp-test.md` §4-E；契约面 `specs/mcp/mcp-design.md` §9 J4。
 
-**档位 `--profile` 实测（2026-09-21 实测，v0.10.0，本地基线容器；可复跑探针 `memory.agent-mate.ai/scripts/profile-probe.sh` —— 每档独立进程、只读、7 档全绿）**
+**档位 `--profile` 实测（2026-09-21 实测，v0.10.0，本地基线容器；可复跑探针 `memory.agent-mate.ai/scripts/probes/profile-probe.sh` —— 每档独立进程、只读、7 档全绿）**
 
 | 档位 | 实际注册数 | 构成与要点 |
 | --- | --- | --- |
@@ -160,7 +160,7 @@ src/storage/migrations.rs:1507
 
 - 超限形态：MCP 错误串含 `QUOTA_EXCEEDED`；HTTP 面 `429` + `{"error":"QUOTA_EXCEEDED","limit","current","max"}`。
 - 核对命令：`ai-memory quota-status --agent-id <id> --namespace <ns> --json`（字段在 `quota` 对象内）。
-- 探针：`memory.agent-mate.ai/scripts/limits-probe.sh`（一次性库 + 每轮全新身份 + **仅 env 注入**小阈值）。
+- 探针：`memory.agent-mate.ai/scripts/probes/limits-probe.sh`（一次性库 + 每轮全新身份 + **仅 env 注入**小阈值）。
 
 ## Lesson / guidance
 
@@ -182,13 +182,13 @@ src/storage/migrations.rs:1507
 8. **可用模型与维度只能实测**（2026-09-20 于私有 MaaS 端点）：`/models` 列出 256 个模型；
    `qwen-plus` / `qwen-turbo` / `qwen-flash` 的 chat 均可用，`qwen-turbo` 支持 `response_format=json_object`；
    `qwen3.7-text-embedding` 与 `qwen3.7-text-embedding-flash` 实测都是 **1024 维**。
-   可重复探针：`memory.agent-mate.ai/scripts/qwen-verify.sh`（决策见 ADR-007）。
+   可重复探针：`memory.agent-mate.ai/scripts/probes/qwen-verify.sh`（决策见 ADR-007）。
 9. **MCP 默认档位是 core，工具恰 8 个**：档位不会在输出里自证，唯一可靠判据是 `tools/list` 回包的工具**计数**；
    把「= 8」写死进冒烟脚本，档位一旦漂移就响亮失败（否则只表现为"某个高级工具不见了"的困惑）。
 10. **中文检索只能走 `memory_recall`，`memory_search` 只认完整词元**（2026-09-21 探针实证升级，精确边界见上方多语言专表）：
     FTS5 `unicode61` 分词下，中文唯一可命中的形态是「标点/空白界定的整段」，词元内子串与简繁交叉一律 count=0，
     且**无任何配置项可调**。写断言时标记一律用 ASCII（如 `mcp-smoke-<epoch>`），语义验证用 recall 的中文查询词；
-    两者职责对调会出现「明明存进去了却搜不到」的假故障。边界探针：`scripts/i18n-probe.sh`（STRICT 模式断言边界漂移）。
+    两者职责对调会出现「明明存进去了却搜不到」的假故障。边界探针：`scripts/probes/i18n-probe.sh`（STRICT 模式断言边界漂移）。
 11. **写元数据前先按 `inputSchema` 构造参数**：`source` 等是枚举字段，凭字段名猜值会被响亮拒绝（好）但白耗一轮往返。
 12. **批量/重复写入必须容忍 CONFLICT**：near-duplicate 去重让语义相近的写入返回 CONFLICT，
     脚本若不处理，第二次运行就会假失败（正解：改验既有标记，见 `specs/mcp/mcp-test.md` §1 原则）。
@@ -217,7 +217,7 @@ src/storage/migrations.rs:1507
     ⇒ 验证「attestation 关掉了」**不要**去找该字段，用**正负对照**（`=0` 可写 ∧ `=1` 被拒）—— 它顺带能发现上游把该 env 改名或移除。
     另：断言别写成「不设就会 `403`」，v0.10.0 的 MCP / CLI 缺省**不会**；翻转发生在 v0.11（见上方专表）。
 
-20. **`[limits]` 的「配置生效」不等于「行为生效」**（2026-09-21 实测，探针 `memory.agent-mate.ai/scripts/limits-probe.sh`）：
+20. **`[limits]` 的「配置生效」不等于「行为生效」**（2026-09-21 实测，探针 `memory.agent-mate.ai/scripts/probes/limits-probe.sh`）：
     ① 优先级 env > `[limits]` > 编译默认，且**任意层非正值视为未设**（`0` 不是「禁用配额」而是回落到编译默认；仅 `max_inflight_requests` 的 `0` 是「不装配 HTTP 准入层」的特殊语义）；
     ② 配额按 **`(agent_id, namespace)` 逐行盖章** —— 行在首次写入时固化**当次进程**的默认值，事后改配置**不追溯**已有身份（探针因此必须「新身份 + 一次性库」）；
     ③ **CLI 一次性写入不计费**（`ai-memory store` 不走 `check_and_record`）⇒ 只有 daemon 面 MCP `memory_store` / `memory_link` 能验证配额，用 CLI 验会得出「配额失效」的假结论；
@@ -226,7 +226,7 @@ src/storage/migrations.rs:1507
     ⑥ `max_page_size` 与 `max_inflight_requests` **仅 HTTP 面**生效（准入层在 HTTP router 装配）⇒ 不能借它们给 stdio 会话做并发限流；
     ⑦ **`quota-status` 查错 namespace 会「自建行 + 报默认值」**：MCP `memory_store` 的默认 namespace 是 **`global`**（写入响应的 `namespace` 字段即证据，且用量计数 `current_memories_today` 记在该行），而 `quota-status --namespace <ns>` 对**不存在的** `(agent, namespace)` **会现场建行**并按当前 env / 编译默认盖章 ⇒ 用 `default` 去查落在 `global` 的写入，会得到一行「看起来注入没生效」的假数据（`max_memories_per_day=1000`、用量 0）。交叉核对必须与写入用**同一 namespace**；本仓探针曾因此写出**自证式**断言（查询本身带着注入 env，于是自己把值写进了新行），已修正为「去掉 env + `--namespace global`」。
 
-21. **每库维护的覆盖面与「谁负责」不能靠假定**（2026-09-21 实测，探针 `memory.agent-mate.ai/scripts/gc-probe.sh`）：
+21. **每库维护的覆盖面与「谁负责」不能靠假定**（2026-09-21 实测，探针 `memory.agent-mate.ai/scripts/probes/gc-probe.sh`）：
     ① **TTL 驱逐不是 `gc` 独有** —— `db::gc_if_needed`（`src/storage/mod.rs:10502`）被 `cmd_list`（`src/cli/crud.rs:99`，清扫在 `:110`）、`cli/store.rs:147`、`cli/recall.rs:184`、`cli/crud.rs:110`、`cli/io.rs:364` 与 MCP `memory_recall`（`src/mcp/tools/recall.rs:981`）**fire-and-forget** 调用 ⇒ 任何 `store`/`list`/`recall`/`import` 都可能顺手把过期行清掉。**`gc` 的 `expired_deleted` 只是「此刻还剩下的过期数」，不是「过期总量」**；让一个用户库只被按 id 读（`cmd_get` 不触发清扫），过期行会一直留着。
     ② **WAL 回收已被 `gc` 覆盖** —— `Command::Gc` 在 `daemon_runtime.rs` 的 `is_write_command` 名单内 ⇒ 分发器在该命令成功后执行 post-run `db::checkpoint`（`PRAGMA wal_checkpoint(TRUNCATE)`）。实测：长活 MCP 会话把 `-wal` 撑到 1499712 字节，跑一次 `gc` 后归零。**`curator` 不在该名单内**，它的写入靠 SQLite 干净关闭时的自动 checkpoint。
     ③ **测 WAL 必须先等写入方静默** —— `memory_store` 返回后仍有 deferred-audit 等异步追加；不等静默就跑 `gc`，TRUNCATE 之后立刻长出新帧（实测残留 107152 字节），断言会变成竞态。判据：连续 N 次采样 `-wal` 无变化再动手。另注意 **`-wal` 非零不能当「写完了」**：MCP 写入是**串行**的，第一条落库就让 `-wal` 非零，此时后续响应尚未到达（探针据此校验响应会偶发假失败）——要等**全部**目标响应到齐再进入下一步。
@@ -243,10 +243,10 @@ src/storage/migrations.rs:1507
 - 决议真相源：`memory.agent-mate.ai/specs/architecture.md` §2
 - MCP 测试策略 / 计划 / 用例（L0–L3 分层、客户端接入配置、工具行为原则）：`memory.agent-mate.ai/specs/mcp/mcp-test.md`
 - 多用户隔离方案与结论（冻结机制 / D1–D5 / V1–V4 / 未决前提）：`memory.agent-mate.ai/specs/mcp/mcp-design.md` §0
-- 隔离探针（可重复）：`memory.agent-mate.ai/scripts/iso-probe.sh`（A 负向解析链 / B 方案③双用户隔离 / C 方案②对照）
-- 多语言检索边界探针（可重复）：`memory.agent-mate.ai/scripts/i18n-probe.sh`（三语言 × 三通路矩阵 + 简繁交叉 + STRICT 边界断言）
-- 档位实测探针（可重复）：`memory.agent-mate.ai/scripts/profile-probe.sh`（7 档独立进程；默认档 / core / graph / admin / power / full / `core,lifecycle` 的实际注册数与关键工具归属，只读）
+- 隔离探针（可重复）：`memory.agent-mate.ai/scripts/probes/iso-probe.sh`（A 负向解析链 / B 方案③双用户隔离 / C 方案②对照）
+- 多语言检索边界探针（可重复）：`memory.agent-mate.ai/scripts/probes/i18n-probe.sh`（三语言 × 三通路矩阵 + 简繁交叉 + STRICT 边界断言）
+- 档位实测探针（可重复）：`memory.agent-mate.ai/scripts/probes/profile-probe.sh`（7 档独立进程；默认档 / core / graph / admin / power / full / `core,lifecycle` 的实际注册数与关键工具归属，只读）
 - attestation 开关判据（可重复）：`memory.agent-mate.ai/scripts/mcp-smoke.sh` 会话 C（正负对照：`=0` 可写 ∧ `=1` 被拒；失败退出码 50）
-- 每库维护覆盖面探针（可重复）：`memory.agent-mate.ai/scripts/gc-probe.sh`（L1.8；TTL 驱逐两条路径 / WAL 归零 / `curator --once` / 失败语义与多库独立性，含 `--self-test`）
+- 每库维护覆盖面探针（可重复）：`memory.agent-mate.ai/scripts/probes/gc-probe.sh`（L1.8；TTL 驱逐两条路径 / WAL 归零 / `curator --once` / 失败语义与多库独立性，含 `--self-test`）
 - 每库维护入口（生产 cron 调用面）：`memory.agent-mate.ai/scripts/maintain-user-dbs.sh`（逐库显式 `--db` + attestation=0；`--dry-run` 只读）
 - 相关 ADR：`adr/ADR-004-version-contract-single-source-of-truth.md`、`adr/ADR-005-upgrade-admission-gate-layering.md`、`adr/ADR-008-local-baseline-reuses-production-compose.md`、`adr/ADR-009-per-user-db-isolation-over-single-db-agent-id.md`（多用户隔离形态的决策，含"排除单库 per-agent"的实测理由）

@@ -19,7 +19,7 @@
  *
  * **为什么上游是进程内假上游而不是 `docker exec ai-memory`**：本探针要**精确控制**上游声明的身份、
  * 能力（含 SDK 不认识的键）与工具耗时。真上游那一半（连得上、能双向转发、`memory_store` 往返）
- * 已由 `probes/mcp-bridge-probe/`（`3.5`）与 `scripts/portal-mcp-probe.sh`（`3.1`）覆盖。
+ * 已由 `probes/mcp-bridge-probe/`（`3.5`）与 `scripts/probes/portal-mcp-probe.sh`（`3.1`）覆盖。
  *
  * 退出码契约（与仓内 `probes/` 同范式）：
  *   0   七项断言全过

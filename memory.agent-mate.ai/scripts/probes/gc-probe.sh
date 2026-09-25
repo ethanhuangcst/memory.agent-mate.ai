@@ -20,7 +20,7 @@
 #   5. 失败语义 —— 单库失败不中断：其余库仍被维护，最终非零退出（供 cron 告警）。
 # 另有静态段：机械断言维护脚本每条调用都带显式 --db 与 attestation=0（跨条目挂账闭环）。
 #
-# 用法：bash memory.agent-mate.ai/scripts/gc-probe.sh [--self-test]
+# 用法：bash memory.agent-mate.ai/scripts/probes/gc-probe.sh [--self-test]
 # 退出码：0 全通过；10 前置；20 静态审计；30 TTL 驱逐；40 WAL 回收；50 curator；
 #        60 失败语义；70 多库实跑 + 主库不变
 set -euo pipefail
@@ -143,7 +143,7 @@ docker ps --filter "name=${CONTAINER}" --format '{{.Names}}' | grep -qx "$CONTAI
   || die 10 "容器 ${CONTAINER} 未运行（先执行 local-up.sh）"
 command -v python3 >/dev/null 2>&1 || die 10 "宿主机缺少 python3"
 
-MAINT="$(cd "$(dirname "$0")" && pwd)/maintain-user-dbs.sh"
+MAINT="$(cd "$(dirname "$0")/.." && pwd)/maintain-user-dbs.sh"  # scripts/probes/ ⇒ 仓根为上溯三级（ADR-021 目录分层后）
 [ -f "$MAINT" ] || die 20 "找不到 maintain-user-dbs.sh"
 
 # ── 20. 静态审计：维护脚本每条调用显式 --db 且固定 attestation=0 ──────────────

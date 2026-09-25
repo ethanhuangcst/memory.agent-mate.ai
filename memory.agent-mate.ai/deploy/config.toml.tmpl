@@ -73,7 +73,7 @@ model = "qwen-turbo"
 # ---------------------------------------------------------------------------
 # [embeddings] — 必须显式指向 API（smart 档 preset 默认走 Ollama 的 Nomic）
 #
-# 以下三项均由 memory.agent-mate.ai/scripts/qwen-verify.sh 于 2026-09-20 实测确定：
+# 以下三项均由 memory.agent-mate.ai/scripts/probes/qwen-verify.sh 于 2026-09-20 实测确定：
 #   model = "qwen3.7-text-embedding"  端点 /models 中真实存在，实测可用
 #   dim   = 1024                      实测返回的向量长度
 #   base_url                          与 [llm] 同一私有 MaaS 端点

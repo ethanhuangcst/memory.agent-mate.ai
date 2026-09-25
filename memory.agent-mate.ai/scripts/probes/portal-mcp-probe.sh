@@ -16,7 +16,7 @@
 # 属 Sprint 5 的门户镜像制品。
 #
 # 用法：
-#   bash memory.agent-mate.ai/scripts/portal-mcp-probe.sh
+#   bash memory.agent-mate.ai/scripts/probes/portal-mcp-probe.sh
 #   PROBE_PORT=8797 PROBE_HANDLE=probe31 PROBE_CONTAINER=ai-memory-mcp bash ...
 #
 # 退出码契约（与仓内其它脚本同范式）：
@@ -28,7 +28,7 @@
 
 set -uo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"  # scripts/probes/ ⇒ 仓根为上溯三级（ADR-021 目录分层后）
 REPO="$(cd "$ROOT/memory.agent-mate.ai" && pwd)"
 PORTAL="$REPO/admin_portal"
 CONTAINER="${PROBE_CONTAINER:-ai-memory-mcp}"

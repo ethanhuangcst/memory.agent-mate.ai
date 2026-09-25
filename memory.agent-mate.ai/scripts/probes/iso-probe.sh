@@ -32,7 +32,7 @@
 #
 # 密钥纪律：本脚本不读 env 文件、不打印密钥；仅打印 doctor 的 source/rc 与 MCP 响应片段。
 #
-# 用法：bash memory.agent-mate.ai/scripts/iso-probe.sh
+# 用法：bash memory.agent-mate.ai/scripts/probes/iso-probe.sh
 # 退出码：0 全通过；10 前置失败；20 解析链断言失败；30 隔离断言失败；40 维护通路失败；
 #         50 方案②对照会话异常（P4 仅记录、不因它失败）
 set -euo pipefail

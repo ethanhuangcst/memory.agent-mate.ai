@@ -14,7 +14,7 @@
 #   A9 正常收尾后**未被摘掉**的会话是否归零？
 #   A10 门户进程退出 ⇒ 容器内是否归零（β′「父死子死」的天然保证）？
 #
-# 编排骨架照抄 `scripts/portal-mcp-probe.sh`（真上游 = 容器里的 ai-memory，经
+# 编排骨架照抄 `scripts/probes/portal-mcp-probe.sh`（真上游 = 容器里的 ai-memory，经
 # `PORTAL_LAUNCH_OVERRIDE` 借壳 —— 模板里的二进制是 linux 二进制，macOS 跑不了）。
 #
 # 用法：

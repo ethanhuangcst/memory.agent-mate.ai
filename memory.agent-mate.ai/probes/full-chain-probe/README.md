@@ -50,5 +50,5 @@ node probe.mjs
 ## 边界与如实登记
 
 - **不经门户**（见上）；`3.6` 交付时在门户链路上复述同一判据。
-- **一处既有脆弱点（不是缺陷，已登记）**：`scripts/portal-mcp-probe.sh` 的 `memory_recall` 断言写的是 `count:1`（`tests/fixtures/probe-runner.mts`）。它**现在稳**，因为该脚本每次在清理阶段 `rm -rf /data/users/$HANDLE`（`portal-mcp-probe.sh:59`）⇒ 每次都是空库；但判据本身**脆** —— 一旦「一个会话写两条」或清库被去掉，就会假失败。`3.6` 顺手把它改成**按标记判**。
+- **一处既有脆弱点（不是缺陷，已登记）**：`scripts/probes/portal-mcp-probe.sh` 的 `memory_recall` 断言写的是 `count:1`（`tests/fixtures/probe-runner.mts`）。它**现在稳**，因为该脚本每次在清理阶段 `rm -rf /data/users/$HANDLE`（`portal-mcp-probe.sh:59`）⇒ 每次都是空库；但判据本身**脆** —— 一旦「一个会话写两条」或清库被去掉，就会假失败。`3.6` 顺手把它改成**按标记判**。
 - 本探针**不改**产品代码（本轮只做开工准备）。

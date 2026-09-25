@@ -3,7 +3,7 @@
 #
 # 为什么单列（覆盖核对结论）：`3.7` 的验收条件是「用户 A 写入的记忆，用户 B **经同一门户实例**
 # 检索不可见」+「两侧均记录**解析后的库路径**」，而既有取证都有缺口 ——
-#   · `scripts/iso-probe.sh`（Sprint 3）已证**上游级**隔离（交叉 `get` / 库路径解析 / 主库不变），
+#   · `scripts/probes/iso-probe.sh`（Sprint 3）已证**上游级**隔离（交叉 `get` / 库路径解析 / 主库不变），
 #     但那是**用显式 env 直连上游**，**没有经过门户**（门户才是「令牌 → handle → 库路径」那一步）；
 #   · `make portal-mcp-session-probe`（`3.3` / `3.4`）虽然经门户起了两个用户的会话，但验的是
 #     **进程与文件隔离**（PID / 库句柄 / 目录足迹），**从没让 B 去召回 A 写的东西**。
@@ -19,7 +19,7 @@
 # **预建**两个测试用户目录；生产的 β′ 形态（门户在容器内 spawn）没有这个错位。
 #
 # 用法：
-#   bash memory.agent-mate.ai/scripts/portal-mcp-session-probe.sh
+#   bash memory.agent-mate.ai/scripts/probes/portal-mcp-session-probe.sh
 #   PROBE_PORT=8899 PROBE_CONTAINER=ai-memory-mcp bash ...
 #
 # 退出码契约（与仓内其它脚本同范式）：

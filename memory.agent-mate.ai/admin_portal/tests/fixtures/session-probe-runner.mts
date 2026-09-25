@@ -1,6 +1,6 @@
 /**
  * 「会话隔离」真上游端到端的断言体 —— Sprint 4 `3.3`「mcp:一会话一子进程」，被
- * `scripts/portal-mcp-session-probe.sh` 调用（`make portal-mcp-session-probe`）。
+ * `scripts/probes/portal-mcp-session-probe.sh` 调用（`make portal-mcp-session-probe`）。
  *
  * 与 `tests/integration/mcp-bridge-session-isolation.test.ts` 的分工：
  *  - 集成测试用**假上游** ⇒ 完全离线、可重复，验的是**桥的归属校验与 spawn 计数**；
@@ -302,7 +302,7 @@ function main(): Promise<number> {
     //  ② 每条**否定型**判据必须配一条「**必须为正向**」的灵敏度对照 —— 否则「B 的检索环境坏掉」
     //     也会让「不含」通过（**假绿**）。
     //
-    // **判据必须「经门户」**：本段用的是**同一个门户实例**上的两条令牌；`scripts/iso-probe.sh`
+    // **判据必须「经门户」**：本段用的是**同一个门户实例**上的两条令牌；`scripts/probes/iso-probe.sh`
     // （Sprint 3）的**上游级**证据（显式 env 直连上游）是补充，**不能替代**它 —— 「令牌 → handle →
     // 库路径」这一步恰恰在门户（`RID R1` / `R2` 的靶心）。
     const recallText = async (session: { client: Client }, marker: string): Promise<string> =>
