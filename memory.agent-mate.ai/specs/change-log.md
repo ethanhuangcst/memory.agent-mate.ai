@@ -110,6 +110,25 @@
 - **联系邮箱尚未配置化**：`CONTACT_EMAIL` 是路由常量（设计真源 = 原型 `mailto:`），目前无配置键；如需按部署改地址，再加 `PORTAL_CONTACT_EMAIL` 并同步 `deployment.md` 配置契约表。
 - `AC6.9` 的「真实界面截图」用的是**已验收的原型素材**（同源同值）；若日后要换成新截图，替换 `admin_portal/assets/chat-example.png` 即可，判据不变。
 - 本行**不涉及** `4.3`（启动自检）与 `#7`（真身份口径核对），也不改 MCP 桥 / 上游 / 会话层。
+### Sprint 4 `#4.3`「web-portal:启动自检」开工准备：`3.21` 判据可行性探针 + §3.4 判据定档
+
+**为什么**：`#4.3` 的四条检查（`AC11.1`–`AC11.5`）**大部分已实现** —— `admin_portal/src/selfcheck.ts` 实做 6 项并经 `server.ts` 的启动序列 fail-closed；但另有 **3 项显式 `deferred`**（`embeddings_reachable_1024` / `binary_version_matches_lock` / `launch_template_assertions`，detail 写着「待 §4.3 落地」）⇒ 本行的实质交付点就是**收口这三项 + 把判据形状定死**，而它们各自的「能不能判、怎么判」正是开工准备要回答的问题。
+
+**做了什么（产品代码一行未动）**：
+
+- **新增 `3.21` 探针** `memory.agent-mate.ai/probes/selfcheck-verdict-probe/`（`probe.sh` + `README.md`）。实测 **8/8 PASS · 退出码 0**，五问各带灵敏度对照：
+  ① **fail-closed 三重证据**：合法配置 ⇒ `portal_listening` + `/healthz` 通；`/data/users` 不可写（`chmod 500`）⇒ **退出码 1**、日志记失败项；且此时**端口未监听**。
+  ② **`deferred` 当下算通过**：`pass=6 deferred=3 fail=0` 时门户**照常启动** ⇒ 缺口坐实（收口后 deferred 应归 0）。
+  ③ **`embeddings` 不能只判「调用成功」**：坏 key 下上游出「线性扫描 / 无 embeddings」告警，而 `tools/call` **仍然返回响应**（静默降级真实存在）⇒ 判据必须是「**可达 + 维度 `1024`**」。
+  ④ **版本归一化取法成立**：`ai-memory --version` = `ai-memory 0.10.0`（取末位 semver）⇄ `upstream.lock` 的 `UPSTREAM_RELEASE_TAG=v0.10.0`（去 `v`）；并**实证 `upstream.lock` 未挂进门户容器** ⇒ 锁侧输入归 Sprint 5 镜像侧。
+  ⑤ **模板断言可复用**：`launch-template.ts` 的 argv/env 常量表 + `mcp-design.md` §5.6.4 真源都在，启动期做同一比对体即可（现有单测 17 例已守同一比对）。
+- **契约同步**：`web-design.md` §3.4 新增「**启动自检判据定档**」块（判据形状 · 编排不变量 · 锁侧输入归属 · 通路选择待拍板 · 编排侧缺口）；`web-test.md` 补 S11 的判据形状与**编排不变量**用例（新号取 `TC-P-L0-*` 最大值 +1，避开已占用的 `-10` / `-11`）。
+- **排期同步**：`sprint-backlog.md` `4.3` 行 `ToDo → WIP`，说明列登记开工准备证据与边界。
+
+**验证**：`3.21` 探针 8/8 PASS（退出码 0）· `make doc-links` 零悬空 · `make attestation-paths` 通过 · 探针目录仅新增 `probe.sh` / `README.md` / `.gitignore`（`out/` 已忽略）。
+
+**边界（如实登记）**：**维度 `1024` 未在探针里断言**（门户侧无 embeddings 客户端，读维度需 SDK/HTTP 通路）⇒ 实现前须先拍板「spawn 上游 vs 直连 MaaS」（直连会新增配置键并牵动 `deployment.md` 契约表）· **镜像侧落地（`IMAGE_TAG` 注入 + 挂载锁文件）归 Sprint 5**，本行只交付判据/读取位/失败路径 · `portal.compose.yml` 无 `healthcheck`、`/healthz` 不反映自检结论（编排侧缺口已登记）· **实现轮必须同步改** `tests/unit/selfcheck.test.ts` 里「三项 `deferred` 且 detail 含 `4.3`」的硬断言，否则 `make portal-test` 直接转红。
+
 
 
 

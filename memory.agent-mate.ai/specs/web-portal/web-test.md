@@ -73,6 +73,8 @@
 | TC-P-L0-09 | 启动自检 — 关键校验在位 | `handle` 白名单 / 启动模板断言缺失 → **拒绝启动** |
 | TC-P-L0-10 | 设计令牌的单色约束 | 前提：页面已应用 `portal.css` 令牌；输入：用计算样式扫描所有元素的 `color` / `background-color` / `border-*-color` / `outline-color`；→ 输出：除危险红 `#8b1a1a` 与其浅底 `#faf6f6` 外**不存在任何彩色**，主按钮为墨色实底（对应 `AC14.1` / `AC14.2`） |
 | TC-P-L0-11 | 表单控件尺度一致 | 前提：同一行内存在输入框 / 下拉框 / 按钮；输入：读取三者的渲染高度与 `font-size`；→ 输出：高度集合与字号集合各自只有一个值（当前 44px / 0.875rem，对应 `AC14.3`） |
+| TC-P-L0-12 | 启动自检 — 编排不变量（fail ⇒ 不对外服务） | 前提：可注入的四类前置（可写目录 / embeddings / 版本 / 关键校验）；输入：逐类注入失败并观察进程与端口；→ 输出：任一类 `fail` 时进程**不调用 `listen`**、退出码非 0，且退出后端口**未监听**；**`deferred` 不得当作 pass**（对应 `AC11.5` 与 §3.4 的 fail-closed 判据；配方见 [`../../probes/selfcheck-verdict-probe/README.md`](../../probes/selfcheck-verdict-probe/README.md)） |
+> **S11 启动自检的判据形状与落点（定档 2026-09-25，`#4.3` 开工准备）**：`TC-P-L0-06`–`09` 的**判据形状**（可机械判定的条件）与失败路径见 [`web-design.md`](./web-design.md) §3.4「启动自检判据定档」。**自动化落点** = `admin_portal/tests/unit/selfcheck.test.ts`（既有 13 例，含三项 `deferred` 的硬断言）+ 实现轮新增的编排不变量用例（`TC-P-L0-12`）。**实现轮必须同步改**该文件里「三项 `deferred` 且 detail 含 `4.3`」的断言 —— 不然后者会与前者的收口直接互斥，`make portal-test` 立刻转红。
 
 ### L1 集成（本地，门户 + 共享卷）
 
