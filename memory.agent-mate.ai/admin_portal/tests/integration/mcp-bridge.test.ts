@@ -619,11 +619,13 @@ describe('上游身份与能力透传、超时分层（3.9：TC-M-L1-18 / 19 / 2
     // 夹具在**工具调用内部**挂 1500ms（`--tool-hang-ms`）—— 与「连接前挂起」的 `--hang-ms`
     // 是两条独立链路：那个覆盖握手超时，这个覆盖每请求超时。
 
-    // ① 短握手（300ms）+ 长请求（5000ms）：超时值反着设，耗时 1500ms 的调用**必须成功**。
+    // ① 短握手（1000ms）+ 长请求（8000ms）：超时值反着设，耗时 1500ms 的调用**必须成功**。
+    //    时间常数在 `#8` 收口入口首跑时**按同一语义放大**（原 300 / 5000）——35 个 vitest worker 并行时，
+    //    300ms 的握手在负载下会被打穿 ⇒ 门禁偶发红（实测一例：失败详情 `upstream_unavailable`）。
     //    分层之前两者共用一个值 ⇒ 这次调用会被 300ms 掐断。
     const shortHandshake = await startWithUpstream('--tool-hang-ms=1500', {
-      handshakeMs: 300,
-      requestMs: 5_000,
+      handshakeMs: 1_000,
+      requestMs: 8_000,
     });
     try {
       const client = await connectTo(shortHandshake.base);
@@ -643,11 +645,11 @@ describe('上游身份与能力透传、超时分层（3.9：TC-M-L1-18 / 19 / 2
       await shortHandshake.close();
     }
 
-    // ② 长握手（5000ms）+ 短请求（300ms）：同一类调用这次必须在**每请求**超时处失败，
+    // ② 长握手（8000ms）+ 短请求（800ms）：同一类调用这次必须在**每请求**超时处失败，
     //    且以 **MCP 层错误 `-32001`** 返回 —— 转发期 SSE 响应头已发出，状态码改不动。
     const shortRequest = await startWithUpstream('--tool-hang-ms=1500', {
-      handshakeMs: 5_000,
-      requestMs: 300,
+      handshakeMs: 8_000,
+      requestMs: 800,
     });
     try {
       const client = await connectTo(shortRequest.base);

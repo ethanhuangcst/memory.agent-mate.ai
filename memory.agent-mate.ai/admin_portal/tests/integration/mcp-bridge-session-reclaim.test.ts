@@ -74,7 +74,10 @@ beforeAll(() => {
 
 afterAll(() => {
   db?.close();
-  fs.rmSync(tmpRoot, { recursive: true, force: true });
+  // **带重试**：夹具子进程可能仍在写 `--env-dump` 文件，会让 `rmSync` 撞 `ENOTEMPTY`
+  // （仓内已登记的既有偶发，复跑即过）。`#8` 的收口入口会重复跑这一套 ⇒ 在这里一次性去掉它，
+  // 否则「验收全绿」会被一个与判据无关的 teardown 竞态搅成偶发红。
+  fs.rmSync(tmpRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 });
 
 interface Portal {

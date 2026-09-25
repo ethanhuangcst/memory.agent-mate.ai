@@ -18,11 +18,12 @@ PORTAL_TUNNEL := memory.agent-mate.ai/scripts/tunnel-dev.sh
 PORTAL_COVERAGE := memory.agent-mate.ai/scripts/portal-coverage.sh
 PORTAL_MCP_PROBE := memory.agent-mate.ai/scripts/portal-mcp-probe.sh
 PORTAL_MCP_SESSION_PROBE := memory.agent-mate.ai/scripts/portal-mcp-session-probe.sh
+PORTAL_ACCEPTANCE := memory.agent-mate.ai/scripts/portal-acceptance.sh
 DEPLOY_GUIDE_AUDIT := memory.agent-mate.ai/probes/deploy-guide-audit/probe.mjs
 # 本机快速路径的环境文件（回环 Host + PORTAL_TEST_JWT_EMAIL），已 gitignore。
 PORTAL_LOCAL_ENV := memory.agent-mate.ai/admin_portal/.env.local
 
-.PHONY: help upstream pin pin-update preflight preflight-test backup restore-drill secret-check doc-links attestation-paths maintain-user-dbs hooks-install up down portal-up portal-down portal-dev portal-test portal-e2e portal-tunnel portal-coverage portal-mcp-probe portal-mcp-session-probe
+.PHONY: help upstream pin pin-update preflight preflight-test backup restore-drill secret-check doc-links attestation-paths maintain-user-dbs hooks-install up down portal-up portal-down portal-dev portal-test portal-e2e portal-tunnel portal-coverage portal-mcp-probe portal-mcp-session-probe portal-acceptance
 
 help:
 	@grep -E '^[a-zA-Z0-9_-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*## "} {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
@@ -115,6 +116,9 @@ portal-mcp-probe: ## 接入面真上游端到端探针（Sprint 4 `3.1`；用容
 
 portal-mcp-session-probe: ## 接入面会话隔离真上游端到端（Sprint 4 `3.3`；两会话两进程 + 无他人痕迹 + 接管不伤第三方）
 	bash $(PORTAL_MCP_SESSION_PROBE) $(ARGS)
+
+portal-acceptance: ## 本地完整集成验收收口入口（Sprint 4 `#8`：离线全绿 + L2 + L3 隔离 + 四条真上游判据 + 逐条结论表）
+	bash $(PORTAL_ACCEPTANCE)
 
 deploy-doc-audit: ## 上线配置指南与真源的一致性审计（Sprint 4 `4.4`/`3.16`；零依赖、纯静态）
 	node $(DEPLOY_GUIDE_AUDIT)

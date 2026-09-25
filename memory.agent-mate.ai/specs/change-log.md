@@ -352,6 +352,21 @@
 
 **未做（等确认才动）**：`#8` 的产品代码（收口入口 `make portal-acceptance` + 四条真上游判据的固化）**一行未改**；代码排布见计划文件 `.codebuddy/plans/sprint4-8-local-acceptance.md`。
 
+### `#8`「deploy:本地完整集成验收」交付：一条命令给出本地验收结论表
+
+**交付了什么**：`#8` 是「本 Sprint 全部产物的**收口判据** + Sprint 5 上线的**准入条件**」。覆盖核对显示：L2 真链路与 L3 跨用户隔离**已有真上游门禁**，其余四条（面隔离 / 吊销即时生效 / 并发上限 / 单响应背压）**只有离线判据** ⇒ 本行把四条提升到「经门户的真上游」，并给出**一条命令的收口入口**。
+
+- **新增收口入口 `make portal-acceptance`**（`scripts/portal-acceptance.sh`）：**相 1** 串既有四关（离线全绿 / 覆盖率 / `portal-mcp-probe` / `portal-mcp-session-probe`，**不重造**）；**相 2** 带两条护栏 env（每 key 并发 1 / 背压 32 KiB）跑四条真上游判据；结尾打印**逐条结论表**与**边界项**；任一段失败即以非零码退出并把全量日志落 `/tmp/portal-acceptance-*.log`，同时给出**分段重跑**命令（`ACC_PHASE=2` 可只跑相 2）。
+- **新增断言体** `admin_portal/tests/fixtures/acceptance-runner.mts`：由 `3.19` 探针**去探针化**（判据形状一字未改，9 条断言挂到 `TC-P-L3-03` / `TC-P-L3-04` / `TC-P-L3-06` / `TC-P-L3-10`）。
+- **清掉三类门禁偶发**（收口入口首跑就暴露 —— 验收门禁不能自己偶发）：① `mcp-bridge-session-isolation` ③ 读到空 `childPid`：夹具 `--closed-marker` 原用 `writeFileSync`（先建文件后写内容，读者可能看到「已存在但为空」）⇒ 改**原子写**（临时文件 + `rename`），测试侧 5 处「先等存在再读」因此都不用改；② `mcp-bridge-session-reclaim` 的 `afterAll` `ENOTEMPTY`（仓内已登记）⇒ `rmSync` 加 `maxRetries` / `retryDelay`；③ `TC-M-L1-19`（超时分层）的时间常数按**同一语义放大**（握手 300 ⇒ 1000ms、每请求 5000 ⇒ 8000ms；反向用例 5000 ⇒ 8000ms、300 ⇒ 800ms）——35 个 vitest worker 并行时 300ms 握手会被打穿（实测失败详情 `upstream_unavailable`）。
+- **背压判据加「有界等待」**：响应被门户截断后，SDK 侧可能在等一条**永不结束**的流（实测：无界等待会让该判据挂住、整条收口入口卡死）⇒ 给大 `memory_get` 包 12s 上限，**抛错 / 超时 / 内容不全**三种表现**都算**「没有把完整内容送回」。
+
+**验证**：`make portal-acceptance` **退出码 `0`** · 结论表 **L2 + 五条 L3 全绿**（`TC-OFFLINE` / `TC-COVERAGE` / `TC-L2` / `TC-L3-ISO` / `TC-L3-ACC`）· 相 2 **9/9 断言 PASS** · **敏感性证明**：把背压判据（`TC-P-L3-10·2`）临时反向 ⇒ 该条**转红**、结论表 `FAIL TC-L3-ACC`、退 `30`，还原后转绿 · 零回归：离线 **356 passed / 35 files** · 覆盖率 **93.58 / 87.22 / 97.85 / 94.7**（阈值 92/85/96/93）· `portal-mcp-probe` **6/6** · `portal-mcp-session-probe` **15/15** · `3.19` 探针 **9/9**（加固后复跑）· `tsc --noEmit` 0 错 · `doc-links` / `attestation-paths` 通过 · 收尾后容器内同形进程数 `0`。
+
+**边界如实登记（不属本行）**：真实域名下的面隔离（CF Access / 隧道）归 Sprint 5 上线验收 · **经门户的配额透传**归 Sprint 5 `#2`「mcp:配额透传」· 「多条 × 正文」的批量体量仍未测（`3.18` 登记）。
+
+**一条操作纪律（本轮实测）**：收口入口与其它门禁**不要并发跑** —— 一次「覆盖率与探针同时跑」的尝试里，`session-reclaim` ② 因负载吃满 60s 超时（单独复跑即绿）。
+
 ---
 
 ## 2026-09-23

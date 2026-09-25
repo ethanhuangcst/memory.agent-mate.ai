@@ -266,7 +266,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 process.stdin.on('end', () => {
   if (closedMarkerPath) {
     try {
-      fs.writeFileSync(closedMarkerPath, String(process.pid));
+      // **原子落盘**（先写临时文件再 `rename`）：直接 `writeFileSync` 会先创建/截断文件再写内容，
+      // 读者可能看到「文件已存在但内容还是空的」⇒ 断言读到 `''`（`#8` 收口入口首跑实测的偶发：
+      // `mcp-bridge-session-isolation` ③ 的 `childPid` 读到空串）。测试侧 5 处「先等存在再读」
+      // 的调用点因此都不再需要改造。
+      const pendingMarker = `${closedMarkerPath}.${process.pid}.tmp`;
+      fs.writeFileSync(pendingMarker, String(process.pid));
+      fs.renameSync(pendingMarker, closedMarkerPath);
     } catch {
       /* 同上 */
     }
