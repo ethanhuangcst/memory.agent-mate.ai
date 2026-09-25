@@ -337,6 +337,21 @@
 
 **一处如实登记**：「多条 × 正文」的批量体量（`memory_smart_load`）**未实测** ⇒ 4 MiB 按 `k × 65 KiB` 最坏情形估算，**未**把它写成实测结论。
 
+### `#8` 开工准备：`3.19` 探针定档「哪几条 L3 判据能提升到真上游」
+
+**为什么**：`#8`「deploy:本地完整集成验收」的验收条件是「L2 真实客户端跑通」+「L3 本地版全绿（跨用户隔离 / 面隔离双向拒绝 / 吊销即时生效 / 并发与配额生效 / 单响应背压生效）」，它的性质是**收口 + 上线准入**。覆盖核对发现：L2 与「跨用户隔离」**已有真上游门禁**（`make portal-mcp-probe` / `make portal-mcp-session-probe`），而**其余四条只有离线（假上游）判据** —— 能不能提升到真上游、判据怎么写，全仓没有实测。
+
+**做了什么**（**只做开工准备，产品代码一行未动**）：
+
+- **新增探针 [`../probes/local-acceptance-probe/`](../probes/local-acceptance-probe/)（`3.19`，研究类）**：骨架由 `3.3` 的会话探针**派生**（差别只有端口 / 用户名 / 断言体路径 / 两条护栏 env），**一次门户起停跑四个场景** —— **9/9 断言 PASS · 退出码 0 · 两轮一致**。
+- **决定性结论：四条全部可在真上游上判** —— ① **面隔离**：本机两个「面」只是两个 `Host`（`PORTAL_ADMIN_HOST` / `PORTAL_MCP_HOST`）⇒ 构造 Host 头即判，信号是 **`403` + `Forbidden: request host does not match this face.`**；② **并发上限**：同令牌第二路 ⇒ `429` + `SESSION_LIMIT_EXCEEDED` 且**不新增子进程**；③ **吊销即时生效**：机制是 `route.ts:248` 的**请求驱动惰性回收**（吊销本身不杀进程 ⇒ 下一次带「该会话自己的 `sessionId`」的请求才回收）⇒ `401` + 子进程消失，**确定性可判**；④ **背压**：40 KiB 内容 ⇒ 大 `memory_get` 不把完整内容送回（客户端 0 字节）+ 门户库留 `mcp_response_capped`。
+- **顺手补一处契约缺口**：门户 `src/server.ts:75` 的 `bodyLimit: 64 * 1024`（**代码常量、不可配**）此前**未在契约登记** —— 它是背压上限的**入站对偶**（入 64 KiB / 出 4 MiB）⇒ 已补进 `web-design.md` §12.7，并写清「判据的输入量必须落在入站与出站两个上限之间」（首版用 ~86 KiB 的 `memory_store` 直接被 `413 FST_ERR_CTP_BODY_TOO_LARGE` 拦下）。
+- **三条工程教训（写进探针 README）**：`keyPrefix` 只能从库里取（`issueKey()` 不返回它，首版据此直接调 `revokeKey` ⇒ `key-not-found` 假失败）· 判据输入量要落在两个上限之间 · 派生脚本的固定文案要当代码改（`3.15` 同款）。
+
+**验证**：`bash memory.agent-mate.ai/probes/local-acceptance-probe/probe.sh` **退出码 `0`**，两轮复跑一致（**9/9 断言 PASS** · 收尾后容器内同形进程数 `0`）。原始输出落 `probes/local-acceptance-probe/out/`（**不入库**）。
+
+**未做（等确认才动）**：`#8` 的产品代码（收口入口 `make portal-acceptance` + 四条真上游判据的固化）**一行未改**；代码排布见计划文件 `.codebuddy/plans/sprint4-8-local-acceptance.md`。
+
 ---
 
 ## 2026-09-23

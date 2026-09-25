@@ -516,6 +516,7 @@ admin_portal/
 | 每 key 并发上限 | `PORTAL_MAX_CONCURRENCY_PER_KEY`（`4.1` 已实现） | **明确拒绝**（不排队致死，T5 / TC-P-L3-06）：`429` + `SESSION_LIMIT_EXCEEDED` + `scope=per_key`；**建会话之前**拒绝 ⇒ 不新增子进程 |
 | 全局并发上限 | `PORTAL_MAX_CONCURRENCY_GLOBAL`（`4.1` 已实现） | 同上，`scope=global` |
 | 单响应字节上限 | `PORTAL_RESPONSE_MAX_BYTES`（**`4.5` 已实现**；生产 **4 MiB**） | **明确报错 / 截断**（见 §12.5 失败映射表对应行）：边转发边计字节；头未发出 ⇒ `502` + `RESPONSE_TOO_LARGE`；头已发出 ⇒ 截断流并留审计 |
+| 请求体上限（**入站**） | `src/server.ts:75` `bodyLimit: 64 * 1024`（**代码常量、不可配**） | **明确拒绝**：`413` + `FST_ERR_CTP_BODY_TOO_LARGE`。它是**背压上限的入站对偶**（入 64 KiB / 出 4 MiB）—— 2026-09-25 由 `3.19` 探针发现**此前未登记**（首版探针用 ~86 KiB 的 `memory_store` 被它拦下）；**任何「大响应」判据的输入量都必须落在入站与出站两个上限之间** |
 | 空闲超时 | `PORTAL_SESSION_IDLE_TIMEOUT`（`3.4` 机制，`4.1` 定值） | 回收会话与子进程 |
 | 单会话最长时长 | `PORTAL_SESSION_MAX_DURATION`（同上） | 同上 |
 
