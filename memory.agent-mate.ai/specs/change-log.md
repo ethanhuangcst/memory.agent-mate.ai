@@ -54,6 +54,12 @@
 - `deploy/config.toml.tmpl` 只改**注释**（键集合未动 ⇒ 与 `deployment.md` §5.3 的镜像断言无关）。
 - 「约 55 处」是 ADR 原稿的快照，**实际 180 处**；已把「以现场 grep 为准」写进 `ADR-021` 的 Consequences。
 - 本机未入仓的 `memory.agent-mate.ai/secrets.local.hk_vps_4.md` 内 1 处旧路径已顺手同步（不入制品）。
+**交付后回归（同日，17 项门禁串行复跑）**：`secret-check` · `doc-links`（56 文件 / **1479** 链接零悬空）· `attestation-paths` · `preflight-test` 5/0 · `deploy-doc-audit` 5/0 · `pin` · `mcp-smoke`（含 attestation 正负对照）· **`portal-acceptance` 退出码 0**（结论表 5/5 · 相 2 9/9）· `portal-coverage`（35 files / 356 passed · 93.58/87.22/97.85/94.7）· `3.19` 探针 9/9 · 5 个被移探针（`gc` / `i18n` / `iso` / `limits` / `profile`）全部 rc=0 · `portal-e2e` 离线端到端通过 ⇒ **分层与 180 处改指未损坏任何一侧**。
+
+**唯一红项是环境问题（非回归）**：`make portal-e2e` 的默认端口 8788 被 **2026-09-23 10:12 启动的常驻 dev 门户**占用（脚本真实退出码 **30** = 前置不满足；`make` 会把它折叠为 2）⇒ 用 `--port 8791` 重跑即绿。需要时可 `make portal-down PORT=8788` 停掉该常驻实例。
+
+**未覆盖（如实登记，未测 ≠ 通过）**：生产域名链路（CF Access / 隧道）· `portal-e2e --online`（需 Service Token）· 备份外迁（OSS 凭证）· `make restore-drill`（会动数据）· `make preflight` / `pin-update`（需网络）· `probes/qwen-verify.sh` 完整复跑（真实调用 MaaS）。
+
 
 ## 2026-09-24
 
