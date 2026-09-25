@@ -128,6 +128,27 @@
 **验证**：`3.21` 探针 8/8 PASS（退出码 0）· `make doc-links` 零悬空 · `make attestation-paths` 通过 · 探针目录仅新增 `probe.sh` / `README.md` / `.gitignore`（`out/` 已忽略）。
 
 **边界（如实登记）**：**维度 `1024` 未在探针里断言**（门户侧无 embeddings 客户端，读维度需 SDK/HTTP 通路）⇒ 实现前须先拍板「spawn 上游 vs 直连 MaaS」（直连会新增配置键并牵动 `deployment.md` 契约表）· **镜像侧落地（`IMAGE_TAG` 注入 + 挂载锁文件）归 Sprint 5**，本行只交付判据/读取位/失败路径 · `portal.compose.yml` 无 `healthcheck`、`/healthz` 不反映自检结论（编排侧缺口已登记）· **实现轮必须同步改** `tests/unit/selfcheck.test.ts` 里「三项 `deferred` 且 detail 含 `4.3`」的硬断言，否则 `make portal-test` 直接转红。
+### Sprint 4 `#7`「deploy:真身份口径核对」开工准备：`3.22` 判据探针 + 核对对象改指真源
+
+**为什么**：`#7` 的验收形态是**文档核对**（`SBI-D5`：「只读核对：受影响则更新，未受影响则显式登记「已核对、无需改」」），而它点名的核对对象里有一条是**空的** —— 「`mcp/mcp-design.md` 主机名与 Bypass 口径」在该文件内**不存在**（全文搜 `Bypass` 0 命中，只回链 `web-portal/web-design.md` §6）。⇒ 开工准备要先把「核对谁、按什么判」定死，再把受影响项列出来，避免本体轮得出一条无内容的结论。
+
+**做了什么（产品代码一行未动）**：
+
+- **新增 `3.22` 判据探针** `memory.agent-mate.ai/probes/identity-scope-verdict-probe/`（`probe.sh` + `probe.mjs` + `README.md`；**纯静态、只读、零网络**，不需要容器）。实测 **5 PASS / 3 待修订**，每条都给出**两侧真源**与判定依据。
+- **核对对象改指真源**：`deployment.md` §12.4 / §12.5.1 / §12.5.4（身份来源、Admin 邮箱与 Allow 策略、MCP 面 Bypass、`PORTAL_ACCESS_*` 与生产禁用键）+ **`web-design.md` §6**（Host/Bypass 表）与 §12.3（按 Host 分面）；并在 `mcp-design.md` §5.6.2 的**回链处就地补一句落点说明**（本文件不展开该口径，核对落在 `web-design.md` §6）。
+- **三项待修订项（`SBI-D5`：受影响则更新）**：
+  ① `deploy/portal.compose.yml:79` 注释写 `PORTAL_ENV=dev`，而 `admin_portal/src/config.ts` 的枚举只认 `development` / `production` ⇒ **照注释填报会踩启动期校验**；
+  ② **`--dev-login` 的生产禁用口径在 `deployment.md` 缺位**（只登记在 `web-design.md` D15 / `ADR-015`）⇒ 口径覆盖不完整；
+  ③ `deploy/config.toml:3` 与 `deploy/config.local.toml:3` 的注释仍写旧部署目录 `/opt/ai-memory-mcp/`（已统一为 `/opt/ai-memory/`）—— **制品侧**注释，正是运维会照抄的地方。
+- **已 PASS 的五项**（可直接登记为「已核对、无需改」）：生产禁用键三处同集（6 键）· 面隔离两 Host 键齐备且「必须不相交」在代码与设计两侧都写了 · 「MCP 面必须绕过 Access」在设计/指南四处一致 · `mcp-design.md` 的回链有效（目标节含 Host/Bypass 表）· 旧口径规则的**灵敏度对照**（注入即命中，不是恒绿）。
+- **契约与分工登记**：`deploy-guide-audit/README.md` 补一条边界 —— 主机名 / Bypass / 隧道 / 真身份口径**不在** `make deploy-doc-audit` 的判据内，由本探针承载（避免「本行已被门禁把住」的自证不实）。
+
+**验证**：`3.22` 探针 5 PASS / 3 待修订（退出码 0）· `make doc-links` 零悬空 · `make attestation-paths` 通过 · 探针目录仅新增 `probe.sh` / `probe.mjs` / `README.md` / `.gitignore`（`out/` 已忽略）。
+
+**判据不许「假绿」的两处实测教训（已写进探针规则）**：① **历史叙述不是残留** —— `deployment.md` 的变更记录行里出现旧目录是**合法历史**（按仓内改名口径保留、靠映射表收口）⇒ 规则必须豁免 `| 20YY-MM-DD |` 形式的变更记录行（实测豁免 1 处），否则第一条命中的就是历史行；② **扫描面必须含制品** —— 只扫 spec 会漏掉 `deploy/config.toml*` 注释里的旧路径，而那正是运维照抄处。
+
+**边界（如实登记）**：三条待修订项的**实际修订**与「逐项留结论」的最终形态属 `#7` 本体 · `deployment.md:33` 的「DNS（两个域名）暂无承接条目（归属待定）」属**人工留结论**项，不在机械判据内 · 交叉引用锚点（`web-design.md` §6 / §6.1）本轮只做语义核对，不加机械断言（避免把「引用错节」误判成漂移）。
+
 
 
 

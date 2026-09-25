@@ -229,6 +229,8 @@ aimem-ssh ALL=(root) NOPASSWD: /usr/bin/docker exec -i ai-memory-mcp ai-memory m
 | **HTTP MCP** | 外部用户 | `https://{MCP_HOST}/mcp` | `Authorization: Bearer memo_…` | 门户实现 |
 
 > **为什么两条都留**：HTTP 是公网面、依赖反代与门户；SSH 零公网入口、零额外组件 ⇒ 门户挂掉时主人仍能读写（**降级不失效**）。全链路数据流与两 stack 划分见 [`../architecture.md`](../architecture.md) §3（不在此重复）。域名与 Cloudflare Access 边界（D8）属门户接入面，见 [`../web-portal/web-design.md`](../web-portal/web-design.md) §6。
+>
+> **`#7` 核对的落点（定档 2026-09-25）**：上句提到的「主机名与 Bypass 口径」**不在本文件展开** —— 真源是 [`../web-portal/web-design.md`](../web-portal/web-design.md) §6（管理面/MCP 面 Host 与 Access 开启/绕过表）+ §12.3（按 `Host` 分面）；本文件 §5.6.2 只登记端点形态。`#7` 按该落点核对，判据见 [`../../probes/identity-scope-verdict-probe/README.md`](../../probes/identity-scope-verdict-probe/README.md)。
 
 **会话桥契约（HTTP(Streamable) ⇄ stdio）**——以下 4 步中，**第 3 步是本文件契约**，其余三步是门户自身编排：
 

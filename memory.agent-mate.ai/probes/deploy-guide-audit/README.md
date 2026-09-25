@@ -72,5 +72,6 @@ node memory.agent-mate.ai/probes/deploy-guide-audit/probe.mjs
 
 - **首版探针自己有两个 bug**（已修，属「探针也要先验证」的同族教训）：① 抽 compose 的键时**只认 `KEY:` 映射形态**，漏了 `- KEY=value` 与 `${KEY}` ⇒ 把 21 个 `PORTAL_*` 全**误报**成遗漏；② 比对引用路径时把 `../` 丢了 ⇒ 45 个引用全**误报**缺失。**若不同批跑一遍「应当通过」的对照项，这两处会把「文档有问题」的结论带错方向。**
 - **`.env` / `.env.local` / `portal.env` 均已 gitignore、未被跟踪**（只有 `*.example` 入库）—— 探针只读这些文件**不入库**的内容，不复制任何值到日志。
+- **本探针不覆盖的维度（分工已登记，2026-09-25）**：主机名 / Bypass / 隧道 / 真身份口径**不在**本探针判据内 ⇒ 由 [`../identity-scope-verdict-probe/README.md`](../identity-scope-verdict-probe/README.md)（Sprint 4 `#7` 开工准备）承载。本探针只管「键名登记 / 引用路径 / §5.4 逐键一致 / compose 结构底线」—— 别把本行读成「真身份口径已被门禁把住」。
 - 本探针**不改**任何文档或代码（本轮只做开工准备）。
 - **不判上游 `config.toml` 的键**（`deploy/config.toml.tmpl` 是另一套真源，`deployment.md` §5.2/§5.3 已逐键对齐），故 `docOnly` 只作发现。
