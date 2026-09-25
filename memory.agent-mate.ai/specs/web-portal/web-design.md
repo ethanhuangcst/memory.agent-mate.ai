@@ -384,7 +384,7 @@ admin_portal/
 
 **旧路径兼容**：`/instructions` 作为历史路径 **301 → `/`**（首页已与接入说明合并，避免旧链接失效）。
 
-**公开页不含机密**：`/` 只渲染静态文案与占位符示例（`{MCP_HOST}` / `{handle}`），**不读取**任何用户库、**不列出**用户或令牌；`/admin/mcp` 的管理员配置示例同样**只用占位符**（不含真实主机名、IP 与凭据）。
+**公开页不含机密**：`/` 只渲染静态文案与占位符示例（`{MCP_HOST}` / `{handle}`），**不读取**任何用户库、**不列出**用户或令牌；`/admin/mcp` 的管理员配置示例同样**只用占位符**（不含真实主机名、IP 与凭据）。 **占位符合规的机械判据（2026-09-25 定档，见 `web-test.md` 的「S6 落点与判据定档」）**：扫描面 = `views/**/*.njk` + `i18n/*.json` + `specs/web-portal/*.md`；命中集合 = {真实令牌形态} ∪ {基础设施主机名} ∪ {公网 IP}；**允许清单只含裸产品域名 `memory.agent-mate.ai`** —— 它是品牌串（`AC6.11` 要求出现在标题与顶栏），其**子域**与基础设施主机名（`nginx*` / `portainer*` / `*.maas.aliyuncs.com`）仍一律禁。
 
 ### 12.4 模板与 i18n 约定
 
@@ -791,7 +791,7 @@ admin_portal/
 | 资产 | 源路径 | 目标路径 | 说明 |
 |---|---|---|---|
 | 设计系统样式 | `mockups/assets/portal.css` | `admin_portal/assets/portal.css` | 全部令牌与组件规则；**唯一真源**，实现期不得另建样式表 |
-| 四语言词表 | `mockups/assets/i18n.js` | `admin_portal/assets/i18n.js` | 四份词表（键集合一致，实测各 220 键）；实现期按 §12.2 拆为 `src/web/i18n/{en,zh-CN,zh-HK,zh-TW}.json`，**键名与结构不变** |
+| 四语言词表 | `mockups/assets/i18n.js` | `admin_portal/assets/i18n.js` | 四份词表（键集合一致，**实测各 260 键** —— 2026-09-25 订正，原写「220 键」已过期）；实现期按 §12.2 拆为 `src/web/i18n/{en,zh-CN,zh-HK,zh-TW}.json`，**键名与结构不变** |
 | 交互脚本 | `mockups/assets/mockup.js` | `admin_portal/assets/mockup.js` | 语言切换 · `[data-i18n]` 渲染 · 复制回显 · URL query 变体态 · 对话框开合。**原型专用**：实现期由真实路由与前端行为替代 |
 | 品牌标识 | `mockups/assets/logo.png` | `admin_portal/assets/logo.png` | 与仓库根 `memory.agent-mate.ai/logo.png` 同源（**三处 sha256 一致**）；**透明底品牌徽标 1004×520**（灰底 + 黄色「MCP」；品牌资产，**不参与 UI 色系核对**，见 §13 开头的说明）。公开页 hero 高 `112px`、管理面顶栏 `72px`（`≤720px` 时 `40px`）；按 `height` + `width:auto` + `object-fit: contain` 渲染，**不拉伸变形**（实测 hero `112×216`、顶栏 `72px`、`≤720px` 时 `40px`）。**语义重复 —— 2026-09-22 用户逐项定夺：保留**：徽标是**横向锁定款**，自带品牌名（`MEMORY MCP`）与域名（`agent-mate.ai`），与相邻的文本品牌串在 hero（`AI Memory MCP`）与顶栏（`memory.agent-mate.ai - AI Memory MCP`）**语义重复**；因 `AC6.11` 要求顶栏出现完整品牌串、`AC14.12` 要求公开页 hero 与管理面顶栏**各有一处** logo，重复是两条 AC 的**结构性结果**，不再改动 |
 | 管理员微信二维码 | `mockups/assets/wechat.png` | `admin_portal/assets/wechat.png` | 站主本人二维码（第 1 步 Contact Admin 悬浮窗）；**属站主个人资产，非异产品品牌资产** |
