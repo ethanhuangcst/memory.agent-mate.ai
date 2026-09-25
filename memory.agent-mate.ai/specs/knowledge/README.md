@@ -13,3 +13,4 @@
 | [web-portal/portal-launch-mechanism.md](web-portal/portal-launch-mechanism.md) | 门户启动机制 β′ 的实测证据（镜像契约 C1–C3、端到端探针配方）、两个落地缺口（`/data/users` 属主 root ⇒ 需 setgid 引导；门户必须注入 LLM key 否则静默降级）、α 无法用 socket 代理收窄 | 2026-09-21 |
 | [docs/spec-doc-conventions.md](docs/spec-doc-conventions.md) | 自有 spec 的写作与维护约定：对外说明「只列增量 + 全档连续编号」、说明必须与探针实测逐项对齐（含集合比对断言）、被引文档改版要连带扫引用方转述、删并文档后的引用治理与护栏豁免收口 | 2026-09-21 |
 | [web-portal/portal-implementation-notes.md](web-portal/portal-implementation-notes.md) | 门户实现笔记（`PSP-W1` 起）：把设计包变成可运行代码时的坑 —— 词表键名沿袭原型的陷阱、令牌 `43 字符` 口径、CSS 令牌收口与护栏断言、E2E 的语言与状态隐式输入、明文一次性不可走 PRG、同目录「本来就在」与「本次创建」的记账 | 2026-09-22 |
+| [retrospective/sprint-4.md](retrospective/sprint-4.md) | Sprint 4 回顾总结（Learnings 71 · Opportunities 15 · Future actions 31，均带稳定锚点与各轮来源）：编号与引用治理、重排同步面、判据口径与敏感性（判据按语义判 / 正反对照 / 取行方式）、门禁自身的可信度（退出码契约 / 带病运行 / 偶发治理）、探针与夹具（假上游 / 可注入接缝 / 探针先于实现）、交付粒度与 UI 增量确认、上线产物各轮实测教训 | 2026-09-25 |

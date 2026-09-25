@@ -8,6 +8,21 @@
 
 ## 2026-09-25
 
+### Sprint 4 收口：结束标记 + 回顾重构（长文总结入 `knowledge/`，排期只留三部分）+ `4.3` 转 Sprint 5
+
+**为什么**：Sprint 4 除 `4.3`（启动自检**实现轮**）外全部 `Done` ⇒ 按 Sprint 1 / 2 / 3 的同体例收口（结束标记 + 回顾定稿）；同时用户指出**回顾太长**（原约 **340 行 / 20 个轮次块**）⇒ 按新体例重构：**细节总结入 `knowledge/`**，排期只保留**三部分的一行式索引**。
+
+**改了什么**：
+
+- **新增 knowledge** [`knowledge/retrospective/sprint-4.md`](./knowledge/retrospective/sprint-4.md)（`type: ops-lesson`，`as_of 2026-09-25`）：原 20 个轮次块的**去重总结** —— **Learnings 71 条**（含跨轮「复现于」标注）· **Opportunities 15 条** · **Future actions 31 条**，每条带**稳定锚点**（`#lN` / `#oN` / `#fN`）与来源块；并在 [`knowledge/README.md`](./knowledge/README.md) 索引登记。
+- **排期重构**：`### Retrospective` 只留**三部分**（`Learnings` / `Opportunities` / `Future actions`），按 `**[时间戳]，创建者，创建原因**` 分块（**16 块**），每条一行 + knowledge 深链接；开头写明**结构变更、体例对照（做得好→Opportunities · 学到→Learnings · 下轮改进→Future actions）与去重口径**。
+- **结束标记**：`## Sprint 4` 标题区加 `**状态：已结束**（`4.3` 实现轮按计划转 Sprint 5 `#1`，2026-09-25）`（与 Sprint 1 / 2 / 3 同体例）。
+- **`4.3` 延期登记**：本 Sprint「移出登记」表加一行（`4.3` 实现轮 → **Sprint 5**，理由 = 依赖镜像与编排制品），并在 Sprint 5 `#1` 行追加**承接说明**（**不新增行**，`ADR-021` D2：十六行不裁）。
+
+**验证**：`make doc-links` **60 文件 / 1625 链接零悬空**（新增 118 条 knowledge 深链接全部可达）· `make attestation-paths` ✓ · `make preflight-test` 5/0 · `make deploy-doc-audit` **9/0 · 退出码 0** · `make secret-check` ✓ · `git diff --check` 干净。
+
+**边界**：本轮**不动** `4.3` 的实现（转 Sprint 5 `#1` 承接）· 不改 Sprint 5 的行数（`ADR-021` D2）· 原回顾**原文**不再在正文保留副本（可沿 git 历史追溯）· 三部分是**索引**，条目细节与证据一律以 knowledge 文档为准。
+
 ### `3.16` 判据修正：`deploy-doc-audit` 的「真正会读」收窄为三种真读取形态（`A2` 假红转绿）
 
 **为什么**：`make deploy-doc-audit` 在 HEAD 上红 —— `A2`（「门户真正会读的每个 `PORTAL_*` 键，都至少在一处被登记」）报「遗漏 `PORTAL_CONTACT_EMAIL`」。归因（机械取证）：该令牌**只出现在一条注释**里 —— `admin_portal/src/web/routes/index.ts`「如需按部署改地址，再加 `PORTAL_CONTACT_EMAIL`」，由 Sprint 4 `#4.2` 交付（`55a4fa0`）引入，代码从未读取；而 `A2` 的实现是**扫源码全文抽键**（注释与字符串都算），与它自己的标题「门户**真正会读的**每个键」不一致 ⇒ 这是**判据假红**，不是文档缺登记。证据：审计规则自基线 `95cc82b` 以来未变（`git diff --stat` 空），该令牌在 `95cc82b` 源码 **0 命中**、在 `55a4fa0` **1 命中**。
