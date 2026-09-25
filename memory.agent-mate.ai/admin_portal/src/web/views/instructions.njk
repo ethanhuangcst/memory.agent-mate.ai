@@ -1,27 +1,188 @@
-{# 公开说明页（本批为占位；真实三步接入说明属 PSP-W3）。
-   公开面没有管理身份，故不复用管理面外壳（外壳需要身份与侧栏上下文）。 #}
+{# 公开接入说明页（Sprint 4 `#4.2`；结构与类名逐字对齐原型 specs/web-portal/mockups/01-instructions.html）。
+   公开面没有管理身份，故不复用管理面外壳（外壳需要身份与侧栏上下文）。
+
+   两条纪律（specs/web-portal/web-design.md）：
+   ① §12.4：文案一律服务端取词（单引号键名，见 tests/unit/i18n-keys.test.ts 的提取规则），不硬编码用户可见文案。
+      —— 注意：本注释里**不要**写出取词调用的字面形态，那会被该护栏当成真实调用而扫成缺键（自指陷阱）。
+   ② §12.3：公开页不含机密 —— 示例一律占位符（`{MCP_HOST}` / 掩码令牌），**不**渲染真实主机名、IP 与令牌明文。 #}
 <!DOCTYPE html>
 <html lang="{{ htmlLang }}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{{ t('placeholder.instructions.title') }} — {{ t('brand') }}</title>
+<title>{{ t('brand') }}</title>
 <link rel="icon" href="/assets/logo.png" type="image/png">
 <link rel="stylesheet" href="/assets/portal.css">
 </head>
-<body class="app-shell">
-<main id="content" class="content">
-  <section class="section">
-    <p class="eyebrow">{{ t('placeholder.eyebrow') }}</p>
-    <h1>{{ t('placeholder.instructions.title') }}</h1>
-    <p class="lead-note">{{ t('placeholder.instructions.body') }}</p>
-    <div class="callout callout-info">
-      <p>{{ t('placeholder.batchNote') }}</p>
+<body class="home-shell guide-shell">
+<a class="sr-only" href="#content">{{ t('a11y.skip') }}</a>
+
+<div class="shell-locale">
+  <form method="get" action="{{ formAction }}">
+    {% for param in preservedQuery %}<input type="hidden" name="{{ param.key }}" value="{{ param.value }}">{% endfor %}
+    <div class="locale-switch" role="group" aria-label="{{ t('a11y.locale') }}">
+      {% for option in localeOptions %}
+      <button type="submit" name="lang" value="{{ option.code }}"{% if option.code == locale %} class="is-active" aria-pressed="true"{% else %} aria-pressed="false"{% endif %}>{{ option.label }}</button>
+      {% endfor %}
     </div>
-  </section>
+  </form>
+</div>
+
+<main id="content" class="home-main">
+  <article class="guide" data-testid="instructions-guide">
+
+    <header class="guide-hero">
+      <div class="guide-hero-title">
+        <span class="logo">
+          <img class="logo-header-mark" src="/assets/logo.png" alt="" width="56" height="56" onerror="this.style.visibility='hidden'">
+        </span>
+        <h1>{{ t('guide.title') }}</h1>
+      </div>
+      <p class="guide-hero-tag">{{ t('guide.tag') }}</p>
+    </header>
+
+    <section class="guide-section" id="setup">
+      <h2 class="section-subtitle">{{ t('guide.h_setup') }}</h2>
+      <p>{{ t('guide.setup_body') }}</p>
+
+      <ol class="steps">
+        <li class="step">
+          <span class="step-num">01</span>
+          <div class="step-body">
+            <h3>{{ t('step1.title') }}</h3>
+            <p>{{ t('step1.body') }}</p>
+            <p class="step-contact">
+              <span>{{ t('step1.contact_lead') }}</span>
+              <span class="contact-admin">
+                <button type="button" class="contact-admin-trigger" aria-describedby="step1-wechat-qr" data-testid="contact-admin">{{ t('contact.trigger') }}</button>
+                <span id="step1-wechat-qr" class="contact-admin-pop" role="tooltip">
+                  <img src="/assets/wechat.png" alt="{{ t('contact.qr_alt') }}" width="180" height="180" onerror="this.style.visibility='hidden'">
+                  <span class="contact-admin-caption">{{ t('contact.caption') }}</span>
+                  <a class="contact-admin-mail" href="mailto:{{ adminEmail }}">{{ adminEmail }}</a>
+                </span>
+              </span>
+            </p>
+            <p>{{ t('step1.token_note') }}</p>
+            <span class="token-mask">memo_a1b2.....4o5p6</span>
+          </div>
+        </li>
+
+        <li class="step">
+          <span class="step-num">02</span>
+          <div class="step-body">
+            <h3>{{ t('step2.title') }}</h3>
+            <p>{{ t('step2.body') }}</p>
+            <p>{{ t('step2.cursor') }}</p>
+            <p class="step-url"><span>{{ t('step2.url_label') }}</span> <code>https://{MCP_HOST}/mcp</code></p>
+            <div class="codeblock codeblock--file">
+              <div class="codeblock-head">
+                <span class="codeblock-tag">mcp.json</span>
+                <button class="codeblock-copy" type="button" data-copy="#step2-config" data-copied-label="{{ t('common.copied') }}">{{ t('common.copy') }}</button>
+              </div>
+              <pre class="codeblock-text mono" id="step2-config">{{ configJson }}</pre>
+            </div>
+          </div>
+        </li>
+
+        <li class="step">
+          <span class="step-num">03</span>
+          <div class="step-body">
+            <h3>{{ t('step3.title') }}</h3>
+            <p>{{ t('step3.body') }}</p>
+            <figure class="step-figure">
+              <img src="/assets/chat-example.png" alt="{{ t('step3.figure_alt') }}" width="910" height="700">
+            </figure>
+            <p class="field-note">{{ t('step3.caption') }}</p>
+          </div>
+        </li>
+      </ol>
+    </section>
+
+    <section class="guide-section" id="agents">
+      <h2 class="section-subtitle">{{ t('agents.h') }}</h2>
+      <p>{{ t('agents.intro') }}</p>
+      <ol class="agent-roster" data-testid="guide-agents">
+        <li class="agent-roster-row">
+          <span class="agent-roster-mark" aria-hidden="true"><img class="agent-roster-icon" src="/assets/guide/cursor.png" alt="" width="18" height="18" onerror="this.style.visibility='hidden'"></span>
+          <span class="agent-roster-name">Cursor</span>
+        </li>
+        <li class="agent-roster-row">
+          <span class="agent-roster-mark" aria-hidden="true"><img class="agent-roster-icon" src="/assets/guide/claude.png" alt="" width="18" height="18" onerror="this.style.visibility='hidden'"></span>
+          <span class="agent-roster-name">Claude Code</span>
+        </li>
+        <li class="agent-roster-row">
+          <span class="agent-roster-mark" aria-hidden="true"><img class="agent-roster-icon" src="/assets/guide/codex.png" alt="" width="18" height="18" onerror="this.style.visibility='hidden'"></span>
+          <span class="agent-roster-name">Codex</span>
+        </li>
+        <li class="agent-roster-row">
+          <span class="agent-roster-mark" aria-hidden="true"><img class="agent-roster-icon" src="/assets/guide/codebuddy.png" alt="" width="18" height="18" onerror="this.style.visibility='hidden'"></span>
+          <span class="agent-roster-name">CodeBuddy CN / CodeBuddy</span>
+        </li>
+        <li class="agent-roster-row">
+          <span class="agent-roster-mark" aria-hidden="true"><img class="agent-roster-icon" src="/assets/guide/trae.png" alt="" width="18" height="18" onerror="this.style.visibility='hidden'"></span>
+          <span class="agent-roster-name">TraeCode CN / TRAE</span>
+        </li>
+        <li class="agent-roster-row">
+          <span class="agent-roster-mark" aria-hidden="true"><img class="agent-roster-icon" src="/assets/guide/copilot.png" alt="" width="18" height="18" onerror="this.style.visibility='hidden'"></span>
+          <span class="agent-roster-name">GitHub Copilot</span>
+        </li>
+        <li class="agent-roster-row">
+          <span class="agent-roster-mark" aria-hidden="true"><img class="agent-roster-icon" src="/assets/guide/kiro.png" alt="" width="18" height="18" onerror="this.style.visibility='hidden'"></span>
+          <span class="agent-roster-name">AWS Kiro</span>
+        </li>
+      </ol>
+    </section>
+
+    {# 能力表：8 行 = `core` 档工具数（权威侧 specs/mcp/mcp-capabilities.md 的档位表）。
+       工具名是协议里的名字（不翻译）；说明与示例取自词表（四语言）。 #}
+    <section class="guide-section" id="tools">
+      <h2 class="section-subtitle">{{ t('tools.h') }}</h2>
+      <p>{{ t('tools.intro') }}</p>
+      <div class="table-wrap">
+        <table class="guide-caps-table">
+          <thead>
+            <tr>
+              <th>{{ t('tools.col.tool') }}</th>
+              <th>{{ t('tools.col.does') }}</th>
+              <th>{{ t('tools.col.example') }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td><code>memory_store</code></td><td>{{ t('tools.store.does') }}</td><td>{{ t('tools.store.eg') }}</td></tr>
+            <tr><td><code>memory_recall</code></td><td>{{ t('tools.recall.does') }}</td><td>{{ t('tools.recall.eg') }}</td></tr>
+            <tr><td><code>memory_search</code></td><td>{{ t('tools.search.does') }}</td><td>{{ t('tools.search.eg') }}</td></tr>
+            <tr><td><code>memory_get</code></td><td>{{ t('tools.get.does') }}</td><td>{{ t('tools.get.eg') }}</td></tr>
+            <tr><td><code>memory_list</code></td><td>{{ t('tools.list.does') }}</td><td>{{ t('tools.list.eg') }}</td></tr>
+            <tr><td><code>memory_load_family</code></td><td>{{ t('tools.family.does') }}</td><td>{{ t('tools.family.eg') }}</td></tr>
+            <tr><td><code>memory_smart_load</code></td><td>{{ t('tools.smart.does') }}</td><td>{{ t('tools.smart.eg') }}</td></tr>
+            <tr><td><code>memory_capabilities</code></td><td>{{ t('tools.caps.does') }}</td><td>{{ t('tools.caps.eg') }}</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="field-note">{{ t('tools.note') }}</p>
+    </section>
+
+  </article>
 </main>
+
 <footer class="site-footer">
+  <a href="/admin/users">{{ t('admin.entry') }}</a>
   <p>{{ t('copyright') }}</p>
 </footer>
+
+<script>
+  // 复制按钮（无 JS 时按钮仍可读，只是不复制）。`data-copy` 是**选择器**，指向要复制的节点。
+  document.querySelectorAll('button.codeblock-copy').forEach(function (button) {
+    button.addEventListener('click', function () {
+      var target = document.querySelector(button.dataset.copy || '');
+      if (!target || !navigator.clipboard) return;
+      navigator.clipboard.writeText(target.textContent || '').then(function () {
+        var original = button.textContent;
+        button.textContent = button.dataset.copiedLabel || original;
+        window.setTimeout(function () { button.textContent = original; }, 1200);
+      }).catch(function () { /* 剪贴板不可用：保持原样，不静默改写页面 */ });
+    });
+  });
+</script>
 </body>
 </html>

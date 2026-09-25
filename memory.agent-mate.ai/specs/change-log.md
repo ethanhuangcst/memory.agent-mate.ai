@@ -77,6 +77,40 @@
 **验证**：`3.20` 探针 13/13 PASS（退出码 0，含 4 条灵敏度对照）· `make doc-links` 零悬空 · `make attestation-paths` 通过 · 探针目录仅新增 `probe.sh` / `probe.py` / `README.md` / `.gitignore`（`out/` 已忽略）。
 
 **边界（如实登记）**：`AC6.6`（口径不一致阻断发布）本轮**未涉及**，其判据形状需在实现轮另定 · `AC6.9` 的「真实界面截图」只验了判据可判别（正向样本 = 原型），未验实现页 · `AC6.4` 的**页面侧**比对要等页面落地 · 探针的「基础设施主机名」取自本机未入仓的 `secrets.local`，无 secrets 的机器上该路对照会跳过并在输出中明示。
+### Sprint 4 `#4.2`「web-portal:接入说明」交付：公开首页从占位页换成真实接入说明页
+
+**为什么**：`#4.2` 的三项验收（「新用户按页面指引 ≤ 3 步完成接入 · 示例一律占位符不出现真实值 · 四语言键集合一致」）此前**无实现也无判据** —— 公开首页 `/` 只渲染占位页，`AC6.4` / `AC6.5` / `AC6.6` / `AC6.11` 未挂任何 `TC-P-*`。本行把页面做出来，并同批把判据补齐（契约与实现一次对齐）。
+
+**做了什么**：
+
+- **模板** `admin_portal/src/web/views/instructions.njk`：占位页 → 真实接入说明页。**结构与类名逐字对齐原型** `specs/web-portal/mockups/01-instructions.html`（`.shell-locale .locale-switch` · `.guide-hero` · `#setup .steps > .step`（含 `.step-num` / `.token-mask` / `.contact-admin*`）· `.codeblock*` · `.step-figure` · `#agents .agent-roster` · `#tools .guide-caps-table` · `.site-footer`）；**文案 100% 服务端取词**（零硬编码，含语言组、品牌串、三步、名册、能力表、页脚）。
+- **路由与上下文**：`src/web/routes/index.ts` 注入公开页上下文；新增 `src/web/pages.ts` 的 `publicShell()` —— **复用 `buildShell` 的语言组构造**（`localeOptions` / `preservedQuery` / `formAction`），只把 `active` 置 `none`、不复用管理面导航语义。`GET /instructions → 301 /` 与面隔离行为不变。
+- **示例一律占位符**（§12.3「公开页不含机密」）：配置示例用 `https://{MCP_HOST}/mcp` + `Bearer memo_…`，令牌用掩码形态 `memo_a1b2.....4o5p6`。**这里对原型做了一处有意偏离**：原型 step2 写的是真实产品域名，而 `AC6.5` 要求「主机名与令牌均以占位符出现」⇒ 按 AC 实现并登记（原型的写法若照搬会让 `AC6.5` 不可判）。
+- **素材**：实现侧 `admin_portal/assets/` 的 10 个文件（`logo.png` · `wechat.png` · `chat-example.png` · `guide/*` 7 个）与原型 `mockups/assets/` 同名文件 **`shasum -a 256` 逐一同值** ⇒ **直接复用真实素材**（本轮开工准备的原「占位图 + 登记待替换」选择由此被事实取代：素材早已同源落地），`AC6.9` 按「真实加载」（`complete && naturalWidth > 0`）判，**无待替换项**。
+- **判据落地**（用例号续编 `TC-P-L2-14`–`TC-P-L2-18`，挂在 `web-test.md` 的 S6 落点块）：
+  `TC-P-L2-14` 结构与入口（`AC6.1`/`6.7`/`6.10`/`6.11`）· `TC-P-L2-15` 能力表与能力文档逐项一致（`AC6.4`，权威侧取法**限定档位表格行**）· `TC-P-L2-16` 占位符合规扫描（`AC6.5`，允许清单只含裸产品域名）· `TC-P-L2-17` 发布阻断（`AC6.6`，即前两条的反向对照）· `TC-P-L2-18` 真浏览器交互与图片（`AC6.8`/`AC6.9`）。`AC6.4/6.5/6.6/6.11` 由此补齐挂靠。
+- **`AC6.6` 不新增门禁目标**：口径不一致或出现真实值时，`make portal-test` 直接转红（用户选择「并入既有离线门禁」）。
+
+**验证**：
+
+- 离线 **371 passed / 35 files**（基线 356 ⇒ **+15**）· 覆盖率 **93.6 / 87.13 / 97.86 / 94.71**（阈值 92/85/96/93）。
+- 真浏览器：`bash memory.agent-mate.ai/scripts/portal-e2e.sh --port 8791` **退出码 0**（新增「公开接入说明页」段：三步纵向几何 · 悬浮层悬停/聚焦显示与焦点移出收起 · 二维码与示例图**真实加载** · 名册 7 项 · 能力表 8 行且位于可滚动容器 · 页内锚点无断链 · 四语言激活按钮与文案语言一致 · 无横向滚动 · 页脚贴合）。
+- 零回归：`make portal-acceptance` **退出码 0**（结论表五行全绿）· `npx tsc --noEmit` **0 错** · `doc-links` / `attestation-paths` / `preflight-test` 通过。
+- **判据敏感性证明**：往模板注入真实令牌形态（`memo_<20+ 位>`）⇒ **4 条判据同时转红**（两条扫描断言 + 两条反向对照），还原后转绿 ⇒ 门禁确实在测事、不是空转。
+
+**过程中修掉的三处自身缺陷（都是「判据写错」而非产品缺陷）**：
+
+1. **注释里的取词字面形态会被护栏扫成缺键**：模板注释写了取词调用示例 ⇒ `tests/unit/i18n-keys.test.ts` 的提取正则把它当真实调用，报 `instructions.njk: key`（仓内「护栏会扫中自己的文档」的又一例）⇒ 注释改为不写该字面形态。
+2. **悬浮层「键盘收起」的断言写错**：`Tab` 会把焦点移进悬浮层内的邮箱链接（仍是 `:focus-within`）⇒ 仍可见；且 Playwright 的鼠标会**停在**触发器上（`:hover` 持续命中）⇒ 断言前必须移开鼠标并真正移出焦点。实现与原型同构（CSS `:focus-within`），故「键盘收起」= 焦点离开即收起。
+3. **能力表被误加进「不得溢出父容器」的护栏**：`.table-wrap{overflow-x:auto}` 下「表格比容器宽」是**设计意图**（窄屏横向滚动）⇒ 放进 `OVERFLOW_SELECTORS` 必然假红；改为断言「能力表位于可滚动容器内 + 页面本身无横向滚动」。
+
+**边界（如实登记）**：
+
+- **FAQ 口径差异待定夺**：`web-design.md` §12.3 称首页含「3 条 FAQ」，而原型 `01-instructions.html` **无 FAQ 区** ⇒ 本轮**按原型实现**（未擅自加区），差异登记待定夺。
+- **联系邮箱尚未配置化**：`CONTACT_EMAIL` 是路由常量（设计真源 = 原型 `mailto:`），目前无配置键；如需按部署改地址，再加 `PORTAL_CONTACT_EMAIL` 并同步 `deployment.md` 配置契约表。
+- `AC6.9` 的「真实界面截图」用的是**已验收的原型素材**（同源同值）；若日后要换成新截图，替换 `admin_portal/assets/chat-example.png` 即可，判据不变。
+- 本行**不涉及** `4.3`（启动自检）与 `#7`（真身份口径核对），也不改 MCP 桥 / 上游 / 会话层。
+
 
 
 

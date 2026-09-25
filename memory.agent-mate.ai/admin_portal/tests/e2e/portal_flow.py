@@ -45,6 +45,13 @@ OVERFLOW_SELECTORS = (
     ".codeblock-text",
     "#issued-token",
     ".btn",
+    # 公开接入说明页（#4.2）：长串现场 = 掩码令牌、占位符 URL 与名册
+    # 注意 **不要**把 `.guide-caps-table` 放进本清单：它位于 `.table-wrap{overflow-x:auto}` 内，
+    # 「表格比容器宽」是**设计意图**（窄屏横向滚动），放进来会必然假红（实测踩到一次）。
+    ".token-mask",
+    ".step-url code",
+    ".agent-roster-row",
+    ".contact-admin-mail",
 )
 
 # 弹窗宽度固定（22rem），与视口无关 ⇒ 宽视口下也必须查一遍；
@@ -369,5 +376,89 @@ def run_flow(page: Page, base_url: str, admin_email: str) -> dict[str, str]:
     # ---- 10. 面隔离：管理域名上不应有 /mcp ----
     response = page.request.get(f"{base_url}/mcp")
     assert response.status == 403, f"管理域名上的 /mcp 应为 403，实际 {response.status}"
+
+    # ---- 11. 公开接入说明页（Sprint 4 `#4.2` / 故事 S6）----
+    # 判据形状由 `3.20` 探针定档（memory.agent-mate.ai/probes/instructions-verdict-probe/README.md）：
+    # 三步 = `#setup .step` ×3 且纵向；Admin 入口判**元素存在**（不是裸 `<a href>`）；示例只用占位符。
+    page.goto(f"{base_url}/?lang=en", wait_until="networkidle")
+    steps = page.locator("#setup .step")
+    expect(steps).to_have_count(3)
+    flex_dir = page.eval_on_selector("#setup .steps", "el => getComputedStyle(el).flexDirection")
+    boxes = [steps.nth(i).bounding_box() for i in range(3)]
+    assert all(boxes), "三步应各有盒子（缺盒说明结构或样式没落地）"
+    same_x = len({round(b["x"]) for b in boxes}) == 1
+    growing_y = all(boxes[i]["y"] < boxes[i + 1]["y"] for i in range(2))
+    assert flex_dir == "column" and same_x and growing_y, (
+        f"三步接入应纵向排列：flex={flex_dir} same_x={same_x} growing_y={growing_y}"
+    )
+    assert page.locator("#setup .step-num").all_inner_texts() == ["01", "02", "03"]
+    expect(page.locator("a[href='/admin/users']").first).to_be_visible()
+    expect(page.locator("h1")).to_have_text("AI Memory MCP")
+
+    # 第 1 步：悬停 / 聚焦显示悬浮层（二维码真实加载 + 邮箱可达），焦点离开后收起
+    trigger = page.locator(".contact-admin-trigger")
+    pop = page.locator(".contact-admin-pop")
+    trigger.hover()
+    expect(pop).to_be_visible()
+    assert page.eval_on_selector(
+        ".contact-admin-pop img", "el => el.complete && el.naturalWidth > 0"
+    ), "微信二维码应真实加载（不是破图）"
+    expect(page.locator(".contact-admin-mail")).to_have_attribute("href", re.compile(r"^mailto:"))
+    trigger.focus()
+    expect(pop).to_be_visible()
+    # 「键盘可收起」= 焦点离开即收起（实现是 CSS `:focus-within`，与原型同构）。
+    # 两处细节都是实测踩到的：① Tab 会把焦点移进悬浮层内的邮箱链接 ⇒ 仍可见，须真正移出焦点；
+    # ② Playwright 的鼠标会**停在**触发器上（`:hover` 持续命中）⇒ 断言前必须把鼠标移开。
+    page.evaluate("() => { const el = document.activeElement; if (el instanceof HTMLElement) el.blur(); }")
+    page.mouse.move(0, 0)
+    expect(pop).to_be_hidden()
+
+    # 第 2 步：配置块用占位符，复制按钮按选择器指向同一节点
+    expect(page.locator("#step2-config")).to_contain_text("{MCP_HOST}")
+    assert page.locator("button.codeblock-copy").first.get_attribute("data-copy") == "#step2-config"
+
+    # 第 3 步：示例图真实加载
+    assert page.eval_on_selector(
+        ".step-figure img", "el => el.complete && el.naturalWidth > 0"
+    ), "第 3 步示例图应真实加载"
+
+    # 名册与能力表（8 = `core` 档工具数，权威侧见 specs/mcp/mcp-capabilities.md）
+    expect(page.locator(".agent-roster-row")).to_have_count(7)
+    expect(page.locator(".guide-caps-table tbody tr")).to_have_count(8)
+    # 能力表在窄屏靠**容器内横向滚动**兜底（`.table-wrap{overflow-x:auto}`），
+    # 而不是靠压缩列宽 ⇒ 判据是「表格位于可滚动容器内」，页面本身不得横向滚动。
+    table_wrap_overflow = page.eval_on_selector(
+        "#tools .table-wrap", "el => getComputedStyle(el).overflowX"
+    )
+    assert table_wrap_overflow in {"auto", "scroll"}, (
+        f"能力表容器应可横向滚动（overflow-x: auto），实际 {table_wrap_overflow}"
+    )
+
+    # 页内锚点无断链（AC6.10）
+    dangling = page.evaluate(
+        "() => Array.from(document.querySelectorAll('a[href^=\"#\"]'))"
+        ".map((a) => a.getAttribute('href').slice(1))"
+        ".filter((id) => id && !document.getElementById(id))"
+    )
+    assert dangling == [], f"页内锚点断链：{dangling}"
+
+    # 四语言切换生效且按钮状态同步（AC6.3）
+    cjk = re.compile(r"[\u4e00-\u9fff]")
+    labels = {"en": "EN", "zh-CN": "简", "zh-HK": "港", "zh-TW": "台"}
+    for tag, expect_cjk in (("en", False), ("zh-CN", True), ("zh-HK", True), ("zh-TW", True)):
+        page.goto(f"{base_url}/?lang={tag}", wait_until="networkidle")
+        step1_title = page.locator("#setup .step").first.locator("h3").inner_text()
+        active = page.locator(".locale-switch button.is-active").inner_text()
+        assert bool(cjk.search(step1_title)) is expect_cjk, (
+            f"?lang={tag} 的第 1 步标题语言不符：{step1_title!r}"
+        )
+        assert active == labels[tag], f"?lang={tag} 的激活语言按钮应为 {labels[tag]}，实际 {active!r}"
+        evidence[f"S6 step1.title ({tag})"] = step1_title
+
+    page.goto(f"{base_url}/?lang=en", wait_until="networkidle")
+    assert_no_overflow(page, "公开接入说明页")
+    _assert_all_viewports(page, "公开接入说明页")
+    assert_footer_pinned(page, "公开接入说明页")
+    _shot(page, "14-instructions")
 
     return evidence

@@ -101,6 +101,30 @@ export function publicContext(
   };
 }
 
+/**
+ * 公开面页面上下文（**无身份**，但**有语言组**）。
+ *
+ * 与 `publicContext` 的差别：公开说明页带语言切换表单（`AC6.3`），因此需要
+ * `localeOptions` / `preservedQuery` / `formAction` 三个字段。这里直接复用 `buildShell`
+ * 的既有构造 —— 语言组的实现只有一处，不另写一份；`active: 'none'` 表示不派生管理面
+ * 导航语义（公开页不渲染侧栏）。`adminEmail` 在公开页承载的是「联系管理员」的地址。
+ */
+export function publicShell(
+  deps: PageDeps,
+  locale: ReturnType<I18n['resolve']>,
+  contactEmail: string,
+  query?: Record<string, string | undefined>,
+): ShellContext {
+  return buildShell(deps.i18n, {
+    locale,
+    titleKey: 'brand',
+    pathname: '/',
+    adminEmail: contactEmail,
+    active: 'none',
+    ...(query ? { query } : {}),
+  });
+}
+
 /** 渲染并发送 HTML（错误交由 onError 钩子，不向客户端回传内部细节）。 */
 export async function sendHtml(
   reply: FastifyReply,
