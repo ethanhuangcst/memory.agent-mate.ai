@@ -5,6 +5,7 @@
 #   ✅ 构建 linux/amd64 门户镜像 → 推 GHCR → 跑**仓库里那一个探针**做契约自检
 #      → 再跑**仓库里那一个冒烟脚本**真起容器验「起得来、答得应、坏姿态必拒」
 #      → 再跑 **Sprint 5 `#2` 的制品契约探针**（其相 3 需要镜像 ⇒ 只有 CI / 有镜像的机器能判）
+#      → 再跑 **Sprint 5 `#4` 的攻击面探针**（相 3 同样需要镜像：运行身份 / socket / 只读根可行性 / 资源基线）
 #   ❌ 不部署、不碰服务器、不改 upstream.lock（部署决策与执行**始终人工**）
 #
 # 为什么放在 CI（实测依据，不是偏好）：
@@ -44,6 +45,7 @@ on:
       - 'memory.agent-mate.ai/scripts/portal-image-smoke.sh'
       - 'memory.agent-mate.ai/probes/portal-image-verdict-probe/**'
       - 'memory.agent-mate.ai/probes/portal-artifact-contract-probe/**'
+      - 'memory.agent-mate.ai/probes/container-attack-surface-probe/**'
       - '.github/workflows/portal-image.yml'
 
 permissions:
@@ -126,6 +128,11 @@ jobs:
         env:
           PORTAL_BUILD_TAG: ${{ env.IMAGE_NAME }}:${{ steps.lock.outputs.tag }}-sha-${{ steps.lock.outputs.sha7 }}
         run: bash memory.agent-mate.ai/probes/portal-artifact-contract-probe/probe.sh
+
+      - name: 攻击面判据（Sprint 5 `#4` 探针：运行身份 + socket + 只读根可行性 + 资源基线）
+        env:
+          PORTAL_BUILD_TAG: ${{ env.IMAGE_NAME }}:${{ steps.lock.outputs.tag }}-sha-${{ steps.lock.outputs.sha7 }}
+        run: bash memory.agent-mate.ai/probes/container-attack-surface-probe/probe.sh
 
       - name: 写入运行摘要
         if: always()
