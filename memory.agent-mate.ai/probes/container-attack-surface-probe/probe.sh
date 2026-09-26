@@ -237,6 +237,7 @@ docker run -d --name "${NAME}" \
   -e PORTAL_ADMIN_HOST=localhost \
   -e PORTAL_MCP_HOST=127.0.0.1 \
   -e PORTAL_DB_PATH=/srv/portal/portal.db \
+  -e PORTAL_PORT=8080 \
   -e PORTAL_TEST_JWT_ENABLED=1 \
   -e "PORTAL_TEST_JWT_JWKS=${JWKS}" \
   -e PORTAL_TEST_JWT_ISS=https://attack-probe.test \
@@ -256,9 +257,10 @@ RO_DIAG="$(printf '%s\n' "${RO_LOGS}" | grep -o '"event":"config_invalid","messa
 # ⇒ 白跑一轮 CI（实测发生过一次）。⇒ 一并带上容器状态/退出码与日志**首行**。口径同 `#2` 冒烟的 `P2`/`P3`。
 RO_STATE="$(docker inspect -f '{{.State.Status}} exit={{.State.ExitCode}}' "${NAME}" 2>/dev/null || echo '?')"
 RO_HEAD="$(printf '%s\n' "${RO_LOGS}" | grep -v '^[[:space:]]*$' | head -3 | tr '\n' '|' | cut -c1-300)"
+RO_LISTEN="$(printf '%s\n' "${RO_LOGS}" | grep -c '"event":"portal_listening"' || true)"
 check T3 'AC13.3 第一条：`--read-only` + 必要挂载（`/srv/portal` rw · `/tmp` tmpfs）下门户**仍能起来并服务**' \
   "$([ "${RO_OK}" = '200' ] && echo 0 || echo 1)" \
-  "20 s 内 /healthz 状态码 '${RO_OK}' · 容器 ${RO_STATE} · 日志首行：${RO_HEAD:-（空）}${RO_DIAG:+【${RO_DIAG}】}"
+  "20 s 内 /healthz 状态码 '${RO_OK}' · 容器 ${RO_STATE} · portal_listening=${RO_LISTEN} 次 · 日志首行：${RO_HEAD:-（空）}${RO_DIAG:+【${RO_DIAG}】}"
 
 # 资源基线（给限额取值提供依据）：健康容器运行 ~8 s 后的内存峰值与进程数
 sleep 8
