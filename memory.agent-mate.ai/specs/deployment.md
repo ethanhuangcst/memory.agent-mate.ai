@@ -24,7 +24,7 @@
 
 | 云资源 | 要求 | 承接条目 |
 |---|---|---|
-| **阿里云 OSS 私有桶** | 桶为**私有** + **SSE 已开**；region **待核查**（现登记为香港，核查方式见下） | Sprint 5 `#8` |
+| **阿里云 OSS 私有桶** | 桶为**私有** + **SSE 已开**；region = **香港**（2026-09-26 用户确认按现登记值回填；`ossutil` 机器核查**未执行**） | Sprint 5 `#8` |
 | **RAM 子账号 AK** | 只授予该桶的最小权限；只存服务器侧 | Sprint 5 `#8` |
 | **SSH 密钥对** | 调用者 ↔ 野草云4；无 passphrase + forced command，`ssh ai-memory` 可完成 MCP 握手 | Sprint 5 `#7` |
 | **Cloudflare Access 应用 + Allow 策略** | 策略内列已批准邮箱（**建议 ≥ 2 个**）；`<MCP_HOST>` 必须**绕过** Access | [`web-portal/web-design.md`](./web-portal/web-design.md) §6.1 · Sprint 5 `#6` |
@@ -32,7 +32,19 @@
 | **门户专用 MaaS key** | 与主 key 分离，只放 `portal.env` | [`../deploy/portal.env.example`](../deploy/portal.env.example) |
 | **DNS（两个域名）** | `<MCP_HOST>` 与 `<ADMIN_HOST>` 分别解析到本机 | Sprint 5 `#9`（上线准备包；Sprint 4 `#7` 核对时定归属） |
 
-**OSS region 核查方式**（核实后回填本文档 §8、`product-backlog.md` #9、Sprint 5 `#8` 与 [`adr/ADR-005`](./adr/ADR-005-upgrade-admission-gate-layering.md)）：`ossutil ls` · `ossutil stat oss://<OSS_BUCKET>` · `ossutil config`（endpoint 形如 `oss-<region>.aliyuncs.com`）；或阿里云控制台 → OSS → 该桶 → 概览 → 「地域」。
+**OSS region 已回填（2026-09-26）**：用户确认**按现登记值（香港）**回填四处 —— 本表 §1.1 · §8 · [`product-backlog.md`](./product-backlog.md) #9 · Sprint 5 `#8`。**`ossutil` 机器核查未执行**（如实登记）⇒ 上线前用 `ossutil ls` · `ossutil stat oss://<OSS_BUCKET>` · `ossutil config`（endpoint 形如 `oss-<region>.aliyuncs.com`），或控制台 → OSS → 该桶 → 概览 → 「地域」**一次性复核**即可。`ADR-021` D3 点名的 [`adr/ADR-005`](./adr/ADR-005-upgrade-admission-gate-layering.md) **实测无 region 表述**（仅含「阿里云 OSS」与 `ossutil ls`）⇒ 无回填项。
+
+**`#8` 就绪需提供的信息（2026-09-26 登记）**：
+
+| # | 信息 | 取值 / 口径 |
+|---|---|---|
+| 1 | 桶名 | `<OSS_BUCKET>` —— **公开文档只写占位符**，真值落 gitignored 的 `secrets.local*.md` |
+| 2 | region | **香港**（已定，见上） |
+| 3 | endpoint | 形如 `oss-cn-hongkong.aliyuncs.com`（由 ② 推出；`ossutil config` / `--endpoint` / env 三选一） |
+| 4 | RAM 子账号 AK | **AccessKeyId / AccessKeySecret** —— 只落**服务器侧**（`chmod 600`），不入仓、不进日志 |
+| 5 | 最小权限范围 | 仅该桶（建议 `oss:GetObject` / `PutObject` / `ListObjects` / `HeadObject`，前缀限定到备份目录） |
+| 6 | 私有 + SSE 确认 | 控制台属性页截图或 `ossutil stat` 输出（**公开读 ⇒ 立即改回**：快照含全部用户记忆） |
+| 7 | 保留策略 | 默认按 §8 已登记值（日备 30 代 + 月备 12 代）；如需不同请显式给出 |
 
 ---
 
@@ -314,7 +326,7 @@ make curl-probe                # 参考用：直连容器 HTTP API 探针（生�
 | 目录 | `/data/backups`（备份脚本 Sprint 5 落地到 `memory.agent-mate.ai/backup/`） |
 | 本地快照 | `sqlite3 /data/ai-memory.db ".backup '/data/backups/ai-memory-<ts>.db'"`（**在线备份首选**，非 `cp` 裸文件） |
 | 频率 | **每日 1 次**（对齐 RPO ≤ 24h）；留存 ≥ 30 份，带时间戳 |
-| 外迁 | **每日**同步到**阿里云 OSS 私有桶** `<OSS_BUCKET>`（region **待核查**，核查方式见 §1.1）；同步后**校验 `sha256sum` 一致** |
+| 外迁 | **每日**同步到**阿里云 OSS 私有桶** `<OSS_BUCKET>`（region = **香港**，见 §1.1）；同步后**校验 `sha256sum` 一致** |
 | 恢复演练 | 每月一次：拷贝 → 起临时实例 → 抽样检索验证 |
 | 每用户库 | **必须一起备份**：`/data/users/<handle>/ai-memory.db` |
 | 告警 | 备份失败 / 大小异常 / 恢复演练失败均告警 |

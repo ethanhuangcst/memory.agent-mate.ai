@@ -12,7 +12,10 @@
 #   - memory.agent-mate.ai/scripts/upstream-preflight.sh   （校验 / 准入判定 / --write-lock 回写）
 #   - Makefile: make pin / make preflight / make pin-update
 #   - .github/workflows/upstream-track.yml     （每日跟踪）
-#   - 文档：memory.agent-mate.ai/specs/deployment_strategy.md、dev-plan.md、deploy/deployment-plan.md
+#   - 文档：memory.agent-mate.ai/specs/architecture.md（§2 决议单点）、deployment.md（§3 部署 / §8 备份 / §9 升级）、web-portal/web-design.md（§3.2 镜像契约）
+#     （2026-09-26 订正：原列点名的 deployment_strategy.md / dev-plan.md / deploy/deployment-plan.md
+#      已于 specs 整合时并入上述文档，三份文件均不存在；本文件不是 .md ⇒ 不在 `make doc-links`
+#      的扫描面内，故这三处悬空引用长期未被护栏发现 —— 引用治理的扫描面缺口，见 change-log 同日小节）
 #
 # 纪律：本文件**不含任何凭据**（无 API key / AK / 私钥），只含公开版本坐标。
 # ============================================================================

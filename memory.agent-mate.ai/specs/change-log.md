@@ -6,7 +6,25 @@
 
 ---
 
-## 2026-09-25
+## 2026-09-26
+
+### Sprint 5 开工：RID 落点收口 · SSOT 悬空引用订正 · 三项拍板落盘（**产品代码与 `scripts/` 一行未动**）
+
+**为什么**：Sprint 5 开工前的 review 发现四类**可机械判定**的问题 —— RID 的执行行与 RID 表**单边指向** · `upstream.lock`（SSOT）里三处引用**指向已不存在的文档**且护栏扫不到 · `#1` 的说明与实际制品状态**过时一半** · `#15` 的入口**先红**；同时把上一轮遗留的三项拍板（自检维度断言通路 / OSS region / 复现矩阵归属）落进真源。
+
+**改了什么**：
+
+- **RID 落点收口（2 处）**：① `D6`（公网真身份链路验收）的 Sprint 落点**补 `#13`（在线链路验收）** —— `#13` 行明写「与 RID `D6` 同一落点」，此前 RID 侧只指 `#14`；② `R1`（多用户隔离静默失效）的落点**补 `#11`（admin portal 部署 + 多用户隔离落地）** —— 该行明写「隔离的本地负向回归（V1）已在 Sprint 3 定型，**本行在生产卷上复验**」。两处均**同批**改「RID Registry」与「RID 覆盖对照」两张表，并为 `#11` / `#13` 补行锚点（`s5-user-isolation` / `s5-online-acceptance`），与 `s5-access-surfaces` / `s5-production-acceptance` 同体例。
+- **`upstream.lock` 悬空引用订正（SSOT 文件）**：第 15 行的「读取方 · 文档」点名 `specs/deployment_strategy.md`、`specs/dev-plan.md`、`deploy/deployment-plan.md` —— **三份均不存在**（2026-09-20 specs 整合时分别并入 `architecture.md` / `deployment.md`）。改为指向**实测引用它的**三份真源（`architecture.md` §2 · `deployment.md` §3/§8/§9 · `web-portal/web-design.md` §3.2，`grep -c upstream.lock` 分别 5 / 7 / 9 次）。**漏网原因（引用治理的扫描面缺口）**：`scripts/link-check.sh:96` 只处理 `fn.endswith(".md")` ⇒ **非 `.md` 的真源文件不在 `make doc-links` 扫描面**，故该门禁对此恒绿 —— 与纪律「数量 / 路径类声明必须机械取证」同族，登记待扩面。
+- **`#1` 说明订正**：原写「全仓此前不存在门户镜像**与**门户编排制品」已过时 —— `deploy/portal.compose.yml` 已由 Sprint 4 `4.4` 入仓（`PORTAL_*` 键真源），缺的只剩 `healthcheck`（已归 `#2`）⇒ **本行当前剩余范围 = 门户镜像构建链路**。机械核实：`admin_portal/` 与 `deploy/` 下**无任何门户 `Dockerfile`**。
+- **`#15` 先红登记**：`memory.agent-mate.ai/backup/` **当前为空**，而 `Makefile` 第 46–50 行已声明 `backup:` / `restore-drill:` 目标指向不存在的 `backup/backup-and-push.sh` / `backup/restore-drill.sh` ⇒ **今天 `make backup` 必失败**，而 `make help` 把它列为可用入口（同 `3.16`「先红后绿」体例）。开工本行时先补脚本。
+- **三项拍板落盘**：① **`#17` 自检维度断言通路 = 直连 MaaS**（用户 2026-09-26 定）：自检直接调私有 MaaS 的 embeddings 并断言**向量长度 == 1024**，不经上游 —— 依据 `3.21`「坏 key 下上游只出线性扫描告警而 `tools/call` 仍返回」⇒ 经上游判会**假绿**。**成本已登记**：门户侧无 embeddings 客户端 ⇒ 必须**新增配置键**（MaaS `base_url` + 模型名；key 复用 `portal.env` 的 `DASHSCOPE_API_KEY`），须同批同步 `deployment.md` §12.5.4 与 `deploy/portal.compose.yml`，否则 `A2` 转红。真源改 `web-portal/web-design.md` §3.4 ④（「实现前须拍板」→「已定档 2026-09-26」）。② **OSS region = 香港**（用户 2026-09-26 确认**按现登记值**回填；`ossutil` 机器核查**未执行**，如实登记）：回填 `deployment.md` §1.1 / §8 · `product-backlog.md` #9 · Sprint 5 `#8`（标题与说明）；`ADR-021` D3 点名的 `adr/ADR-005` **实测无 region 表述**（仅含「阿里云 OSS」与 `ossutil ls`）⇒ 无回填项。③ **复现矩阵留在 Sprint 6 `#11`**（不提前到 Sprint 5），Sprint 5 头部「移入登记」末行的「由用户定」改为已定。
+- **`#8` 配置信息说明（用户要求）**：`deployment.md` §1.1 补「OSS 就绪需提供的信息」7 项清单（桶名 / region / endpoint / AK / 最小权限范围 / 私有 + SSE 确认 / 保留策略），使「需要提供什么」有真源而非只在对话里。
+- **`as_of` 同步**：`sprint-backlog.md` 的 `as_of` 由 `2026-09-24` → **`2026-09-26`** —— 它在上一轮（09-25）改过本文件时**未同步**（仓内既有先例明确：改过本文件即同步 `as_of`，见 2026-09-24 的「一致性收口」行），本轮一并补上。**未同步**：`deployment.md` / `product-backlog.md` / `web-portal/web-design.md` 用的是 `**状态**：vX · as_of <date>` 的版本日期口径（长期停在上次定版日），不在本批范围内。
+
+**验证**：`make doc-links` · `make attestation-paths` · `make preflight-test` 5/0 · `make deploy-doc-audit` 9/0 退 0 · `make secret-check` · `git diff --check` 干净。
+
+**边界**：产品代码与 `scripts/` **一行未动** · 未改任何 Sprint 的行数与编号（`ADR-021` D2） · 未改 RID 的状态枚举（R1/R2/R3 仍 `Open`、D6 仍 `Pending`） · **未处理** review 的第三项 —— `D5` 的「`Implemented` vs 上线前必须关闭」语义歧义**留待用户定夺** · `.lock` 的引用治理扩面只**登记**、未改 `link-check.sh`。
 
 ### Sprint 5 开工前准备（只做计划）：执行顺序重排 · 依赖项移入登记 · 技术难点识别
 
