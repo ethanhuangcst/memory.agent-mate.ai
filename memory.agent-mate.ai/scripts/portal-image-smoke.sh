@@ -10,8 +10,10 @@
 #   那条断言「自检不过就不 listen」）· §11（部署九步·第 8 步冒烟）
 #
 # 两类判据：
-#   正例（1 个容器）  dev 姿态 + 回环 Host ⇒ 必须起来、自检零 fail、开始监听、`/healthz` 200、
-#                     受保护路径无断言头回 401、三条 `deferred` 如实登记（不伪装通过）
+#   正例（1 个容器）  dev 姿态 + **两个不同的**回环 Host（管理面 `localhost` / MCP 面 `127.0.0.1`；
+#                     门户守卫禁止两面同名）⇒ 必须起来、自检零 fail、开始监听、`/healthz` 200 且回体
+#                     含 `ok:true` + `schemaVersion`、管理面受保护路径无断言头回 401、面隔离 403、
+#                     `/healthz` 任一面放行、三条 `deferred` 如实登记（不伪装通过）
 #   反例（3 个容器）  身份姿态的三条守卫必须**拒绝启动**（非零退出 + 点名原因 + 从未监听）：
 #                     N1 production 缺 Cloudflare Access ⇒ 拒（没有身份源就不服务）
 #                     N2 production 却启用自签测试通道 ⇒ 拒（测试旁路不得流入生产）
@@ -129,14 +131,17 @@ echo
 # ── 正例 ──────────────────────────────────────────────────────────────────────────────────
 # 路径类键**全部留默认**（PORTAL_VIEWS_ROOT / STATIC_ROOT / USERS_ROOT 都不给）—— 通过即同时
 # 证明镜像内建布局成立（views=/app/src/web/views · static=/app/assets · users=/data/users）。
+# 两个 Host **必须不同**、且都必须回环：门户有一条配置守卫「管理面与 MCP 面的 Host 不得相同
+# （面隔离判据失效）」—— 首版把两面都写成 `127.0.0.1`，CI 首跑即被它**正确**拦下（容器 `exit=1`
+# `config_invalid`；本机同代码路径秒级复现）。不同名回环 ⇒ 自签通道与面隔离两条判据同时成立。
 USERS_DIR="$(mktemp -d)" || die 20 '无法创建临时目录'
 chmod 1777 "${USERS_DIR}"
 
-echo '--- 正例：dev 姿态（回环 Host）应当起来并服务 ---'
+echo '--- 正例：dev 姿态（两个不同的回环 Host）应当起来并服务 ---'
 if ! docker run -d --name "${NAME}" \
   -v "${USERS_DIR}:/data/users" \
   -e PORTAL_ENV=development \
-  -e PORTAL_ADMIN_HOST=127.0.0.1 \
+  -e PORTAL_ADMIN_HOST=localhost \
   -e PORTAL_MCP_HOST=127.0.0.1 \
   -e PORTAL_DB_PATH=/srv/portal/portal.db \
   -e PORTAL_PORT="${PORT}" \
@@ -150,17 +155,19 @@ if ! docker run -d --name "${NAME}" \
   finish
 fi
 
-# 容器内探活：打印 HTTP 状态码（不可达时非零退出）
-http_status() { # $1=path
+# 容器内探活：打印 HTTP 状态码（不可达时非零退出）。$1 = URL 主机（**决定走哪个面** · 管理面
+# `localhost` / MCP 面 `127.0.0.1`），$2 = 路径。用 URL 主机而不是手工设 `Host` 头：fetch 会自动
+# 把 URL 主机写进 `Host`（`Host` 是禁止手工覆盖的头），请求也就自然落在对应面上。
+http_status() { # $1=URL 主机（面） $2=路径
   docker exec "${NAME}" node -e "
-fetch('http://127.0.0.1:${PORT}$1')
+fetch('http://$1:${PORT}$2')
   .then((r) => process.stdout.write(String(r.status)))
   .catch(() => process.exit(3));
 " 2>/dev/null
 }
-http_body() { # $1=path
+http_body() { # $1=URL 主机（面） $2=路径
   docker exec "${NAME}" node -e "
-fetch('http://127.0.0.1:${PORT}$1')
+fetch('http://$1:${PORT}$2')
   .then((r) => r.text())
   .then((t) => process.stdout.write(t))
   .catch(() => process.exit(3));
@@ -172,7 +179,7 @@ waited=0
 while [ "${waited}" -lt "${READY_TIMEOUT}" ]; do
   running="$(docker inspect -f '{{.State.Running}}' "${NAME}" 2>/dev/null || echo false)"
   if [ "${running}" != 'true' ]; then break; fi
-  STATUS="$(http_status /healthz || true)"
+  STATUS="$(http_status localhost /healthz || true)"
   [ "${STATUS}" = '200' ] && break
   sleep 1
   waited=$((waited + 1))
@@ -185,24 +192,44 @@ EXIT_CODE="$(docker inspect -f '{{.State.ExitCode}}' "${NAME}" 2>/dev/null || ec
 INFO="$(printf '%s\n' "${LOGS}" | grep -c '"event":"portal_listening"')"
 SELFCHECK_FAIL="$(printf '%s\n' "${LOGS}" | grep -c '"status":"fail"')"
 DEFERRED="$(printf '%s\n' "${LOGS}" | grep -c '"status":"deferred"')"
-BODY="$(http_body /healthz || true)"
+BODY="$(http_body localhost /healthz || true)"
+
+# 失败时把「进程自己怎么说」带进断言明细：容器起不来时**唯一**有用的信息就是那一行报错。
+# 首版没带这行 ⇒ CI 首跑只报了 `exit=1`，根因（两面 Host 不得相同）得本机复现才拿到。
+DIAG="$(printf '%s\n' "${LOGS}" | grep -o '"event":"config_invalid","message":"[^"]*"' | head -1 || true)"
+[ -n "${DIAG}" ] || DIAG="$(printf '%s\n' "${LOGS}" | grep -o '"event":"selfcheck_failed"[^}]*' | head -1 || true)"
+[ -n "${DIAG}" ] || DIAG="$(printf '%s\n' "${LOGS}" | grep -o '"event":"startup_failed","message":"[^"]*"' | head -1 || true)"
+[ -n "${DIAG}" ] || DIAG='（无 config_invalid / selfcheck_failed / startup_failed）'
 
 check 'P2' '容器仍在运行' "$([ "${RUNNING}" = 'true' ] && echo 0 || echo 1)" \
-  "running=${RUNNING}${EXIT_CODE:+ exit=${EXIT_CODE}}"
+  "running=${RUNNING} exit=${EXIT_CODE}【${DIAG}】"
 check 'P3' '日志出现 portal_listening' "$([ "${INFO}" -ge 1 ] && echo 0 || echo 1)" \
   "${INFO} 处（超时 ${READY_TIMEOUT} s，末次状态码 '${STATUS}'）"
 check 'P4' '启动自检零 fail' "$([ "${SELFCHECK_FAIL}" -eq 0 ] && echo 0 || echo 1)" \
-  "status=fail 计 ${SELFCHECK_FAIL} 处"
+  "status=fail 计 ${SELFCHECK_FAIL} 处【${DIAG}】"
 check 'P5' '三条 deferred 如实登记（不伪装通过）' "$([ "${DEFERRED}" -eq 3 ] && echo 0 || echo 1)" \
   "status=deferred 计 ${DEFERRED} 处（期望 3）"
-check 'P6' '/healthz 回 200' "$([ "${STATUS}" = '200' ] && echo 0 || echo 1)" "状态码 '${STATUS}'"
+check 'P6' '/healthz 回 200（管理面 Host）' "$([ "${STATUS}" = '200' ] && echo 0 || echo 1)" \
+  "状态码 '${STATUS}'【${DIAG}】"
 check 'P7' '/healthz 回体含 ok:true 与 schemaVersion' \
   "$(printf '%s' "${BODY}" | grep -q '"ok":true' && printf '%s' "${BODY}" | grep -q '"schemaVersion"' && echo 0 || echo 1)" \
   "${BODY:0:120}"
 
-ADMIN_STATUS="$(http_status /admin/users || true)"
-check 'P8' '受保护路径无断言头回 401（身份先于路由）' \
+ADMIN_STATUS="$(http_status localhost /admin/users || true)"
+check 'P8' '管理面受保护路径无断言头回 401（身份先于路由）' \
   "$([ "${ADMIN_STATUS}" = '401' ] && echo 0 || echo 1)" "状态码 '${ADMIN_STATUS}'"
+
+# 面隔离：管理面路径在 **MCP 面 Host** 上必须被拒（403）—— 与启动期那条「两面 Host 不得相同」
+# 的配置守互为表里（守卫防配置写错，本断言证明运行时真的按面分流）。
+FACE_STATUS="$(http_status 127.0.0.1 /admin/users || true)"
+check 'P9' '面隔离生效：管理面路径在 MCP 面上回 403' \
+  "$([ "${FACE_STATUS}" = '403' ] && echo 0 || echo 1)" "状态码 '${FACE_STATUS}'（期望 403）"
+
+# `/healthz` 在任一面都放行（`server.ts` 的「探活：不承载机密，任何面放行」）⇒ `#2` 的 compose
+# `healthcheck` 无论用哪个 Host 发起都能用。
+MCP_HEALTH="$(http_status 127.0.0.1 /healthz || true)"
+check 'P10' '/healthz 在 MCP 面上也放行（容器 healthcheck 可用任一面）' \
+  "$([ "${MCP_HEALTH}" = '200' ] && echo 0 || echo 1)" "状态码 '${MCP_HEALTH}'（期望 200）"
 
 # ── 反例：身份姿态的三条守卫必须拒绝启动 ──────────────────────────────────────────────────
 # 每个反例断言三件事：非零退出 · 日志点名原因 · **从未监听**（第三条是关键：退出码非零也可能是
