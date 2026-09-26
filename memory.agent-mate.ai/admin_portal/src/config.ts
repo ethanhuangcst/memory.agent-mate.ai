@@ -52,6 +52,12 @@ export interface TestJwtConfig {
 export interface PortalConfig {
   readonly env: 'development' | 'production';
   readonly isProduction: boolean;
+  /**
+   * 门户**自身**的版本标签（`PORTAL_IMAGE_TAG`）—— 构建期烘入镜像、**不由 compose 提供**；
+   * 未烘入时为**空串**（启动自检把「空」判为 `fail`：说明镜像不是用
+   * `scripts/build-portal-image.sh` 构建的）。
+   */
+  readonly ownImageTag: string;
   readonly port: number;
   readonly logLevel: LogLevel;
   readonly adminHosts: string[];
@@ -144,6 +150,11 @@ const RawEnvSchema = z.object({
   // **单响应字节上限**（背压护栏）：正整数；**未提供 = 不启用该护栏**（同上，本层不写死默认值 ——
   // 生产取值由 `deploy/portal.compose.yml` 给出；取值依据见 `../../probes/response-size-probe/README.md`）。
   PORTAL_RESPONSE_MAX_BYTES: z.coerce.number().int().positive().optional(),
+  // 门户**自身**的版本标签：**只在构建期烘入镜像**（`Dockerfile` 的 `ENV PORTAL_IMAGE_TAG=${IMAGE_TAG}`，
+  // 取值来自 `upstream.lock`）—— **不在 compose / portal.env 里设**（设了等于用运维手填的值去掩盖
+  // 镜像的真实版本）。启动自检用它 vs **挂载进来的** `upstream.lock` 比对，不一致即**拒绝启动**。
+  // 归属：Sprint 5 `#2`「版本断言」（2026-09-26 拍板整体归 `#2`）。
+  PORTAL_IMAGE_TAG: z.string().min(1).optional(),
 });
 
 function formatIssues(error: z.ZodError): string {
@@ -254,6 +265,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): PortalConfig {
   return {
     env: raw.PORTAL_ENV,
     isProduction,
+    ownImageTag: raw.PORTAL_IMAGE_TAG ?? '',
     port: raw.PORTAL_PORT,
     logLevel: raw.PORTAL_LOG_LEVEL,
     adminHosts,

@@ -43,6 +43,11 @@ FROM node:22-bookworm-slim
 ARG UPSTREAM_IMAGE
 ARG IMAGE_TAG=0.10.0
 
+# 门户**自身**版本：**烘入镜像**（启动自检拿它 vs 挂载的 `upstream.lock` 比对，不一致即拒绝启动
+# —— Sprint 5 `#2` 的「版本断言」）。**不要**改成从 compose 读：放 compose 就等于让运维手填
+# 「这个镜像是什么版本」，填错反而掩盖不一致。
+ENV PORTAL_IMAGE_TAG=${IMAGE_TAG}
+
 # 门户要出站访问私有 MaaS 的 HTTPS 与 CF Access 的 JWKS ⇒ 证书必须有
 RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates \

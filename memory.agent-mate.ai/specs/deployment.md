@@ -529,6 +529,7 @@ bash scripts/pin-update.sh <ref> [--force]          # 更新锁文件（--force 
 | 运行环境 | `PORTAL_ENV` | `production`（此值下**启用自签测试通道即拒绝启动**） |
 | 面隔离 | `PORTAL_ADMIN_HOST` · `PORTAL_MCP_HOST` · `PORTAL_PORT` | 两个面各自的 Host（面隔离判据的来源）；端口只对同网反代暴露 |
 | 存储 | `PORTAL_DB_PATH` · `PORTAL_USERS_ROOT` · `PORTAL_VIEWS_ROOT` · `PORTAL_STATIC_ROOT` | 门户库**必须不在 `/data` 下**；`PORTAL_USERS_ROOT=/data/users`（与主 stack 共享卷）；后两个是**镜像内路径**，填错由启动自检**响亮失败**。（`PORTAL_ROOT` 已于 2026-09-26 **删除** —— 产品代码三种真读取形态皆不命中它，属「看起来能配、其实无作用」的键；判据见 [`../probes/portal-artifact-contract-probe/`](../probes/portal-artifact-contract-probe/README.md) 的 `B1`） |
+| **镜像烘入（不在 compose 设）** | `PORTAL_IMAGE_TAG` | 门户**自身**版本，由**构建期**从 [`../upstream.lock`](../upstream.lock) 注入镜像（[`../admin_portal/Dockerfile`](../admin_portal/Dockerfile) 的 `ENV PORTAL_IMAGE_TAG=${IMAGE_TAG}`）。启动自检拿它 vs **挂载的** `upstream.lock` 比对：**不一致 / 读不到锁 / 锁被挂成目录 ⇒ 拒绝启动**（生产；开发姿态缺锁登记为「未判」，不伪装通过）。**不要**在 compose / `portal.env` 里设它 —— 设了等于用手填值掩盖镜像的真实版本。 |
 | 会话 | `PORTAL_SESSION_IDLE_TIMEOUT` · `PORTAL_SESSION_MAX_DURATION` | 毫秒；**取值归 `4.1`**，compose 里给的是保守初值 |
 | 身份 | `PORTAL_ACCESS_TEAM_DOMAIN` · `PORTAL_ACCESS_AUD` · `PORTAL_ACCESS_JWKS_URL` | 团队域 + Access 应用的 `aud`；`JWKS_URL` **可选**（默认由团队域推导） |
 | 日志 / i18n | `PORTAL_LOG_LEVEL` · `PORTAL_I18N_DEFAULT` | `info` · `zh-CN` |

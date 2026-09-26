@@ -105,6 +105,11 @@ const readKeysIn = (text) => {
 const UNEXPLAINED_OK = {
   PORTAL_CONTACT_EMAIL: '注释里的**将来键名**（`#4.2` 交付的「待配置化」登记：当前无配置键承载它，如需按部署改地址再加）',
 };
+/** `A2c` 的白名单：部署侧**故意**声明、但代码不读取的键（必须带理由；条目仍被声明才有效）。 */
+const DEPLOY_ONLY_OK = {
+  // 目前为空 —— 2026-09-26 已把唯一的「无读取方的键」（`PORTAL_ROOT`）从 compose 与
+  // `deployment.md` §12.5.4 删除（理由：产品代码三种真读取形态皆不命中）。
+};
 const unexplainedOf = (tokens, reads, allow = UNEXPLAINED_OK) =>
   [...tokens].filter((key) => !reads.has(key) && !(key in allow)).sort();
 
@@ -164,6 +169,34 @@ for (const file of exampleFiles) {
   exampleKeys.set(path.basename(file), keys);
 }
 const deployKeys = new Set([...composeKeys, ...[...exampleKeys.values()].flatMap((s) => [...s])]);
+
+/**
+ * 取 compose 里**服务 `environment:` 块内**声明的键（按缩进切块）。
+ *
+ * **为什么要与 `composeKeys` 分开**：`composeKeys` 是按行抽「长得像键」的一切，会把 compose 自身的
+ * **插值变量**也算进来（`image: ${PORTAL_IMAGE}` 里的 `PORTAL_IMAGE` 是 compose 用来**定位镜像**的，
+ * 本来就不该被门户代码读取）⇒ 拿它判 `A2c` 会**假红**。`A2c` 只关心「**给容器的环境**」。
+ */
+function envBlockKeys(text) {
+  const keys = new Set();
+  let blockIndent = null;
+  for (const line of text.split('\n')) {
+    const trimmed = line.trim();
+    const indent = line.length - line.trimStart().length;
+    if (blockIndent === null) {
+      if (/^environment:\s*$/.test(trimmed)) blockIndent = indent;
+      continue;
+    }
+    if (trimmed === '' || trimmed.startsWith('#')) continue; // 空行 / 注释不改变块边界
+    if (indent <= blockIndent) {
+      blockIndent = null; // 回到同级 ⇒ 块已结束（本行不再视为块内容）
+      continue;
+    }
+    const matched = /^([A-Z][A-Z0-9_]{3,})\s*:/.exec(trimmed);
+    if (matched) keys.add(matched[1]);
+  }
+  return keys;
+}
 
 // ---------------------------------------------------------------- 文档侧：指南
 const docFiles = [path.join(SPECS, 'deployment.md'), path.join(DEPLOY, 'README.md')].filter((f) =>
@@ -236,6 +269,41 @@ for (const key of unexplained)
   finding('源码里出现、但**既非真读取、也不在白名单**的 `PORTAL_*` 令牌（新写的注释键名？请在白名单里解释）', key);
 for (const key of stale) finding('白名单里的条目**已不再被引用**（注释删了、白名单没删 ⇒ 陈旧）', key);
 
+// `A2c`：「**部署侧声明的键 → 代码读取方**」—— `A2` 是**单向**的（只判「代码会读 → 必须被登记」），
+// 反方向此前**没有任何判据** ⇒ 会留下「看起来能配、其实无作用」的键。实测依据：`PORTAL_ROOT` 曾在
+// `portal.compose.yml` 与 `deployment.md` §12.5.4 各登记一处，而产品代码三种真读取形态皆不命中 ——
+// 本门禁当时仍恒绿（方向缺口的登记见 `probes/portal-artifact-contract-probe/` 的 `B1`）。
+// 口径：部署侧（**服务 `environment:` 块** + `*.env.example`）的每个 `PORTAL_*` 键，要么**真被代码
+// 读取**，要么在 `DEPLOY_ONLY_OK` 里**带理由**；白名单条目必须**仍被部署侧声明**（声明删了却忘删
+// 白名单 ⇒ 陈旧，同样报错）—— 与 `A2b` 同体例。
+const deployOnlyOf = (declared, reads, allow = DEPLOY_ONLY_OK) =>
+  [...declared]
+    .filter((key) => key.startsWith('PORTAL_') && !reads.has(key) && !(key in allow))
+    .sort();
+const deployEnvKeys = new Set([
+  ...composeFiles.flatMap((file) => [...envBlockKeys(fs.readFileSync(file, 'utf8'))]),
+  ...[...exampleKeys.values()].flatMap((set) => [...set]),
+]);
+const deployOnly = deployOnlyOf(deployEnvKeys, portalKeys);
+const staleDeployOnly = Object.keys(DEPLOY_ONLY_OK)
+  .filter((key) => !deployEnvKeys.has(key))
+  .sort();
+check(
+  'A2c',
+  deployOnly.length === 0 && staleDeployOnly.length === 0,
+  '**部署侧声明的每个 `PORTAL_*` 键，要么被代码真读取、要么在白名单里带理由**（防「看起来能配、其实无作用」）',
+  [
+    deployOnly.length
+      ? `无读取方且无理由：${deployOnly.join(', ')}`
+      : `无读取方的键 0 个（部署侧声明 ${deployEnvKeys.size} 个 · 白名单 ${Object.keys(DEPLOY_ONLY_OK).length} 条）`,
+    staleDeployOnly.length ? `陈旧白名单：${staleDeployOnly.join(', ')}` : '无陈旧白名单条目',
+  ].join(' · '),
+);
+for (const key of deployOnly)
+  finding('部署侧（compose `environment:` / `*.env.example`）声明了、但**代码从不读取**，且白名单里没有理由', key);
+for (const key of staleDeployOnly)
+  finding('白名单里的键**已不在部署侧声明**（声明删了、白名单没删 ⇒ 陈旧）', key);
+
 // ---- 判据自检：注入样本，验两个失效方向（正对照防假红 · 反对照防假绿）----------------
 const SAMPLE = [
   '  PORTAL_FOO_BAR: z.string().optional(),', // ① schema 键
@@ -260,6 +328,36 @@ check(
   !sampleReads.has('PORTAL_COMMENT_ONLY') && sampleCaught.includes('PORTAL_COMMENT_ONLY'),
   '反对照：注释里的键名**抽不到**，且必须被 `A2b` 拦下（否则会误抽注释 ⇒ 假绿 / 存在消红通道）',
   `注释令牌未进读取=${!sampleReads.has('PORTAL_COMMENT_ONLY')} · A2b 拦下注释令牌=${sampleCaught.includes('PORTAL_COMMENT_ONLY')}`,
+);
+// `A2c` 的判据自检：合成一个「部署侧声明、代码不读、白名单无理由」的键 ⇒ **必须被命中**（防恒绿）
+const sampleDeployOnly = deployOnlyOf(new Set([...deployEnvKeys, 'PORTAL_SELFTEST_KEY']), portalKeys, {});
+check(
+  'S4',
+  sampleDeployOnly.includes('PORTAL_SELFTEST_KEY') && !deployOnly.includes('PORTAL_SELFTEST_KEY'),
+  '`A2c` 判据自检：注入「部署侧声明、代码不读、无理由」的合成键 ⇒ **必须被命中**（防恒绿）',
+  `合成键命中=${sampleDeployOnly.includes('PORTAL_SELFTEST_KEY')} · 真实集里不含它=${!deployOnly.includes('PORTAL_SELFTEST_KEY')}`,
+);
+// `envBlockKeys` 的判据自检：**服务 `environment:` 块内**的键要抽到，compose **自身的插值变量**不能抽到
+const sampleEnvText = [
+  'services:',
+  '  portal:',
+  '    image: ${PORTAL_IMAGE:?set me}',
+  '    environment:',
+  '      PORTAL_ENV: production',
+  '      # PORTAL_COMMENTED: x',
+  '      PORTAL_PORT: "8080"',
+  '    volumes:',
+  '      - ./a:/b',
+].join('\n');
+const sampleEnvKeys = envBlockKeys(sampleEnvText);
+check(
+  'S5',
+  sampleEnvKeys.has('PORTAL_ENV') &&
+    sampleEnvKeys.has('PORTAL_PORT') &&
+    !sampleEnvKeys.has('PORTAL_IMAGE') &&
+    !sampleEnvKeys.has('PORTAL_COMMENTED'),
+  '`A2c` 抽键判据自检：`environment:` 块内命中、**compose 自身插值变量**（`${PORTAL_IMAGE}`）与注释键名**不**命中',
+  `命中=[${[...sampleEnvKeys].join(', ')}]（期望恰为 PORTAL_ENV / PORTAL_PORT）`,
 );
 
 // Q4：文档提到、但真源（代码 / 部署）都不认的键 ⇒ 陈旧或属上游 config（需人工判，故只作发现）

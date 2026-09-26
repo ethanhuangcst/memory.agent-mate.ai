@@ -184,7 +184,11 @@ ver_read_hits() { grep -rEc 'process\.env\.PORTAL_(IMAGE_TAG|VERSION)|PORTAL_IMA
 mount_hits() { nocomment "$1" | grep -c 'upstream\.lock'; }
 
 SAMPLE="${TMP}/ver-sample"; mkdir -p "${SAMPLE}"
-printf 'const v = process.env.PORTAL_IMAGE_TAG ?? "0.0.0";\n' >"${SAMPLE}/sample.ts"
+# 两侧（自身版本读取位 / 挂载的锁）都用**合成样本**对照，**不拿制品现状当反样本** ——
+# 口径同 `#1` 探针的 `C5`：本文件里凡是「现状如何」的观察只写 `info` 或 `Q`（契约断言）。
+# 这里踩过第三次：`#2` 第 2 批把自身版本读取位落地后，「现状 0 命中」的断言必然假红。
+printf 'const v = process.env.PORTAL_IMAGE_TAG ?? "0.0.0";\n' >"${SAMPLE}/with-version.ts"
+printf 'const v = "0.0.0";\n' >"${SAMPLE}/without-version.ts"
 # 挂载样本注入到 `volumes:` 块内（不是文件末尾）—— 判据要求「锁真的被挂进容器」，
 # 样本本身就得是合法的挂载声明，否则又是「用非法样本证明判据」。
 awk '1; /^[[:space:]]*volumes:[[:space:]]*$/ && !d { print "      - ../upstream.lock:/app/upstream.lock:ro"; d = 1 }' \
@@ -192,10 +196,10 @@ awk '1; /^[[:space:]]*volumes:[[:space:]]*$/ && !d { print "      - ../upstream.
 # 反样本同样**合成**（不拿制品现状当样本 —— 它已随 `#2` 第 1 批挂上锁而翻转）
 printf 'name: probe-mount-none\nservices:\n  portal:\n    image: x\n' >"${TMP}/mount-none.yml"
 check V2 '版本断言的两侧输入面**可判**（自身读取位 / 挂载的锁，两侧对照都观察到）' \
-  "$([ "$(ver_read_hits "${SAMPLE}")" -gt 0 ] && [ "$(ver_read_hits "${PRODUCT}/admin_portal/src")" -eq 0 ] \
+  "$([ "$(ver_read_hits "${SAMPLE}/with-version.ts")" -gt 0 ] && [ "$(ver_read_hits "${SAMPLE}/without-version.ts")" -eq 0 ] \
      && [ "$(mount_hits "${TMP}/mount-ok.yml")" -gt 0 ] && [ "$(mount_hits "${TMP}/mount-none.yml")" -eq 0 ] && echo 0 || echo 1)" \
   '两向都由**合成样本**观察（正=命中 / 反=不命中）⇒ 判据能分辨「有没有」，且不随制品落地翻转'
-info "现状：自身版本读取位在 admin_portal/src/ 命中 $(ver_read_hits "${PRODUCT}/admin_portal/src") 处 · 锁挂载在 compose 命中 $(mount_hits "${COMPOSE}") 处 ⇒ **两侧都缺**（§3.4 ③ 把「挂载 + 读取位」记归 #17）"
+info "现状：自身版本读取位在 admin_portal/src/ 命中 $(ver_read_hits "${PRODUCT}/admin_portal/src") 处 · 锁挂载在 compose 命中 $(mount_hits "${COMPOSE}") 处（两侧是否齐备由 Q3 断言，本行只是记录）"
 info "现状：selfcheck 的版本项 = $(grep -o "name: 'binary_version_matches_lock', status: '[a-z]*'" "${SELFCHECK}" | head -1 || echo '(未匹配)') ⇒ 该项判的是**上游二进制**版本，与门户**自身**版本的断言不是同一件事（归属待拍板）"
 
 # ── V3：归属表述的可定位性（两处文本都在位 ⇒ 冲突是文本级事实，须拍板）───────────────
@@ -270,6 +274,9 @@ check Q1 '编排契约：`healthcheck` 四键齐 + `restart` 为**有界**形态
 check Q2 '编排契约：锁已挂载（版本断言的期望值输入面）且**无读取方的键**（`PORTAL_ROOT`）零残留' \
   "$([ "$(mount_hits "${COMPOSE}")" -gt 0 ] && [ "$(nocomment "${COMPOSE}" | grep -c 'PORTAL_ROOT')" -eq 0 ] && echo 0 || echo 1)" \
   "锁挂载 $(mount_hits "${COMPOSE}") 处 · PORTAL_ROOT 可见行 $(nocomment "${COMPOSE}" | grep -c 'PORTAL_ROOT') 处"
+check Q3 '契约：版本断言的**两侧输入面齐备**（源码有自身版本读取位 + compose 挂了锁）' \
+  "$([ "$(ver_read_hits "${PRODUCT}/admin_portal/src")" -gt 0 ] && [ "$(mount_hits "${COMPOSE}")" -gt 0 ] && echo 0 || echo 1)" \
+  "自身版本读取位 $(ver_read_hits "${PRODUCT}/admin_portal/src") 处 · 锁挂载 $(mount_hits "${COMPOSE}") 处"
 
 # ─────────────────────── 相 2：基础镜像代理（需 docker + 网络）───────────────────────
 echo

@@ -140,6 +140,7 @@ chmod 1777 "${USERS_DIR}"
 echo '--- 正例：dev 姿态（两个不同的回环 Host）应当起来并服务 ---'
 if ! docker run -d --name "${NAME}" \
   -v "${USERS_DIR}:/data/users" \
+  -v "${PRODUCT}/upstream.lock:/app/upstream.lock:ro" \
   -e PORTAL_ENV=development \
   -e PORTAL_ADMIN_HOST=localhost \
   -e PORTAL_MCP_HOST=127.0.0.1 \
@@ -230,6 +231,12 @@ check 'P9' '面隔离生效：管理面路径在 MCP 面上回 403' \
 MCP_HEALTH="$(http_status 127.0.0.1 /healthz || true)"
 check 'P10' '/healthz 在 MCP 面上也放行（容器 healthcheck 可用任一面）' \
   "$([ "${MCP_HEALTH}" = '200' ] && echo 0 || echo 1)" "状态码 '${MCP_HEALTH}'（期望 200）"
+
+# 版本断言（Sprint 5 `#2`）：本用例**挂了** `upstream.lock` ⇒ 该项必须真跑成 `pass`
+# （而不是降级为 `deferred`）—— 同时证明镜像**烘入了** `PORTAL_IMAGE_TAG`。
+OWNVER="$(printf '%s\n' "${LOGS}" | grep -o '"name":"own_version_matches_lock","status":"[a-z]*"' | head -1)"
+check 'P11' '版本断言在容器内真跑（own_version_matches_lock = pass；锁已挂 + 镜像已烘版本）' \
+  "$(printf '%s' "${OWNVER}" | grep -q '"status":"pass"' && echo 0 || echo 1)" "${OWNVER:-（未出现）}"
 
 # ── 反例：身份姿态的三条守卫必须拒绝启动 ──────────────────────────────────────────────────
 # 每个反例断言三件事：非零退出 · 日志点名原因 · **从未监听**（第三条是关键：退出码非零也可能是

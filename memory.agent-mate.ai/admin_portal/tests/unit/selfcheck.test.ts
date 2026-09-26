@@ -66,6 +66,90 @@ function pick(results: readonly SelfCheckResult[], name: string): SelfCheckResul
   return found;
 }
 
+/** 生产姿态配置：去掉自签通道的五个键（生产下启用即拒绝启动），补 Access 两键。 */
+function prodEnv(over: Record<string, string> = {}): Record<string, string> {
+  const env = baseEnv();
+  for (const key of [
+    'PORTAL_TEST_JWT_ENABLED',
+    'PORTAL_TEST_JWT_EMAIL',
+    'PORTAL_TEST_JWT_JWKS',
+    'PORTAL_TEST_JWT_ISS',
+    'PORTAL_TEST_JWT_AUD',
+  ]) {
+    delete env[key];
+  }
+  return {
+    ...env,
+    PORTAL_ENV: 'production',
+    PORTAL_ACCESS_TEAM_DOMAIN: 'team.cloudflareaccess.com',
+    PORTAL_ACCESS_AUD: 'aud-tag',
+    ...over,
+  };
+}
+
+describe('runSelfCheck：门户自身版本 vs 版本锁（Sprint 5 `#2`）', () => {
+  const LOCK_OK = 'LOCK_SCHEMA="1"\nIMAGE_TAG="0.10.0"\nUPSTREAM_RELEASE_TAG="v0.10.0"\n';
+  function writeLock(content: string, name = 'upstream.lock'): string {
+    const file = path.join(root, name);
+    fs.writeFileSync(file, content);
+    return file;
+  }
+  function verdict(cfg: PortalConfig, lockPath: string): SelfCheckResult {
+    return pick(runSelfCheck(cfg, { lockPath }), 'own_version_matches_lock');
+  }
+
+  it('生产 + 锁可读 + 两侧一致 ⇒ pass（detail 带两侧取值）', () => {
+    const result = verdict(loadConfig(prodEnv({ PORTAL_IMAGE_TAG: '0.10.0' })), writeLock(LOCK_OK));
+    expect(result.status).toBe('pass');
+    expect(result.detail).toContain('0.10.0');
+  });
+
+  it('开发 + 锁可读 + 两侧一致 ⇒ pass（同一判据，不因姿态放宽）', () => {
+    const result = verdict(load({ PORTAL_IMAGE_TAG: '0.10.0' }), writeLock(LOCK_OK));
+    expect(result.status).toBe('pass');
+  });
+
+  it('生产 + 锁读不到 ⇒ fail 且阻断启动（不伪装通过）', () => {
+    const result = verdict(loadConfig(prodEnv({ PORTAL_IMAGE_TAG: '0.10.0' })), path.join(root, 'nope.lock'));
+    expect(result.status).toBe('fail');
+    expect(result.detail).toContain('production');
+    expect(hasBlockingFailure([result])).toBe(true);
+  });
+
+  it('开发 + 锁读不到 ⇒ deferred（如实登记「未判」，且不阻断）', () => {
+    const result = verdict(load(), path.join(root, 'nope.lock'));
+    expect(result.status).toBe('deferred');
+    expect(hasBlockingFailure([result])).toBe(false);
+  });
+
+  it('挂载点被建成了目录（Docker 在源文件缺失时的真实表现）⇒ fail', () => {
+    const dir = path.join(root, 'lock-is-dir');
+    fs.mkdirSync(dir, { recursive: true });
+    const result = verdict(load({ PORTAL_IMAGE_TAG: '0.10.0' }), dir);
+    expect(result.status).toBe('fail');
+    expect(result.detail).toContain('不是文件');
+  });
+
+  it('两侧不一致 ⇒ fail，且 detail 把两个值都写出来', () => {
+    const result = verdict(load({ PORTAL_IMAGE_TAG: '0.9.9' }), writeLock(LOCK_OK));
+    expect(result.status).toBe('fail');
+    expect(result.detail).toContain('0.9.9');
+    expect(result.detail).toContain('0.10.0');
+  });
+
+  it('镜像未烘入自身版本（PORTAL_IMAGE_TAG 为空）⇒ fail（提示用构建脚本）', () => {
+    const result = verdict(load(), writeLock(LOCK_OK));
+    expect(result.status).toBe('fail');
+    expect(result.detail).toContain('build-portal-image.sh');
+  });
+
+  it('锁缺 IMAGE_TAG 行 ⇒ fail（锁被改坏也要挡住）', () => {
+    const result = verdict(load({ PORTAL_IMAGE_TAG: '0.10.0' }), writeLock('LOCK_SCHEMA="1"\n'));
+    expect(result.status).toBe('fail');
+    expect(result.detail).toContain('IMAGE_TAG');
+  });
+});
+
 describe('runSelfCheck：本批可验的项', () => {
   it('基线配置：全部可验项通过，未启用项显式登记为 deferred（不伪装通过）', () => {
     const results = runSelfCheck(load());

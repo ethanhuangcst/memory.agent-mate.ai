@@ -8,6 +8,25 @@
 
 ## 2026-09-26
 
+### Sprint 5 `#2` 第 2 批「启动期版本断言」交付（含判据方向补齐 `A2c`）
+
+**为什么**：第 1 批落了编排侧；这批落**判据本体** —— 「门户自身版本 vs 挂载的版本锁」的读取位与启动期断言，外加 `#2` 探针登记的 **B 缺口**（`deploy-guide-audit` 的**方向缺口**：只判「代码会读 → 必须被登记」，反方向无判据）。
+
+**改了什么**：
+
+- **自身版本烘入**（2026-09-26 用户拍板）：[`../admin_portal/Dockerfile`](../admin_portal/Dockerfile) 新增 `ENV PORTAL_IMAGE_TAG=${IMAGE_TAG}`（由 `upstream.lock` 经 build-arg 注入）。**不放进 compose** —— 放进去等于让运维手填「这个镜像是什么版本」，填错反而掩盖不一致。
+- **配置读取位**：[`../admin_portal/src/config.ts`](../admin_portal/src/config.ts) 新增 `PORTAL_IMAGE_TAG`（`RawEnvSchema` + `PortalConfig.ownImageTag`；未烘入 = 空串）。
+- **启动期断言（fail-closed）**：[`../admin_portal/src/selfcheck.ts`](../admin_portal/src/selfcheck.ts) 新增 `own_version_matches_lock` —— 生产**读不到锁** / 两侧不一致 / 挂载点被 Docker 建成**目录** ⇒ **拒绝启动**；**开发姿态缺锁 ⇒ `deferred`**（如实登记「未判」，**不伪装通过**）。路径**写死** `/app/upstream.lock`（编排契约的一部分，多一个键只会多一处能对不上）；**测试缝** = `runSelfCheck(cfg, { lockPath })`（**不是**配置键）。
+- **键登记**：[`deployment.md`](./deployment.md) §12.5.4 新增「**镜像烘入（不在 compose 设）**」行 ⇒ `A2` 绿（否则新键会被判「代码会读但没人登记」—— 本轮实测先红后绿）。
+- **判据方向补齐**：[`../probes/deploy-guide-audit/probe.mjs`](../probes/deploy-guide-audit/probe.mjs) 新增 **`A2c`** ——「部署侧声明的 `PORTAL_*` 键 → 代码读取方」；**只看服务 `environment:` 块** + `*.env.example`（**排除 compose 自身的插值变量**如 `${PORTAL_IMAGE}`，否则假红），含白名单（带理由、条目仍被声明）与「陈旧白名单」检查；并加两条判据自检 **`S4`**（合成「声明但无读取方」的键 ⇒ 必须命中，防恒绿）与 **`S5`**（`environment:` 块命中、插值变量与注释键名不命中）⇒ 该门禁 **9 → 12 项 / 0 失败**。
+- **冒烟同步**：[`../scripts/portal-image-smoke.sh`](../scripts/portal-image-smoke.sh) 的 dev 用例挂载 `upstream.lock` 并新增 **`P11`**（`own_version_matches_lock = pass`）—— 让该断言在容器里**真跑**（而不是因缺锁降级为 `deferred`），同时证明镜像**确实烘入了**版本。
+- **探针自伤第三次（同族）**：[`../probes/portal-artifact-contract-probe/`](../probes/portal-artifact-contract-probe/README.md) 的 `V2` 又把「**现状**无自身版本读取位」写进断言 ⇒ 本批落地后必然假红。已改为**合成样本对照**，并新增 **`Q3`**（两侧输入面**齐备**的契约断言）承接「现状」的角色。
+- **口径**：`A2c` 的存在使「部署侧声明了但代码从不读」的键**首次有了判据** ⇒ 本轮 `PORTAL_ROOT` 的删除有了**守门人**（白名单当前为空）。
+
+**验证（本机）**：离线 **379 passed / 35 files**（+8 用例）· 覆盖率 **93.70 / 87.30 / 97.87 / 94.80**（`selfcheck.ts` 行覆盖 **100%**）· `tsc --noEmit` 0 错 · `make deploy-doc-audit` **12/0 退 0** · `#2` 探针 **12 PASS / 0 FAIL / 1 未判** · `make doc-links` 零悬空 · `make secret-check` ✓ · `git diff --check` 干净。**CI 复跑（镜像侧 `P11` 与相 3）待确认** —— 这两项需要真镜像。
+
+**边界**：不改 `upstream.lock` · 不改 `deploy/portal.compose.yml`（第 1 批已挂锁）· **未**改第 1 批的 `healthcheck` / `restart` 取值 · 开发姿态的 `deferred` 是**刻意**的（本地不挂锁 ⇒ 记「未判」而非记通过）· `#2` 暂留 `WIP`（待 CI 复跑确认后置 `Done`）。
+
 ### Sprint 5 `#2` 第 1 批「编排可判」交付（`ToDo` → `WIP`）
 
 **为什么先做这批**：用户定「分批 —— 先编排、再启动期断言」。这批的共同点是**判据已在手上**（不依赖产品代码改动）：编排侧四处 + 判据接线。
