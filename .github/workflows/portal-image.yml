@@ -7,6 +7,7 @@
 #      → 再跑 **Sprint 5 `#2` 的制品契约探针**（其相 3 需要镜像 ⇒ 只有 CI / 有镜像的机器能判）
 #      → 再跑 **Sprint 5 `#4` 的攻击面探针**（相 3 同样需要镜像：运行身份 / socket / 只读根可行性 / 资源基线）
 #      → 再跑 **Sprint 5 `#3` 的库边界探针**（相 2 需要能起门户：库位置合规 / 误放必拒启动 / 备份遍历面）
+#      → 再跑 **Sprint 5 `#5` 的上游 HTTP 面探针**（**不需要镜像**：制品无 9077 映射 + 绑回环 + 顶层 `api_key` + 同网可达性）
 #   ❌ 不部署、不碰服务器、不改 upstream.lock（部署决策与执行**始终人工**）
 #
 # 为什么放在 CI（实测依据，不是偏好）：
@@ -22,7 +23,7 @@
 #     同一脚本；CI 里镜像刚构建完就在本地守护里 ⇒ 不需要 GHCR 凭据，故这里能判而本机不能）
 #
 # 退出码契约：构建 10 前置缺失 / 20 用法错 / 30 构建失败；探针 0 全判且无失败 / 10 有失败 / 30 有「未判」项；
-#   冒烟 0 全判且无失败 / 10 有失败 / 30 未判；制品契约探针、攻击面探针与库边界探针同（0/10/30/20）
+#   冒烟 0 全判且无失败 / 10 有失败 / 30 未判；制品契约探针、攻击面探针、库边界探针与上游 HTTP 面探针同（0/10/30/20）
 #   —— 任一步非 0，本工作流即红（不把「未判」当通过）。
 #
 # 备注：`.github/workflows/` 必须位于仓库根（GitHub 平台强制），是资产隔离判据中继 `.gitignore` /
@@ -48,6 +49,7 @@ on:
       - 'memory.agent-mate.ai/probes/portal-artifact-contract-probe/**'
       - 'memory.agent-mate.ai/probes/container-attack-surface-probe/**'
       - 'memory.agent-mate.ai/probes/portal-db-boundary-probe/**'
+      - 'memory.agent-mate.ai/probes/upstream-http-surface-probe/**'
       - '.github/workflows/portal-image.yml'
 
 permissions:
@@ -141,6 +143,10 @@ jobs:
           PORTAL_BUILD_TAG: ${{ env.IMAGE_NAME }}:${{ steps.lock.outputs.tag }}-sha-${{ steps.lock.outputs.sha7 }}
         run: bash memory.agent-mate.ai/probes/portal-db-boundary-probe/probe.sh
 
+      # 本步**不需要镜像**（制品面判据 + 合成靶同网可达性）⇒ 不传 PORTAL_BUILD_TAG
+      - name: 上游 HTTP 面判据（Sprint 5 `#5` 探针：制品无 9077 映射 + 绑回环 + 顶层 api_key + 同网可达性）
+        run: bash memory.agent-mate.ai/probes/upstream-http-surface-probe/probe.sh
+
       - name: 写入运行摘要
         if: always()
         run: |
@@ -158,4 +164,6 @@ jobs:
             echo "运行时判据由 \`scripts/portal-image-smoke.sh\` 判定（正例：起容器 + \`/healthz\` 200 + 受保护路径 401 + 三条 \`deferred\` 如实登记；反例：身份姿态三条守卫必拒启动且从未监听）。"
             echo ""
             echo "库边界判据由 \`probes/portal-db-boundary-probe/\` 判定（库位置合规：独立卷 + 不在 \`/data\` 下；误放必拒启动：非零退出 + 日志点名 + 从未监听；AC9.2 第一半：备份遍历面 \`/data/users/*\` 不含门户库）。"
+            echo ""
+            echo "上游 HTTP 面判据由 \`probes/upstream-http-surface-probe/\` 判定（制品无 9077 映射：注释态不算生效、\`expose\` 不算发布；\`serve\` 显式绑 \`127.0.0.1\` + 显式端口；未启用顶层 \`api_key\`；同网可达性由合成靶正/反对照；**公网不可达归生产** \`#13\`/\`#14\`）。"
           } >> "$GITHUB_STEP_SUMMARY"
