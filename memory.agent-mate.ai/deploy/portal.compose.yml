@@ -48,6 +48,31 @@ services:
       retries: 3
       start_period: 20s
 
+    # ── 最小攻击面（Sprint 5 `#4`；判据 = web-stories.md S13 `AC13.1`–`AC13.3`）────────────────═
+    # 只读根 + 可写的必要挂载。**「必要挂载」清单已被 CI 实证**（`probes/container-attack-surface-probe/`
+    # 相 3 `T3`：`--read-only` + 这批挂载下门户能起来、答 `/healthz` 200、自检全过）：`/data` 与
+    # `/srv/portal` 是可写**命名卷**（见下方 volumes）、`config.toml` 与 `upstream.lock` 挂**只读**
+    # ⇒ 这里只需再给进程一个可写临时目录。**别因为有了 `read_only` 就把临时目录省掉**：`tsx` 与
+    # SQLite 都要写临时文件。
+    read_only: true
+    tmpfs:
+      - /tmp:mode=1777
+    # 权限：丢弃**全部** Linux capabilities + 禁止提权。`aimem` 一个 capability 都不需要（8080 是
+    # 非特权端口、不 chown、不 setuid）。两者**互补**：`cap_drop` 管当前进程，`no-new-privileges`
+    # 管「镜像里若残留 setuid 程序」的那条提权路径。
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    # 资源限额（S13 `AC13.3` 第二条）。**取值依据 = 实测**（`probes/container-attack-surface-probe/`
+    # 相 3 `T5`）：空闲态内存 **71.54 MiB** · cgroup `pids.current=21`；会话上限 = 每 key 2 / 全局 4
+    # （`4.1`）· 每会话 ~27 MiB（`3.17`）⇒ 峰值 ≈ 71.5 + 4×27 ≈ 180 MiB ⇒ `mem_limit: 512m`
+    # （≈2.8× 余量）；`pids_limit: 128` 覆盖 node 主进程线程 + 4 个上游子进程及其线程 + 余量。
+    # **注意**：CI runner 的内存总量与生产机不同 ⇒ 这两个数字按生产机复核后如有调整，请同批更新
+    # 这条注释（见探针 README 的「待拍板 ①」）。
+    mem_limit: 512m
+    pids_limit: 128
+
     # 密钥**只**走 portal.env（`chmod 600`）：当前只有门户专用 `DASHSCOPE_API_KEY`。
     # 与主 stack 的 `.env` 分开 ⇒ 门户那把 key 可单独吊销/归因（§12.2）。
     env_file:

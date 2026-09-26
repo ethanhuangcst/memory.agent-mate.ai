@@ -48,10 +48,20 @@ ARG IMAGE_TAG=0.10.0
 # 「这个镜像是什么版本」，填错反而掩盖不一致。
 ENV PORTAL_IMAGE_TAG=${IMAGE_TAG}
 
-# 门户要出站访问私有 MaaS 的 HTTPS 与 CF Access 的 JWKS ⇒ 证书必须有
+# 门户要出站访问私有 MaaS 的 HTTPS 与 CF Access 的 JWKS ⇒ 证书必须有；
+# 装完**立刻把包管理能力移除**（Sprint 5 `#4`；判据 = web-stories.md S13 `AC13.3` 第三条
+# 「镜像内不含非必需的系统包管理能力」）。
+# · **保留 `/bin/sh`**：compose 的 `healthcheck` 用 `CMD-SHELL`（`/bin/sh -c`）⇒ 删了它容器就再也
+#   探不了活。这一条写进判据（探针的 `pkgmgrs_ok`：**包里管理器全空 _且_ `sh` 仍在**才算合格）。
+# · 直接删二进制与元数据，**不走 `apt-get purge`**：`dpkg` 是 Debian 的 essential 包，purge 会被它
+#   自己拦下；而我们的目标只是「镜像里不存在可用的包管理能力」，不需要维持 dpkg 数据库自洽。
+# · 证书本身已落进 `/etc/ssl/certs`，运行期不依赖 dpkg。
 RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates \
- && rm -rf /var/lib/apt/lists/*
+ && rm -rf /var/lib/apt /var/lib/dpkg /var/cache/apt /etc/apt /var/log/apt \
+ && rm -f /usr/bin/apt /usr/bin/apt-get /usr/bin/apt-cache /usr/bin/apt-config /usr/bin/apt-key \
+          /usr/bin/dpkg /usr/bin/dpkg-deb /usr/bin/dpkg-divert /usr/bin/dpkg-maintscript-helper \
+          /usr/bin/dpkg-query /usr/bin/dpkg-split /usr/bin/dpkg-statoverride /usr/bin/dpkg-trigger
 
 # ── 容器用户必须与上游镜像对齐 ────────────────────────────────────────────────────────────────
 # 实测上游 = uid/gid 999:999（`docker run --rm --entrypoint id <img> aimem`）；门户若以不同 UID 建

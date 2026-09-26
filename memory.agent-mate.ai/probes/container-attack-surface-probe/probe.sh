@@ -121,6 +121,16 @@ limits_ok() {
   nocomment "${f}" | grep -qE '^[[:space:]]*pids_limit:' || return 1
   return 0
 }
+# AC13.2 的**加固侧**（「不持有宿主 root 等价权限」的最强手段）：丢弃全部 capabilities **且**
+# 禁止提权 —— 两者互补：`cap_drop` 管当前进程，`no-new-privileges` 管「镜像里若残留 setuid 程序」
+# 的那条路。判据要求**两者齐备**（只写一个不给过）。
+hardening_ok() {
+  local f="$1"
+  nocomment "${f}" | grep -qE '^[[:space:]]*cap_drop:[[:space:]]*$' || return 1
+  nocomment "${f}" | grep -qE '^[[:space:]]*-[[:space:]]*ALL[[:space:]]*$' || return 1
+  nocomment "${f}" | grep -qE 'no-new-privileges:true' || return 1
+  return 0
+}
 # AC13.3 第三条：**镜像内不含非必需的系统包管理能力** —— 判据作用在**容器内的命令可见性**
 #   （`command -v` 的原始输出文本）。离线侧只能证明「判据能分辨」，取值归相 2/3 实测。
 pkgmgrs_ok() { # $1 = `command -v …` 的输出文本；0 = 合格（无包管理器，且保留了 sh）
@@ -160,6 +170,13 @@ check S5 'AC13.3 包管理能力判据可判（含 apt/dpkg ⇒ 不合格；只�
   "$(! pkgmgrs_ok "$(printf '/usr/bin/apt-get\n/usr/bin/dpkg\n/bin/sh')" && pkgmgrs_ok "$(printf '/bin/sh')" && ! pkgmgrs_ok '' && echo 0 || echo 1)" \
   '含包管理器不合格 · 只剩 sh 合格 · **空输出不合格**（命令都没了 ⇒ 不是「最小」而是「坏了」）'
 
+printf 'name: s\nservices:\n  p:\n    image: x\n    cap_drop:\n      - ALL\n    security_opt:\n      - no-new-privileges:true\n' >"${TMP}/hard-ok.yml"
+printf 'name: s\nservices:\n  p:\n    image: x\n    cap_drop:\n      - ALL\n' >"${TMP}/hard-nonnp.yml"
+printf 'name: s\nservices:\n  p:\n    image: x\n' >"${TMP}/hard-none.yml"
+check S6 'AC13.2 加固侧判据可判（`cap_drop: ALL` 与 `no-new-privileges` **二者齐备**才算；只写一个不给过）' \
+  "$(hardening_ok "${TMP}/hard-ok.yml" && ! hardening_ok "${TMP}/hard-nonnp.yml" && ! hardening_ok "${TMP}/hard-none.yml" && echo 0 || echo 1)" \
+  '正样本合格 · 只丢 caps 不合格 · 都没有不合格 ⇒ 「加固了一半」不会被判成合格'
+
 # ── 现状记录（**只写 info**；是否达标由 `Q` 类契约断言在施工后接手）────────────────────
 info "现状（门户 compose）：socket 挂载 $(socket_hits "${PORTAL_COMPOSE}") 处 · 特权键 $(privilege_hits "${PORTAL_COMPOSE}") 处 · $(readonly_ok "${PORTAL_COMPOSE}" && echo '只读根已配齐' || echo '只读根未配齐 ✗') · $(limits_ok "${PORTAL_COMPOSE}" && echo '资源限额已配齐' || echo '资源限额未配齐 ✗')"
 info "现状（主 stack compose）：socket 挂载 $(socket_hits "${MAIN_COMPOSE}") 处 · 特权键 $(privilege_hits "${MAIN_COMPOSE}") 处 · $(readonly_ok "${MAIN_COMPOSE}" && echo '只读根已配齐' || echo '只读根未配齐 ✗') · $(limits_ok "${MAIN_COMPOSE}" && echo '资源限额已配齐' || echo '资源限额未配齐 ✗')"
@@ -170,6 +187,14 @@ info "现状（Dockerfile）：运行身份 = $(grep -m1 -E '^USER ' "${DOCKERFI
 check U1 'AC13.2「非 root 运行」的镜像侧**已判**（引用 #1 探针 `E4`：容器内 uid=999）' \
   "$(grep -q 'E4' "${PRODUCT}/probes/portal-image-verdict-probe/probe.sh" && grep -qE '^USER 999:999' "${DOCKERFILE}" && echo 0 || echo 1)" \
   'Dockerfile 声明 `USER 999:999` · #1 探针 E4 已实测容器内 uid=999'
+
+# ── Q：`#4` 本体落地后的**编排契约断言**（落地 ⇒ 被改坏即红；口径同 `#2` 探针的 `Q` 类）──────────
+check Q1 '编排契约：只读根**配齐**（`read_only: true` **且**给出可写的必要挂载 `tmpfs`）且资源限额**齐备**（`mem_limit` + `pids_limit`）' \
+  "$(readonly_ok "${PORTAL_COMPOSE}" && limits_ok "${PORTAL_COMPOSE}" && echo 0 || echo 1)" \
+  "只读根 $(readonly_ok "${PORTAL_COMPOSE}" && echo 合格 || echo '不合格 ✗') · 限额 $(limits_ok "${PORTAL_COMPOSE}" && echo 合格 || echo '不合格 ✗')"
+check Q2 '编排契约：权限加固**齐备**（`cap_drop: ALL` + `no-new-privileges:true`）' \
+  "$(hardening_ok "${PORTAL_COMPOSE}" && echo 0 || echo 1)" \
+  "加固判据 $(hardening_ok "${PORTAL_COMPOSE}" && echo 合格 || echo '不合格 ✗')"
 
 # ─────────────────────── 相 2：底座镜像代理（需 docker + 网络）───────────────────────
 echo
@@ -208,9 +233,10 @@ check T2 'AC13.1：容器内不存在 docker socket（`TC-P-L1-08` 的容器侧�
   "$([ "${SOCK}" = 'no' ] && echo 0 || echo 1)" "/var/run/docker.sock 存在=${SOCK}（期望 no）"
 
 PKG_IMG="$(docker run --rm --entrypoint sh "${IMG}" -c 'command -v apt-get; command -v apt; command -v dpkg; command -v apk; command -v rpm; command -v yum; command -v dnf; command -v sh' 2>/dev/null || true)"
-# **现状记录，不写成断言**：AC13.3 第三条当前**不合规**（镜像继承底座自带的 apt/dpkg）⇒ 断言它会在
-# 施工前必然红（口径同 `#1` 探针的 `C5`）。施工后由 `Q` 类**契约断言**接手（届时 `pkgmgrs_ok` 直接可用）。
-info "现状（AC13.3 第三条，**当前不合规**）：镜像内包管理能力命中 —— $(printf '%s' "${PKG_IMG}" | tr '\n' ' ')（判据已就绪：施工后要求该集合里只剩 `/bin/sh` —— healthcheck 的 CMD-SHELL 依赖它）"
+# `#4` 本体已在 `Dockerfile` 里移除包管理能力 ⇒ 由「现状记录」**升为契约断言**（`Q` 类口径：
+# 落地之后就该被改坏即红）。判据要求「包管理器全空 **且** `sh` 仍在」。
+check T4 'AC13.3 第三条：镜像内**不含**非必需的系统包管理能力（且保留了 `sh`）' \
+  "$(pkgmgrs_ok "${PKG_IMG}" && echo 0 || echo 1)" "命中：$(printf '%s' "${PKG_IMG}" | tr '\n' ' ')"
 
 # 只读根可行性（AC13.3 第一条的**关键未知项**）：`--read-only` + 必要 tmpfs 下门户还能不能起来
 JWKS="$(docker run --rm --entrypoint node "${IMG}" --input-type=module -e "
@@ -228,8 +254,13 @@ USERS_DIR="${TMP}/users"; mkdir -p "${USERS_DIR}"; chmod 1777 "${USERS_DIR}"
 # CI 首跑转红（**探针自伤**：夹具不完整会把「产品不可行」误报成结论 —— 实测依据见 change-log 同日小节）。
 PDPORTAL_DIR="${TMP}/srv-portal"; mkdir -p "${PDPORTAL_DIR}"; chmod 1777 "${PDPORTAL_DIR}"
 docker rm -f "${NAME}" >/dev/null 2>&1 || true
+# **按 compose 的最终加固设置**起容器：`--read-only` + 必要 `tmpfs` + `--cap-drop ALL` +
+# `--security-opt no-new-privileges` + `--memory` / `--pids-limit`。断言的不是「只读根理论上可行」，
+# 而是「**我们发出去的那套设置跑得起来**」—— compose 若与运行时实际能力冲突，这里会第一个红。
 docker run -d --name "${NAME}" \
   --read-only --tmpfs /tmp:mode=1777 \
+  --cap-drop ALL --security-opt no-new-privileges:true \
+  --memory 512m --pids-limit 128 \
   -v "${USERS_DIR}:/data/users" \
   -v "${PDPORTAL_DIR}:/srv/portal" \
   -v "${PRODUCT}/upstream.lock:/app/upstream.lock:ro" \
@@ -258,7 +289,7 @@ RO_DIAG="$(printf '%s\n' "${RO_LOGS}" | grep -o '"event":"config_invalid","messa
 RO_STATE="$(docker inspect -f '{{.State.Status}} exit={{.State.ExitCode}}' "${NAME}" 2>/dev/null || echo '?')"
 RO_HEAD="$(printf '%s\n' "${RO_LOGS}" | grep -v '^[[:space:]]*$' | head -3 | tr '\n' '|' | cut -c1-300)"
 RO_LISTEN="$(printf '%s\n' "${RO_LOGS}" | grep -c '"event":"portal_listening"' || true)"
-check T3 'AC13.3 第一条：`--read-only` + 必要挂载（`/srv/portal` rw · `/tmp` tmpfs）下门户**仍能起来并服务**' \
+check T3 'AC13.3 第一条：按 compose 的**最终加固设置**（`read_only` + `tmpfs` + `cap_drop ALL` + `no-new-privileges` + 限额）起容器 ⇒ 门户**仍能起来并服务**' \
   "$([ "${RO_OK}" = '200' ] && echo 0 || echo 1)" \
   "20 s 内 /healthz 状态码 '${RO_OK}' · 容器 ${RO_STATE} · portal_listening=${RO_LISTEN} 次 · 日志首行：${RO_HEAD:-（空）}${RO_DIAG:+【${RO_DIAG}】}"
 
