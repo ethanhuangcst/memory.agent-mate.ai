@@ -4,6 +4,7 @@
 # 职责边界（重要）：
 #   ✅ 构建 linux/amd64 门户镜像 → 推 GHCR → 跑**仓库里那一个探针**做契约自检
 #      → 再跑**仓库里那一个冒烟脚本**真起容器验「起得来、答得应、坏姿态必拒」
+#      → 再跑 **Sprint 5 `#2` 的制品契约探针**（其相 3 需要镜像 ⇒ 只有 CI / 有镜像的机器能判）
 #   ❌ 不部署、不碰服务器、不改 upstream.lock（部署决策与执行**始终人工**）
 #
 # 为什么放在 CI（实测依据，不是偏好）：
@@ -19,7 +20,8 @@
 #     同一脚本；CI 里镜像刚构建完就在本地守护里 ⇒ 不需要 GHCR 凭据，故这里能判而本机不能）
 #
 # 退出码契约：构建 10 前置缺失 / 20 用法错 / 30 构建失败；探针 0 全判且无失败 / 10 有失败 / 30 有「未判」项；
-#   冒烟 0 全判且无失败 / 10 有失败 / 30 未判 —— 任一步非 0，本工作流即红（不把「未判」当通过）。
+#   冒烟 0 全判且无失败 / 10 有失败 / 30 未判；制品契约探针同（0/10/30/20）
+#   —— 任一步非 0，本工作流即红（不把「未判」当通过）。
 #
 # 备注：`.github/workflows/` 必须位于仓库根（GitHub 平台强制），是资产隔离判据中继 `.gitignore` /
 #       `Makefile` 之后的第三个根目录例外，已在 memory.agent-mate.ai/specs/architecture.md §5 记录。
@@ -41,6 +43,7 @@ on:
       - 'memory.agent-mate.ai/scripts/build-portal-image.sh'
       - 'memory.agent-mate.ai/scripts/portal-image-smoke.sh'
       - 'memory.agent-mate.ai/probes/portal-image-verdict-probe/**'
+      - 'memory.agent-mate.ai/probes/portal-artifact-contract-probe/**'
       - '.github/workflows/portal-image.yml'
 
 permissions:
@@ -118,6 +121,11 @@ jobs:
         env:
           PORTAL_SMOKE_TAG: ${{ env.IMAGE_NAME }}:${{ steps.lock.outputs.tag }}-sha-${{ steps.lock.outputs.sha7 }}
         run: bash memory.agent-mate.ai/scripts/portal-image-smoke.sh
+
+      - name: 制品契约判据（Sprint 5 `#2` 探针：编排 + 工具面 + boot 耗时 + 重启语义）
+        env:
+          PORTAL_BUILD_TAG: ${{ env.IMAGE_NAME }}:${{ steps.lock.outputs.tag }}-sha-${{ steps.lock.outputs.sha7 }}
+        run: bash memory.agent-mate.ai/probes/portal-artifact-contract-probe/probe.sh
 
       - name: 写入运行摘要
         if: always()
