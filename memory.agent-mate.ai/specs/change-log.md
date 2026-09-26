@@ -8,7 +8,9 @@
 
 ## 2026-09-27
 
-### Sprint 5 `#17` 本体交付：门户启动自检三项 `deferred` **转正**（`ToDo` → 待 CI 确认）
+### Sprint 5 `#17` 本体交付：门户启动自检三项 `deferred` **转正**（`ToDo` → `Done`）
+
+> **CI 复跑（run `36280398939` success）⇒ 七步判据全绿**：`#1` 探针 31/0/0 · 冒烟 19/0/0 · `#2` 探针 17/0/0 · `#4` 探针 17/0/0 · `#3` 探针 12/0/0 · `#5` 探针 16/0/0 · **`#17` 探针 14/0/0**。容器内的权威值（冒烟 `P5`，本批改的正是这条判据）：`embeddings=deferred`（dev 未配 MaaS，**明写**）· **`binary_version=pass`** · **`launch_template=pass`** · `status=deferred` 总数 **1**（原 3）⇒ **三项里两项已在镜像内真跑并通过**，第三项如实登记未判 ⇒ 置 `Done`。
 
 **拍板（2026-09-27 用户定）**：① **开发姿态** = 生产 `fail` / 非生产**显式 `deferred` 并明写**；② **键名** = `PORTAL_EMBEDDINGS_BASE_URL` + `PORTAL_EMBEDDINGS_MODEL`；③ 探针接入 CI。
 
