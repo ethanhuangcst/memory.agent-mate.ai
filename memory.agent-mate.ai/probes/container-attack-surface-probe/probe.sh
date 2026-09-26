@@ -251,8 +251,14 @@ for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
 done
 RO_LOGS="$(docker logs "${NAME}" 2>&1 || true)"
 RO_DIAG="$(printf '%s\n' "${RO_LOGS}" | grep -o '"event":"config_invalid","message":"[^"]*"\|"event":"selfcheck_failed"[^}]*\|"event":"startup_failed","message":"[^"]*"' | head -1 || true)"
-check T3 'AC13.3 第一条：`--read-only` + 必要 tmpfs 下门户**仍能起来并服务**（可行性）' \
-  "$([ "${RO_OK}" = '200' ] && echo 0 || echo 1)" "20 s 内 /healthz 状态码 '${RO_OK}'${RO_DIAG:+【${RO_DIAG}】}"
+# 诊断**必须自带**：容器「在跑但从未监听」时，唯一有用的信息就是**进程自己说了什么**。
+# 首版只摘 JSON 事件 ⇒ 若失败发生在**自检之前**（如 EROFS 写失败，进程压根没跑到自检），明细会是空的
+# ⇒ 白跑一轮 CI（实测发生过一次）。⇒ 一并带上容器状态/退出码与日志**首行**。口径同 `#2` 冒烟的 `P2`/`P3`。
+RO_STATE="$(docker inspect -f '{{.State.Status}} exit={{.State.ExitCode}}' "${NAME}" 2>/dev/null || echo '?')"
+RO_HEAD="$(printf '%s\n' "${RO_LOGS}" | grep -v '^[[:space:]]*$' | head -3 | tr '\n' '|' | cut -c1-300)"
+check T3 'AC13.3 第一条：`--read-only` + 必要挂载（`/srv/portal` rw · `/tmp` tmpfs）下门户**仍能起来并服务**' \
+  "$([ "${RO_OK}" = '200' ] && echo 0 || echo 1)" \
+  "20 s 内 /healthz 状态码 '${RO_OK}' · 容器 ${RO_STATE} · 日志首行：${RO_HEAD:-（空）}${RO_DIAG:+【${RO_DIAG}】}"
 
 # 资源基线（给限额取值提供依据）：健康容器运行 ~8 s 后的内存峰值与进程数
 sleep 8
