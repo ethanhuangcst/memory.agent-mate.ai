@@ -158,14 +158,11 @@ fi
 lock_mentions() { nocomment "$1" | grep -c "upstream.lock" || true; }              # 非注释行提及锁文件
 hardcoded_tag() { nocomment "$1" | grep -c "ghcr.io/alphaonedev/ai-memory:" || true; }  # 非注释行硬编码上游 tag
 
-# C5 锁文件是否挂进容器（3.21 已实证未挂；此处复核并定归属）—— 只扫非注释行
-if [ "$(lock_mentions "${COMPOSE}")" -gt 0 ]; then
-  check C5 "upstream.lock 当前未挂进门户容器（锁侧输入归镜像构建期）" 1 \
-    "非注释行里出现 upstream.lock"
-else
-  check C5 "upstream.lock 当前未挂进门户容器（锁侧输入归镜像构建期）" 0 \
-    "volumes 无该文件（仅注释里提及）⇒ #17 版本断言的锁侧输入必须由构建期注入"
-fi
+# C5 锁文件是否挂进容器 —— **状态记录，不是断言**。
+#   为什么不做断言：当前状态是「未挂载」，而 `#17`（启动自检实现轮）**正是要**把 `upstream.lock`
+#   挂进去 + 加读取位（web-design §3.4 ③ 把它归「镜像侧落地（Sprint 5）」）。把它写成断言会在
+#   #17 落地时**必然反红** —— 判据不该随正确实现而翻转。
+info "upstream.lock 在编排里的现状：非注释行出现 $(lock_mentions "${COMPOSE}") 次 ⇒ $([ "$(lock_mentions "${COMPOSE}")" -gt 0 ] && echo '已挂载' || echo '未挂载（挂载 + 读取位归 #17 启动自检实现轮）')"
 
 # C6 镜像坐标外置 + 零硬编码上游 tag（防漂移）—— 只扫非注释行
 HARDCODED="$(hardcoded_tag "${COMPOSE}")"
@@ -244,6 +241,28 @@ S3_OK=0
 [ "$(c8a_bad "${TMP}/s3-bad.txt" "${TMP}/s3-bad.txt")" = "1" ] || S3_OK=1
 check S3 "C8a 判据自检：正输入 ⇒ 0（不报错）· 反输入 ⇒ 1（必报错），两个方向都被观察到" "${S3_OK}" \
   "好/好=$(c8a_bad "${TMP}/s3-good.txt" "${TMP}/s3-good.txt") · 好/坏=$(c8a_bad "${TMP}/s3-good.txt" "${TMP}/s3-bad.txt") · 坏/坏=$(c8a_bad "${TMP}/s3-bad.txt" "${TMP}/s3-bad.txt")"
+
+# C9/C10：`#1` 验收条件里的**编排三结构**（此前只靠人工读 compose，现补成断言）
+NET_BLOCK="$(sed -n '/^networks:/,$p' "${COMPOSE}")"
+if echo "${NET_BLOCK}" | grep -q "external: true" && echo "${NET_BLOCK}" | grep -q "name: portainer_network"; then
+  check C9 "编排与上游**同网络**（networks.default = external + portainer_network）" 0 \
+    "与主 stack 同网 ⇒ 反代可直接转发，不需要额外网络"
+else
+  check C9 "编排与上游**同网络**（networks.default = external + portainer_network）" 1 \
+    "networks 段：$(echo "${NET_BLOCK}" | tr '\n' ' ' | cut -c1-90)"
+fi
+
+NC_COMPOSE="$(nocomment "${COMPOSE}")"
+DB_PATH_LINE="$(echo "${NC_COMPOSE}" | grep -E "PORTAL_DB_PATH:" | head -1)"
+if echo "${NC_COMPOSE}" | grep -q "ai_memory_data:/data" \
+  && echo "${NC_COMPOSE}" | grep -q "portal_data:/srv/portal" \
+  && ! echo "${DB_PATH_LINE}" | grep -qE '"?/data/'; then
+  check C10 "共享 /data 卷 + 门户库落独立卷且**不在 /data 下**" 0 \
+    "volumes: ai_memory_data:/data · portal_data:/srv/portal · ${DB_PATH_LINE##*PORTAL_DB_PATH}" 
+else
+  check C10 "共享 /data 卷 + 门户库落独立卷且**不在 /data 下**" 1 \
+    "volumes/DB_PATH 不满足：$(echo "${DB_PATH_LINE}" | cut -c1-80)"
+fi
 
 # ─────────────────────── 相 2：镜像侧实值（需 docker 守护） ───────────────────────
 echo
@@ -384,7 +403,7 @@ echo "--- 相 3：门户镜像契约（PORTAL_BUILD_TAG 指定；缺则记未判
 
 PORTAL_TAG="${PORTAL_BUILD_TAG:-memory-agent-mate-portal:${LOCK_TAG}}"
 if ! docker image inspect "${PORTAL_TAG}" >/dev/null 2>&1; then
-  unjudged E1-E8 "门户镜像契约（Entrypoint/Cmd 自声明 · Env 零 AI_MEMORY_DB · 非 root 999:999 · 二进制版本 · tsx 可解析 · 静态资源在位）" \
+  unjudged E1-E9 "门户镜像契约（Entrypoint/Cmd 自声明 · Env 零 AI_MEMORY_DB · 非 root 999:999 · 二进制版本 · tsx 可解析 · 静态资源 · 底座与证书）" \
     "镜像不在本机：${PORTAL_TAG}（构建入口：make portal-image，或 CI 的 .github/workflows/portal-image.yml）"
 else
   info "被测镜像：${PORTAL_TAG}"
@@ -464,6 +483,17 @@ else
     check E8 "静态资源在位（/app/assets/portal.css —— compose 的 PORTAL_STATIC_ROOT 指向它）" 0 "${P_CSS}"
   else
     check E8 "静态资源在位（/app/assets/portal.css —— compose 的 PORTAL_STATIC_ROOT 指向它）" 1 "${P_CSS}"
+  fi
+
+  # E9 底座契约：bookworm 系 + ca-certificates 在位（门户要出站访问私有 MaaS 的 HTTPS 与 CF 的 JWKS）
+  P_OS="$(docker run --rm --entrypoint /bin/cat "${PORTAL_TAG}" /etc/os-release 2>&1 | tr '\n' ' ')"
+  P_CA="$(docker run --rm --entrypoint /usr/bin/dpkg "${PORTAL_TAG}" -s ca-certificates 2>&1 | grep -m1 'install ok installed')"
+  if echo "${P_OS}" | grep -q "bookworm" && [ -n "${P_CA}" ]; then
+    check E9 "底座为 bookworm 系且 ca-certificates 已装（#1 验收条件里的底座契约）" 0 \
+      "$(echo "${P_OS}" | grep -o 'VERSION_CODENAME=[a-z]*') · ${P_CA}"
+  else
+    check E9 "底座为 bookworm 系且 ca-certificates 已装（#1 验收条件里的底座契约）" 1 \
+      "os-release=${P_OS:0:70} · dpkg=${P_CA:-未装}"
   fi
 fi
 
