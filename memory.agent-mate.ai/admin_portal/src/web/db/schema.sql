@@ -3,7 +3,7 @@
 -- 纪律：
 --  - `keys` 只存 `key_hash` + `key_prefix`，**没有明文列**（§4.1 / AC2.2 / TC-P-L0-04）
 --  - `audit.detail_json` 不得含令牌明文或记忆正文（§12.6 / T8）—— 写入侧经 shared/redact.ts 兜底
---  - 门户库落在独立卷（`admin_portal_data` → `/srv/portal`），**不在 /data 下**（AC9.4）
+--  - 门户库落在独立卷（`portal_data` → `/srv/portal`），**不在 /data 下**（AC9.4）
 --  - 时间一律 ISO 8601 UTC 字符串（TEXT）
 
 CREATE TABLE users (

@@ -1,11 +1,12 @@
 # =============================================================================
-# portal-image.yml — 门户镜像：构建 · 推 GHCR · 契约自检 · 运行时冒烟（Sprint 5 `#1`）
+# portal-image.yml — 门户镜像：构建 · 推 GHCR · 契约自检 · 运行时冒烟 · 制品/攻击面/库边界判据（Sprint 5）
 #
 # 职责边界（重要）：
 #   ✅ 构建 linux/amd64 门户镜像 → 推 GHCR → 跑**仓库里那一个探针**做契约自检
 #      → 再跑**仓库里那一个冒烟脚本**真起容器验「起得来、答得应、坏姿态必拒」
 #      → 再跑 **Sprint 5 `#2` 的制品契约探针**（其相 3 需要镜像 ⇒ 只有 CI / 有镜像的机器能判）
 #      → 再跑 **Sprint 5 `#4` 的攻击面探针**（相 3 同样需要镜像：运行身份 / socket / 只读根可行性 / 资源基线）
+#      → 再跑 **Sprint 5 `#3` 的库边界探针**（相 2 需要能起门户：库位置合规 / 误放必拒启动 / 备份遍历面）
 #   ❌ 不部署、不碰服务器、不改 upstream.lock（部署决策与执行**始终人工**）
 #
 # 为什么放在 CI（实测依据，不是偏好）：
@@ -21,7 +22,7 @@
 #     同一脚本；CI 里镜像刚构建完就在本地守护里 ⇒ 不需要 GHCR 凭据，故这里能判而本机不能）
 #
 # 退出码契约：构建 10 前置缺失 / 20 用法错 / 30 构建失败；探针 0 全判且无失败 / 10 有失败 / 30 有「未判」项；
-#   冒烟 0 全判且无失败 / 10 有失败 / 30 未判；制品契约探针同（0/10/30/20）
+#   冒烟 0 全判且无失败 / 10 有失败 / 30 未判；制品契约探针、攻击面探针与库边界探针同（0/10/30/20）
 #   —— 任一步非 0，本工作流即红（不把「未判」当通过）。
 #
 # 备注：`.github/workflows/` 必须位于仓库根（GitHub 平台强制），是资产隔离判据中继 `.gitignore` /
@@ -46,6 +47,7 @@ on:
       - 'memory.agent-mate.ai/probes/portal-image-verdict-probe/**'
       - 'memory.agent-mate.ai/probes/portal-artifact-contract-probe/**'
       - 'memory.agent-mate.ai/probes/container-attack-surface-probe/**'
+      - 'memory.agent-mate.ai/probes/portal-db-boundary-probe/**'
       - '.github/workflows/portal-image.yml'
 
 permissions:
@@ -134,6 +136,11 @@ jobs:
           PORTAL_BUILD_TAG: ${{ env.IMAGE_NAME }}:${{ steps.lock.outputs.tag }}-sha-${{ steps.lock.outputs.sha7 }}
         run: bash memory.agent-mate.ai/probes/container-attack-surface-probe/probe.sh
 
+      - name: 库边界判据（Sprint 5 `#3` 探针：库位置合规 + 误放必拒启动 + 备份遍历面）
+        env:
+          PORTAL_BUILD_TAG: ${{ env.IMAGE_NAME }}:${{ steps.lock.outputs.tag }}-sha-${{ steps.lock.outputs.sha7 }}
+        run: bash memory.agent-mate.ai/probes/portal-db-boundary-probe/probe.sh
+
       - name: 写入运行摘要
         if: always()
         run: |
@@ -149,4 +156,6 @@ jobs:
             echo "契约判据由 \`probes/portal-image-verdict-probe/\` 判定（含相 3 门户镜像契约）；退出码 30 = 有「未判」项。"
             echo ""
             echo "运行时判据由 \`scripts/portal-image-smoke.sh\` 判定（正例：起容器 + \`/healthz\` 200 + 受保护路径 401 + 三条 \`deferred\` 如实登记；反例：身份姿态三条守卫必拒启动且从未监听）。"
+            echo ""
+            echo "库边界判据由 \`probes/portal-db-boundary-probe/\` 判定（库位置合规：独立卷 + 不在 \`/data\` 下；误放必拒启动：非零退出 + 日志点名 + 从未监听；AC9.2 第一半：备份遍历面 \`/data/users/*\` 不含门户库）。"
           } >> "$GITHUB_STEP_SUMMARY"
