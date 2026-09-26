@@ -98,6 +98,11 @@ COPY --from=ghcr.io/alphaonedev/ai-memory:<tag> \
 
 - `<tag>` **不得手写**：构建时注入，使门户与部署制品天然同版本（[`../adr/ADR-004`](../adr/ADR-004-version-contract-single-source-of-truth.md) 单一真相源）
 - 门户镜像**不继承**上游的 `ENTRYPOINT`/`CMD`/`ENV`（避免被上游默认值静默影响）—— 契约依据 [`../mcp/mcp-design.md`](../mcp/mcp-design.md) §5.6.3
+- **构建配方定档（2026-09-26 `#1` 开工准备实测；探针 [`../../probes/portal-image-verdict-probe/`](../../probes/portal-image-verdict-probe/README.md) 20 PASS / 0 FAIL / 1 未判）**：
+  - **必须钉 `linux/amd64` 且需要 BuildKit（`buildx`）**：arm64 宿主 + legacy builder 下 `COPY --from=<上游镜像>` 会**按宿主平台**解析并失败（`invalid from flag value … no match for platform`），退到 `docker cp` 等价路径后仍在**导出**阶段失败 ⇒ 构建放 **amd64 机器 / CI / 服务器侧**，或本机先装 `buildx`。
+  - **必须显式声明自己的 `ENTRYPOINT` / `CMD`**：上游实测 `Entrypoint=["ai-memory"]` / `Cmd=["serve","--host","0.0.0.0"]`，而 base 镜像 `node:22-bookworm-slim` 自带 `docker-entrypoint.sh` / `node` ⇒「不继承上游」**不等于**不用声明。
+  - **「零继承」的判据形式（已定形）**：门户镜像 `inspect` 的 `Env` **零 `AI_MEMORY_DB`** —— 上游实测 `Env` 含 `AI_MEMORY_DB=/data/ai-memory.db`，继承它等于让**每用户库静默指向共享主库**（RID `R1` 的形态）。
+  - **已实测可照写的值**：`aimem` 的 uid/gid = **`999:999`**（`docker run --rm --entrypoint id <img> aimem`）⇒ 上面 `--uid 999 --gid 999` 成立；`/usr/local/bin/ai-memory` 存在且 `--version` = `ai-memory 0.10.0`（末位 semver ⇄ 锁 tag）。
 
 ### 3.3 门户代码里的 ai-memory 知识 = 0
 

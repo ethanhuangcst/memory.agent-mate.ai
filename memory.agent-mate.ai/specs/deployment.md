@@ -56,7 +56,7 @@
 | 2 | 落地 `docker-compose.prod.yml` 到 `/opt/ai-memory/` | **必需** |
 | 3 | 重命名 `config.toml.tmpl` → `config.toml` 并改三处（见 §5.2） | **必需** |
 | 4 | 落地 `.env`（键只有 `IMAGE_TAG` + `DASHSCOPE_API_KEY`，**只设本轮用的**，见 §5.4） | **必需** |
-| 5 | `docker compose config`（语法自检） | **必需** |
+| 5 | `docker compose config`（语法自检） | **必需** —— **本机可判**（2026-09-26 `#1` 开工准备实测）：独立二进制 `docker-compose`（**不需要 docker 守护**、不需要 compose 插件）即可解析，前置 = `deploy/.env` 存在（缺则非 0）；上游 `docker-compose.prod.yml` 与门户 `portal.compose.yml` **两个 compose 均实测 rc=0** |
 | 6 | `docker compose up -d` | **必需** |
 | 7 | 从日志确认 embedder / LLM（**不 curl**：镜像无 curl，见 §7.1） | **必需** |
 | 8 | 端到端冒烟（写入 → 重新连接 → 语义召回） | **必需** |

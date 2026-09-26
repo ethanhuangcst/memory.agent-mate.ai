@@ -8,6 +8,29 @@
 
 ## 2026-09-26
 
+### Sprint 5 `#1`「门户镜像与编排制品」开工准备：判据可行性探针 + 判据定档 6 条
+
+**为什么**：按 [`ADR-017`](./adr/ADR-017-complexity-probe-before-real-build.md)（先探针后施工），`#1` 是本 Sprint 的**最关键缺口**（全仓无门户 `Dockerfile`），其验收条件里有两类「不实测就只能靠人工比对」的东西 —— 编排能否自检、镜像侧三项制品契约（二进制路径 / uid·gid 对齐 / 不继承 `ENTRYPOINT`·`CMD`·`ENV`）。
+
+**做了什么**：新增只读探针 [`../probes/portal-image-verdict-probe/`](../probes/portal-image-verdict-probe/README.md)（**两相**：相 1 离线编排判据 · 相 2 需 docker 守护的镜像实值），**20 PASS / 0 FAIL / 1 未判 · 退出码 30 · 两跑一致**。
+
+**判据定档 6 条**：
+
+1. **编排判据本机可判**（此前口径过宽）：独立 `docker-compose`（本机无插件）**不需要 docker 守护**即可解析；判据前置 = **5 个以 `${X:?}` 强制的变量** + **`portal.env` 必须存在**（三段对照：缺变量 rc=1 且点名 5 键；变量齐但无 `portal.env` rc=1；两者齐 ⇒ rc=0 + 规范化 YAML）。主 stack 的 `docker-compose.prod.yml` 亦实测 **rc=0** ⇒ 真源 [`deployment.md`](./deployment.md) §3 第 5 步已补「本机可判 + 前置」。
+2. **构建配方新增硬要求**：门户镜像**必须钉 `linux/amd64` 且需要 BuildKit（`buildx`）** —— arm64 宿主 + legacy builder 下 `COPY --from=<上游镜像>` **按宿主平台**解析并失败（`invalid from flag value … no match for platform`），退到 `docker cp` 等价路径后仍在**导出**阶段失败 ⇒ 构建放 amd64 机器 / CI / 服务器侧。真源 [`web-portal/web-design.md`](./web-portal/web-design.md) §3.2 新增「构建配方定档」。
+3. **「零继承」判据定形**：门户镜像 `inspect` 的 `Env` **零 `AI_MEMORY_DB`**，且 `Entrypoint`/`Cmd` **自带**。**依据实测**：上游镜像 `Entrypoint=["ai-memory"]` / `Cmd=["serve","--host","0.0.0.0"]` / `Env` 含 **`AI_MEMORY_DB=/data/ai-memory.db`** ⇒ 继承它等于**每用户库静默指向共享主库**，正是 RID [`R1`](./sprint-backlog.md#rid-registry) 的形态。
+4. **uid/gid 实测 = `999:999`**（`docker run --rm --entrypoint id <img> aimem`）：与 `web-design.md` §3.2 / §3.4 的声明**一致** ⇒ 无需改文档；同时确认 `mcp-design.md` §5.6.3 的契约形态是「**必须对齐**」而非常量。
+5. **二进制与版本实测**：`/usr/local/bin/ai-memory` 存在，`--version` = `ai-memory 0.10.0`（末位 semver ⇄ 锁的 `IMAGE_TAG`；`UPSTREAM_RELEASE_TAG=v0.10.0` 去 `v`）—— 与 `#17` 版本断言同一比对体。
+6. **指纹口径**：多架构拉取后 `RepoDigests` 记的是**索引摘要**（= 锁的 `IMAGE_DIGEST_MANIFEST`），**不是**平台专属摘要 ⇒ 平台维度归既有门禁 `make preflight ARGS=--with-image`，**不重复造判据**。
+
+**未判 1 项（如实登记，故退出码 30 而非 0）**：构建对照实验 `D6`（门户规范产物零继承）—— 本机缺 `buildx` 组件且宿主 `aarch64` ⇒ 无法在本机构建 linux/amd64 门户镜像；判据已定形，复跑条件 = amd64 机器 / CI / 装 `buildx` 的环境。
+
+**探针首版自身的 6 处判据缺陷（已修并如实登记）**：① 把 compose 注释里的示例写法当制品 ⇒ 2 条假红（加 `nocomment()` + `S1`/`S2` 判据自检）；② 把「待实测值」当文档事实（uid/gid `999`）⇒ 1 条假红；③ `check` 的极性写反（`0 = PASS`）⇒ 3 条同红（抽成合成判据 + `S3` 自检）；④ 指纹取错字段（索引摘要 vs 平台摘要）⇒ 恒假红；⑤ 外部依赖（ghcr 匿名 token）偶发失败 ⇒ 一次假红（加**有界重试**）；⑥ 判据文案写死被断言的数字（敏感性证明时文案与断言不一致）⇒ 期望值改走变量。
+
+**验证**：探针 **20/0/1 · rc=30 · 两跑一致** · 敏感性证明（`D3` 期望值临时改 `888:888`、`D5` 键名临时改错 ⇒ **转红**；两次还原后**文件哈希与基准一致**、复跑转绿）· `make doc-links` 零悬空 · `make attestation-paths` ✓ · `make preflight-test` 5/0 · `make deploy-doc-audit` 9/0 退 0 · `make secret-check` ✓ · `git diff --check` 干净。
+
+**边界**：产品代码与 `scripts/` **一行未动** · 探针组合 compose 解析在**临时目录副本**里做（零污染仓库，`portal.env` 不落仓库）· `#1` 的产物（`Dockerfile` / 构建脚本）不在本批 · 未改任何 Sprint 的行数与编号（`ADR-021` D2）。
+
 ### Sprint 5 开工：RID 落点收口 · SSOT 悬空引用订正 · 三项拍板落盘（**产品代码与 `scripts/` 一行未动**）
 
 **为什么**：Sprint 5 开工前的 review 发现四类**可机械判定**的问题 —— RID 的执行行与 RID 表**单边指向** · `upstream.lock`（SSOT）里三处引用**指向已不存在的文档**且护栏扫不到 · `#1` 的说明与实际制品状态**过时一半** · `#15` 的入口**先红**；同时把上一轮遗留的三项拍板（自检维度断言通路 / OSS region / 复现矩阵归属）落进真源。
