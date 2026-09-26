@@ -1,0 +1,19 @@
+# 构建上下文排除清单（Sprint 5 #1）
+#
+# 为什么必须有：宿主是 macOS/arm64，`node_modules` 里的 better-sqlite3 是**darwin-arm64** 原生模块，
+# 一旦进上下文就会被塞进 linux/amd64 镜像（运行期 `invalid ELF header` 一类失败）；镜像内的依赖
+# 一律由 `npm ci --omit=dev` 在容器里重新装。
+node_modules
+coverage
+.portal-data
+tests
+*.log
+
+# 本地环境文件（含密，永不入镜像；生产值由 compose env_file 注入）
+.env
+.env.*
+
+# 版本控制与编辑器
+.git
+.gitignore
+.DS_Store

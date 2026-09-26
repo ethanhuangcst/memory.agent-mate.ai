@@ -1,0 +1,126 @@
+# =============================================================================
+# portal-image.yml — 门户镜像：构建 · 推 GHCR · 契约自检（Sprint 5 `#1`）
+#
+# 职责边界（重要）：
+#   ✅ 构建 linux/amd64 门户镜像 → 推 GHCR → 跑**仓库里那一个探针**做契约自检
+#   ❌ 不部署、不碰服务器、不改 upstream.lock（部署决策与执行**始终人工**）
+#
+# 为什么放在 CI（实测依据，不是偏好）：
+#   本机是 Apple Silicon，构建 linux/amd64 要走 **Rosetta 模拟** —— 实测 `apt-get install ca-certificates`
+#   一层 **1085 s**、原生模块（better-sqlite3）回落到源码编译后 **15 分钟仍未完**；
+#   runner 是原生 amd64：`npm ci` 约半分钟。
+#
+# 两个「只有一个真相源」：
+#   · 构建配方 → 一律调 memory.agent-mate.ai/scripts/build-portal-image.sh（本文件**不复制** build-args / 平台）
+#   · 契约判据 → 一律跑 memory.agent-mate.ai/probes/portal-image-verdict-probe/（本机与 CI 同一脚本；
+#     CI 里 buildx 可用 ⇒ 探针的 D6「构建对照实验」也会被真正判掉，不再停留在「未判」）
+#
+# 退出码契约：构建 10 前置缺失 / 20 用法错 / 30 构建失败；探针 0 全判且无失败 / 10 有失败 / 30 有「未判」项
+#   —— 任一步非 0，本工作流即红（不把「未判」当通过）。
+#
+# 备注：`.github/workflows/` 必须位于仓库根（GitHub 平台强制），是资产隔离判据中继 `.gitignore` /
+#       `Makefile` 之后的第三个根目录例外，已在 memory.agent-mate.ai/specs/architecture.md §5 记录。
+# =============================================================================
+name: portal-image
+
+on:
+  workflow_dispatch:
+    inputs:
+      extra_tag:
+        description: '额外 tag（可选；默认只推 IMAGE_TAG 与 IMAGE_TAG-sha-<7位sha>）'
+        required: false
+        default: ''
+  push:
+    branches: [main]
+    paths:
+      - 'admin_portal/**'
+      - 'memory.agent-mate.ai/upstream.lock'
+      - 'memory.agent-mate.ai/scripts/build-portal-image.sh'
+      - 'memory.agent-mate.ai/probes/portal-image-verdict-probe/**'
+      - '.github/workflows/portal-image.yml'
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: portal-image
+  cancel-in-progress: false
+
+env:
+  IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/memory-agent-mate-portal
+
+jobs:
+  build-and-verify:
+    name: 构建 · 推 GHCR · 契约自检
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出仓库
+        uses: actions/checkout@v4
+
+      - name: 读 upstream.lock 的坐标（含一致性断言）
+        id: lock
+        run: |
+          set -euo pipefail
+          LOCK=memory.agent-mate.ai/upstream.lock
+          IMAGE_TAG="$(sed -n 's/^IMAGE_TAG="\(.*\)"$/\1/p' "$LOCK" | head -1)"
+          RELEASE_TAG="$(sed -n 's/^UPSTREAM_RELEASE_TAG="\(.*\)"$/\1/p' "$LOCK" | head -1)"
+          if [ -z "$IMAGE_TAG" ]; then echo "::error::upstream.lock 缺 IMAGE_TAG"; exit 10; fi
+          if [ "${RELEASE_TAG#v}" != "$IMAGE_TAG" ]; then
+            echo "::error::锁自相矛盾：UPSTREAM_RELEASE_TAG=${RELEASE_TAG} 去 v 后 != IMAGE_TAG=${IMAGE_TAG}"; exit 10
+          fi
+          SHA7="$(git rev-parse --short=7 HEAD)"
+          echo "tag=$IMAGE_TAG" >> "$GITHUB_OUTPUT"
+          echo "sha7=$SHA7" >> "$GITHUB_OUTPUT"
+          echo "坐标：IMAGE_TAG=${IMAGE_TAG} · release=${RELEASE_TAG} · sha7=${SHA7}"
+
+      - name: 准备 buildx（runner 本身是 amd64，无需 qemu）
+        uses: docker/setup-buildx-action@v3
+
+      - name: 登录 GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 构建（调用仓内唯一构建入口）
+        env:
+          PORTAL_BUILD_TAG: ${{ env.IMAGE_NAME }}:${{ steps.lock.outputs.tag }}-sha-${{ steps.lock.outputs.sha7 }}
+          PORTAL_BUILD_CACHE_FROM: type=gha
+          PORTAL_BUILD_CACHE_TO: type=gha,mode=max
+        run: bash memory.agent-mate.ai/scripts/build-portal-image.sh
+
+      - name: 打稳定 tag 并推送 GHCR
+        run: |
+          set -euo pipefail
+          SHA_TAG="${IMAGE_NAME}:${{ steps.lock.outputs.tag }}-sha-${{ steps.lock.outputs.sha7 }}"
+          STABLE_TAG="${IMAGE_NAME}:${{ steps.lock.outputs.tag }}"
+          docker tag "$SHA_TAG" "$STABLE_TAG"
+          docker push "$SHA_TAG"
+          docker push "$STABLE_TAG"
+          if [ -n "${{ github.event.inputs.extra_tag }}" ]; then
+            docker tag "$SHA_TAG" "${IMAGE_NAME}:${{ github.event.inputs.extra_tag }}"
+            docker push "${IMAGE_NAME}:${{ github.event.inputs.extra_tag }}"
+          fi
+          echo "已推送：${STABLE_TAG} · ${SHA_TAG}"
+
+      - name: 契约自检（仓库里那一个探针，本机同款）
+        env:
+          PORTAL_BUILD_TAG: ${{ env.IMAGE_NAME }}:${{ steps.lock.outputs.tag }}-sha-${{ steps.lock.outputs.sha7 }}
+        run: bash memory.agent-mate.ai/probes/portal-image-verdict-probe/probe.sh
+
+      - name: 写入运行摘要
+        if: always()
+        run: |
+          {
+            echo "## portal-image 运行结果"
+            echo ""
+            echo "| 项 | 值 |"
+            echo "| --- | --- |"
+            echo "| 上游 tag（锁） | \`${{ steps.lock.outputs.tag }}\` |"
+            echo "| 镜像 | \`${IMAGE_NAME}:${{ steps.lock.outputs.tag }}\` |"
+            echo "| 源码 sha7 | \`${{ steps.lock.outputs.sha7 }}\` |"
+            echo ""
+            echo "契约判据由 \`probes/portal-image-verdict-probe/\` 判定（含相 3 门户镜像契约）；退出码 30 = 有「未判」项。"
+          } >> "$GITHUB_STEP_SUMMARY"

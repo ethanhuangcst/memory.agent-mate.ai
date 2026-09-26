@@ -1,7 +1,7 @@
 # memory.agent-mate.ai — 部署资产仓（公开）
 # 上游 ai-memory clone 位于 ./ai-memory-mcp/（gitignored，只读约定）
 # 版本契约（上游 tag / 镜像指纹）的单一真相源：memory.agent-mate.ai/upstream.lock
-# 详见 memory.agent-mate.ai/specs/asset_isolation_plan.md 与 memory.agent-mate.ai/specs/dev-plan.md
+# 详见 memory.agent-mate.ai/specs/architecture.md（§5 资产边界）与 memory.agent-mate.ai/specs/deployment.md（§3 部署 / §9 升级）
 
 UPSTREAM_URL := https://github.com/alphaonedev/ai-memory-mcp.git
 LOCK := memory.agent-mate.ai/upstream.lock
@@ -19,11 +19,12 @@ PORTAL_COVERAGE := memory.agent-mate.ai/scripts/portal-coverage.sh
 PORTAL_MCP_PROBE := memory.agent-mate.ai/scripts/probes/portal-mcp-probe.sh
 PORTAL_MCP_SESSION_PROBE := memory.agent-mate.ai/scripts/probes/portal-mcp-session-probe.sh
 PORTAL_ACCEPTANCE := memory.agent-mate.ai/scripts/portal-acceptance.sh
+PORTAL_IMAGE_BUILD := memory.agent-mate.ai/scripts/build-portal-image.sh
 DEPLOY_GUIDE_AUDIT := memory.agent-mate.ai/probes/deploy-guide-audit/probe.mjs
 # 本机快速路径的环境文件（回环 Host + PORTAL_TEST_JWT_EMAIL），已 gitignore。
 PORTAL_LOCAL_ENV := memory.agent-mate.ai/admin_portal/.env.local
 
-.PHONY: help upstream pin pin-update preflight preflight-test backup restore-drill secret-check doc-links attestation-paths maintain-user-dbs hooks-install up down portal-up portal-down portal-dev portal-test portal-e2e portal-tunnel portal-coverage portal-mcp-probe portal-mcp-session-probe portal-acceptance
+.PHONY: help upstream pin pin-update preflight preflight-test backup restore-drill secret-check doc-links attestation-paths maintain-user-dbs hooks-install up down portal-up portal-down portal-dev portal-test portal-e2e portal-tunnel portal-coverage portal-image portal-mcp-probe portal-mcp-session-probe portal-acceptance
 
 help:
 	@grep -E '^[a-zA-Z0-9_-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*## "} {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
@@ -119,6 +120,9 @@ portal-mcp-session-probe: ## 接入面会话隔离真上游端到端（Sprint 4 
 
 portal-acceptance: ## 本地完整集成验收收口入口（Sprint 4 `#8`：离线全绿 + L2 + L3 隔离 + 四条真上游判据 + 逐条结论表）
 	bash $(PORTAL_ACCEPTANCE)
+
+portal-image: ## 构建门户镜像（Sprint 5 `#1`：buildx + linux/amd64，tag 由 upstream.lock 注入；ARGS=--print-only 只打印命令）
+	bash $(PORTAL_IMAGE_BUILD) $(ARGS)
 
 deploy-doc-audit: ## 上线配置指南与真源的一致性审计（Sprint 4 `4.4`/`3.16`；零依赖、纯静态）
 	node $(DEPLOY_GUIDE_AUDIT)

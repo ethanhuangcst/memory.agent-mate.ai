@@ -338,10 +338,13 @@ if [ "${FAIL}" -eq 0 ]; then
     printf 'FROM --platform=linux/amd64 %s\n' "${UPSTREAM_REF}" >"${TMP}/d6/Dockerfile.inherit"
     printf 'FROM --platform=linux/amd64 %s\nCOPY --from=%s /usr/local/bin/ai-memory /usr/local/bin/ai-memory\n' \
       "${NODE_REF}" "${UPSTREAM_REF}" >"${TMP}/d6/Dockerfile.portal"
-    docker build -q -t probe-d6-inherit -f "${TMP}/d6/Dockerfile.inherit" "${TMP}/d6" >"${TMP}/d6/b1.log" 2>&1
+    docker buildx build --platform linux/amd64 --load -q -t probe-d6-inherit -f "${TMP}/d6/Dockerfile.inherit" "${TMP}/d6" >"${TMP}/d6/b1.log" 2>&1
     RC_A=$?
-    docker build -q -t probe-d6-portal -f "${TMP}/d6/Dockerfile.portal" "${TMP}/d6" >"${TMP}/d6/b2.log" 2>&1
+    docker buildx build --platform linux/amd64 --load -q -t probe-d6-portal -f "${TMP}/d6/Dockerfile.portal" "${TMP}/d6" >"${TMP}/d6/b2.log" 2>&1
     RC_B=$?
+    # 实测对照（2026-09-26）：**`docker build` 即便装了 buildx 也仍然失败**
+    #   （`failed to resolve source metadata … no match for platform in manifest`）
+    #   ⇒ 判据的调用路径本身也是判据：这里必须与构建脚本同款（buildx + --platform + --load）。
     if [ "${RC_A}" -eq 0 ] && [ "${RC_B}" -eq 0 ]; then
       B_ENTRY="$(docker image inspect --format '{{json .Config.Entrypoint}}' probe-d6-portal)"
       B_ENV="$(docker image inspect --format '{{json .Config.Env}}' probe-d6-portal)"
@@ -361,6 +364,95 @@ if [ "${FAIL}" -eq 0 ]; then
   else
     unjudged D6 "构建对照实验：门户规范产物零继承上游（Config 三项与上游不同）" \
       "本机缺 buildx 组件、宿主 ${SYS_ARCH} ⇒ 不能在本机构建 linux/amd64 门户镜像（COPY --from 平台解析 + 导出两步都会失败）；判据已定形，须在 amd64 机器 / CI / 装 buildx 的环境复跑"
+  fi
+fi
+
+# ─────────────── 相 3：门户镜像契约（镜像由 make portal-image / CI 产出）───────────────
+echo
+echo "--- 相 3：门户镜像契约（PORTAL_BUILD_TAG 指定；缺则记未判）---"
+
+PORTAL_TAG="${PORTAL_BUILD_TAG:-memory-agent-mate-portal:${LOCK_TAG}}"
+if ! docker image inspect "${PORTAL_TAG}" >/dev/null 2>&1; then
+  unjudged E1-E8 "门户镜像契约（Entrypoint/Cmd 自声明 · Env 零 AI_MEMORY_DB · 非 root 999:999 · 二进制版本 · tsx 可解析 · 静态资源在位）" \
+    "镜像不在本机：${PORTAL_TAG}（构建入口：make portal-image，或 CI 的 .github/workflows/portal-image.yml）"
+else
+  info "被测镜像：${PORTAL_TAG}"
+  # 上游 Config（相 2 未跑时在这里补算一次；供「不自声明成上游那样」的对照）
+  U_ENTRY="${U_ENTRY:-$(docker image inspect --format '{{json .Config.Entrypoint}}' "${UPSTREAM_REF}" 2>/dev/null)}"
+  U_CMD="${U_CMD:-$(docker image inspect --format '{{json .Config.Cmd}}' "${UPSTREAM_REF}" 2>/dev/null)}"
+
+  # E1 平台
+  P_ARCH="$(docker image inspect --format '{{.Architecture}}' "${PORTAL_TAG}" 2>/dev/null)"
+  if [ "${P_ARCH}" = "amd64" ]; then
+    check E1 "门户镜像是 linux/amd64（与上游二进制单平台一致）" 0 "Architecture=${P_ARCH}"
+  else
+    check E1 "门户镜像是 linux/amd64（与上游二进制单平台一致）" 1 "实测 Architecture=${P_ARCH}"
+  fi
+
+  # E2 入口是**门户自声明**的（既不是上游的，也不是 base 镜像 node 的）
+  P_ENTRY="$(docker image inspect --format '{{json .Config.Entrypoint}}' "${PORTAL_TAG}" 2>/dev/null)"
+  P_CMD="$(docker image inspect --format '{{json .Config.Cmd}}' "${PORTAL_TAG}" 2>/dev/null)"
+  if [ "${P_ENTRY}" != "null" ] && [ "${P_ENTRY}" != "${U_ENTRY}" ] && [ "${P_CMD}" != "${U_CMD}" ] \
+    && ! echo "${P_ENTRY}" | grep -q "docker-entrypoint.sh"; then
+    check E2 "Entrypoint/Cmd 是门户自声明（≠ 上游 ${U_ENTRY} / ≠ base 镜像 docker-entrypoint.sh）" 0 \
+      "Entrypoint=${P_ENTRY} · Cmd=${P_CMD}"
+  else
+    check E2 "Entrypoint/Cmd 是门户自声明（≠ 上游 ${U_ENTRY} / ≠ base 镜像 docker-entrypoint.sh）" 1 \
+      "Entrypoint=${P_ENTRY} · Cmd=${P_CMD}"
+  fi
+
+  # E3 Env 零 AI_MEMORY_DB（继承它 = 每用户库静默指向共享主库 = RID R1 的形态）
+  P_ENV="$(docker image inspect --format '{{json .Config.Env}}' "${PORTAL_TAG}" 2>/dev/null)"
+  if echo "${P_ENV}" | grep -q "AI_MEMORY_DB"; then
+    check E3 "门户镜像 Env 里零 AI_MEMORY_DB（继承上游该键 ⇒ 每用户库静默指向共享主库）" 1 "Env=${P_ENV}"
+  else
+    check E3 "门户镜像 Env 里零 AI_MEMORY_DB（继承上游该键 ⇒ 每用户库静默指向共享主库）" 0 "Env=${P_ENV}"
+  fi
+
+  # E4/E5 运行用户 = 999:999，且与上游镜像的 aimem 对齐
+  P_ID="$(docker run --rm --entrypoint id "${PORTAL_TAG}" 2>&1 | head -1)"
+  P_UIDGID="$(echo "${P_ID}" | sed -n 's/.*uid=\([0-9]*\).*gid=\([0-9]*\).*/\1:\2/p')"
+  if [ "${P_UIDGID}" = "${EXPECT_UIDGID}" ]; then
+    check E4 "门户容器默认以 999:999 运行（非 root）" 0 "${P_ID}"
+  else
+    check E4 "门户容器默认以 999:999 运行（非 root）" 1 "实测 ${P_UIDGID:-无法解析}（${P_ID}）"
+  fi
+  U_ID="$(docker run --rm --entrypoint id "${UPSTREAM_REF}" aimem 2>&1 | head -1)"
+  U_UIDGID="$(echo "${U_ID}" | sed -n 's/.*uid=\([0-9]*\).*gid=\([0-9]*\).*/\1:\2/p')"
+  if [ "${P_UIDGID}" = "${U_UIDGID}" ] && [ -n "${P_UIDGID}" ]; then
+    check E5 "门户与上游镜像的用户标识**对齐**（否则 SSH 路径写不进门户建的目录）" 0 \
+      "门户 ${P_UIDGID} == 上游 aimem ${U_UIDGID}"
+  else
+    check E5 "门户与上游镜像的用户标识**对齐**（否则 SSH 路径写不进门户建的目录）" 1 \
+      "门户 ${P_UIDGID:-?} vs 上游 ${U_UIDGID:-?}"
+  fi
+
+  # E6 上游二进制真的进了镜像，且版本 == 锁 tag
+  P_VER="$(docker run --rm --entrypoint /usr/local/bin/ai-memory "${PORTAL_TAG}" --version 2>&1 | head -1)"
+  P_SEMVER="$(echo "${P_VER}" | grep -o '[0-9][0-9.]*$' | head -1)"
+  if [ "${P_SEMVER}" = "${LOCK_TAG}" ]; then
+    check E6 "镜像内 /usr/local/bin/ai-memory 可执行且版本 == 锁 tag" 0 "${P_VER}"
+  else
+    check E6 "镜像内 /usr/local/bin/ai-memory 可执行且版本 == 锁 tag" 1 "实测 ${P_VER} · 锁 ${LOCK_TAG}"
+  fi
+
+  # E7 运行期入口与依赖在位（tsx 由 dependencies 提供 —— 口径 A′）
+  P_TSX="$(docker run --rm --entrypoint node "${PORTAL_TAG}" --import tsx -e "console.log('tsx-ok')" 2>&1 | tail -1)"
+  P_SERVER="$(docker run --rm --entrypoint /bin/ls "${PORTAL_TAG}" -l /app/src/server.ts 2>&1 | head -1)"
+  if echo "${P_TSX}" | grep -q "tsx-ok" && echo "${P_SERVER}" | grep -q "server.ts"; then
+    check E7 "镜像内可跑 node --import tsx，且 /app/src/server.ts 在位（依赖装对、入口在位）" 0 \
+      "tsx 输出=${P_TSX}"
+  else
+    check E7 "镜像内可跑 node --import tsx，且 /app/src/server.ts 在位（依赖装对、入口在位）" 1 \
+      "tsx 输出=${P_TSX} · server.ts=${P_SERVER}"
+  fi
+
+  # E8 静态资源在位（门户页面依赖 /app/assets）
+  P_CSS="$(docker run --rm --entrypoint /bin/ls "${PORTAL_TAG}" -l /app/assets/portal.css 2>&1 | head -1)"
+  if echo "${P_CSS}" | grep -q "portal.css"; then
+    check E8 "静态资源在位（/app/assets/portal.css —— compose 的 PORTAL_STATIC_ROOT 指向它）" 0 "${P_CSS}"
+  else
+    check E8 "静态资源在位（/app/assets/portal.css —— compose 的 PORTAL_STATIC_ROOT 指向它）" 1 "${P_CSS}"
   fi
 fi
 
