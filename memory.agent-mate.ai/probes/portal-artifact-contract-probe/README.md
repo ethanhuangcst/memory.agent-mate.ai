@@ -20,7 +20,7 @@ PORTAL_BUILD_TAG=<name:tag> bash memory.agent-mate.ai/probes/portal-artifact-con
 ## 实测结论（2026-09-26）
 
 **本机**（无 linux/amd64 门户镜像）：**11 PASS / 0 FAIL / 1 未判 · `rc=30` · 两跑一致**（未判 1 项 = 相 3 的前置）。
-**CI**：本脚本已接进 [`portal-image.yml`](../../../.github/workflows/portal-image.yml) 的「制品契约判据」步 ⇒ **相 3 在 CI 里真跑**（镜像刚构建完就在本地守护里）；**首次绿 = run `36235735927`**（本脚本由其持续裁决）。
+**CI**：本脚本已接进 [`portal-image.yml`](../../../.github/workflows/portal-image.yml) 的「制品契约判据」步 ⇒ **相 3 在 CI 里真跑**（镜像刚构建完就在本地守护里）；**首次绿 = run `36235735927`**（接入时版本 14 项）；**本版（+`Q1`/`Q2`）复跑 = run `36240706277` ⇒ 16 PASS / 0 FAIL / 0 未判**。本脚本由其持续裁决。
 
 ### 硬数据（可直接用于施工）
 
