@@ -31,7 +31,7 @@
 | **Access Service Token** | 供在线链路探针判定「策略已生效」 | Sprint 5 `#6` |
 | **门户专用 MaaS key** | 与主 key 分离，只放 `portal.env` | [`../deploy/portal.env.example`](../deploy/portal.env.example) |
 | **DNS（两个域名）** | `<MCP_HOST>` 与 `<ADMIN_HOST>` 分别解析到本机 | Sprint 5 `#9`（上线准备包；Sprint 4 `#7` 核对时定归属） |
-| **容器镜像仓库（GHCR）拉取凭据** | 门户镜像推在 `ghcr.io/<owner>/memory-agent-mate-portal:<IMAGE_TAG>`；**包默认私有** ⇒ 服务器侧需 `docker login ghcr.io`（只读 PAT），或把该包设为 public | Sprint 5 `#10`（部署执行；镜像构建见 `#1` 的 CI） |
+| **容器镜像仓库（GHCR）拉取凭据** | 门户镜像推在 `ghcr.io/<owner>/memory-agent-mate-portal:<IMAGE_TAG>`；**包默认私有** ⇒ 服务器侧需 `docker login ghcr.io`（只读 PAT），或把该包设为 public。**拉到之后先验「可用」再部署**：`make portal-image-smoke ARGS="--tag <该镜像>"` —— 真起容器判「起得来 · 答得应 · 坏姿态必拒」（退出码 **0** 全判 · **10** 有失败 · **30** 未判（守护不可用或镜像不在本地 —— **不伪装通过**）· **20** 用法错）；判据真源见 [`web-portal/web-design.md`](./web-portal/web-design.md) §3.4 ⑤ | Sprint 5 `#10`（部署执行；镜像构建见 `#1` 的 CI，运行时判据见 `#1` 的冒烟） |
 
 **OSS region 已回填（2026-09-26）**：用户确认**按现登记值（香港）**回填四处 —— 本表 §1.1 · §8 · [`product-backlog.md`](./product-backlog.md) #9 · Sprint 5 `#8`。**`ossutil` 机器核查未执行**（如实登记）⇒ 上线前用 `ossutil ls` · `ossutil stat oss://<OSS_BUCKET>` · `ossutil config`（endpoint 形如 `oss-<region>.aliyuncs.com`），或控制台 → OSS → 该桶 → 概览 → 「地域」**一次性复核**即可。`ADR-021` D3 点名的 [`adr/ADR-005`](./adr/ADR-005-upgrade-admission-gate-layering.md) **实测无 region 表述**（仅含「阿里云 OSS」与 `ossutil ls`）⇒ 无回填项。
 

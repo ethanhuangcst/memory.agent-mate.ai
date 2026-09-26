@@ -8,6 +8,26 @@
 
 ## 2026-09-26
 
+### Sprint 5 `#1` 置 `Done`：运行时冒烟落地（真起容器）· 首跑两红留档
+
+**为什么**：`#1` 的判据此前只到**静态契约**（探针相 3 从 `docker inspect` 读平台 / 入口 / `Env` 零 `AI_MEMORY_DB` / 非 root / 与上游对齐 / 二进制版本）—— **不证明镜像起得来、答得应**。DoD 问「这个功能可用吗」时，回答只能靠推理。本轮把「可用」变成可复跑的判据。
+
+**改了什么**：
+
+- 新增 [`../scripts/portal-image-smoke.sh`](../scripts/portal-image-smoke.sh)（入口 `make portal-image-smoke`）：**正例**（dev 姿态 + **两个不同的**回环 Host）断言「起来 · 自检零 fail · `portal_listening` · `/healthz` 200 且回体含 `ok:true` + `schemaVersion` · 管理面受保护路径 **401** · 面隔离 **403** · `/healthz` 任一面 **200** · 三条 `deferred` 如实登记」；**反例**（三条身份姿态守卫必拒启动，各断「非零退出 · 日志点名原因 · **从未监听**」）。路径类键全部留默认 ⇒ 通过同时证明镜像内建布局成立（`views=/app/src/web/views` · `static=/app/assets` · `users=/data/users`）。
+- 断言走 `docker exec` + 容器内 `node -e fetch`：门户**非生产姿态绑 `127.0.0.1`**（`resolveBindHost`）⇒ 发布端口不可达 —— 与 `#2` 的 `healthcheck` 必须容器内发起**同源**。自签 JWKS **用镜像自己生成**（镜像内自带 `jose`）⇒ 零宿主依赖、CI 无需 `npm ci`。
+- 接线：[`../../Makefile`](../../Makefile) 新增 `portal-image-smoke` 目标 · [`../../.github/workflows/portal-image.yml`](../../.github/workflows/portal-image.yml) 在「契约自检」后新增冒烟步 + `paths` 触发面 · 分层按 [`ADR-021`](./adr/ADR-021-scripts-layering-and-minimal-launch-scope.md) D1「拿不准的一律先留根目录」留 `scripts/`。
+- specs 同步：`#1` 行登记交付与证据并置 **`Done`** · `#2` 行登记「本冒烟即 `healthcheck` 原型」的接口 · [`web-portal/web-design.md`](./web-portal/web-design.md) §3.4 ⑤ 把「自检不过就不 listen」从**文档断言**改述为**已可机械判定**。
+
+**首跑两红（都留档，都已解决）**：
+
+1. **run `36227681629`：冒烟正例红 —— 产品守卫正确拦下我的错误姿态。** 现象：容器 `exit=1` 且日志里**连自检行都没有** ⇒ 失败发生在 `loadConfig`（自检行只在配置合法后打印）。**根因**（本机同代码路径秒级复现，无需构建镜像）：`管理面与 MCP 面的 Host 不得相同（面隔离判据失效）：127.0.0.1` —— 首版把两面都设成 `127.0.0.1`。**修法**：管理面 `localhost` / MCP 面 `127.0.0.1`（**不同名**回环）。**顺带按实测订正三处**（不凭文档猜）：① 探针改为**按面寻址**（`http_status <URL 主机> <路径>`）—— 实测 undici **忽略**手工 `Host` 头（`127.0.0.1` 配 `Host: localhost` 仍回 403）⇒ 按面寻址只此一途；② 新增 `P9`（面隔离 403）/`P10`（`/healthz` 任一面放行）；③ FAIL 明细**带上进程自述**（`config_invalid` / `selfcheck_failed` / `startup_failed` 那行）—— 首版只报 `exit=1`，根因得本机复现才拿到，该诊断缺口必须补。
+2. **run `36229371743` attempt 1：GHCR 推送红（`unknown blob`）。** 红在冒烟**之前**（第 7 步「打稳定 tag 并推送 GHCR」），与本次改动无关（该提交只改冒烟脚本，**不进镜像**）⇒ 属**注册表瞬时故障**；**重跑（attempt 2）即 success**。**登记为已知故障模式**：读日志时把「推送失败」与「判据失败」分开看，**重跑是首选处置**；若复现频繁再给推送步加**有界重试**（本轮**未**加：不在复现前加固）。
+
+**验证**：CI run **`36229371743`（attempt 2）success** ⇒ 探针 **31 / 0 / 0** · 冒烟 **18 PASS / 0 FAIL / 0 未判**（`P2`–`P10` 九条 + 三条反例各三条；`P1` 只在 `docker run` 失败时才出断言行） · 本机自测：语法 ✓ · 用法错 ⇒ **20** · 镜像不在本地 ⇒ **30**（不伪装通过） · `make doc-links` 零悬空 · `make deploy-doc-audit` 9/0 退 0 · `make secret-check` ✓ · `git diff --check` 干净。
+
+**边界**：**不改任何产品代码**（`admin_portal/**` 一行未动）· **不改 `upstream.lock`** · `#2` 的 compose `healthcheck` 与版本号注入**未做**（本轮只交付其原型）· 三条 `deferred` 自检项仍归 `#17` · `.lock` / `.yml` 的引用治理扩面本轮未动。
+
 ### Sprint 5 `#1`「门户镜像与编排制品」交付：构建链路 + CI + 镜像契约判定
 
 **为什么**：`#1` 是本 Sprint 最关键缺口（全仓无门户 `Dockerfile`）。开工准备的探针把判据定档后，本轮落**产物**：Dockerfile / 构建脚本 / CI / `.dockerignore`，并把「镜像契约」由人工比对升级为**机械断言**。
