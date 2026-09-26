@@ -23,7 +23,30 @@ services:
   portal:
     image: ${PORTAL_IMAGE:?set PORTAL_IMAGE in portal.env（按 web-design.md §3.2 构建的镜像坐标）}
     container_name: memory-agent-mate-portal
-    restart: unless-stopped
+
+    # ── 重启策略 = **有界早停**（2026-09-26 拍板；不是 `unless-stopped`）────────────────────────
+    # 依据（实测，不是偏好）：`probes/portal-artifact-contract-probe/` 相 3 的 `T3` —— 坏配置
+    # （production 缺 Access）+ `unless-stopped` 在 **12 s 内 `RestartCount=7`** 且**从未监听**
+    # ⇒ 无限重启循环**快速且无界**，只会淹没日志、拖长发现时间。`on-failure:3` ⇒ 坏配置最多重启
+    # 3 次即停，`docker compose ps` 能看到退出态。
+    # **语义分离（重要）**：「自检是否通过」由**进程退出**兑现（fail-closed），下面的 `healthcheck`
+    # 只表达**运行期**健康 —— 两者不重叠、也不互相替代。
+    restart: on-failure:3
+
+    # ── 探活（运行期健康；Sprint 5 `#2` 契约项）──────────────────────────────────────────────
+    # **形态依据**：底座 `node:22-bookworm-slim` **无 `curl`、无 `wget`**（只有 `node`）⇒ 只能用
+    #   容器内 `node -e fetch`（探针相 2 的底座代理 + 相 3 `T1` 的权威取值：命中 `/usr/local/bin/node`）。
+    # **取值依据**：相 3 `T2` 实测 boot → `/healthz` 200 耗时 = **1 s / 1 s / 2 s** ⇒
+    #   `start_period=20s`（≥10× 余量，期间不计失败）· `interval=30s`（可见性用途，不承担自检语义）
+    #   · `timeout=5s`（回环 fetch 实测瞬时返回）· `retries=3`（最坏 ~90 s 转 unhealthy）。
+    # 端口取 `${PORTAL_PORT:-8080}` **而不是写死**：改端口时探活要跟着走。
+    # `/healthz` 不承载机密、**任何面放行**（web-design §3.4 ⑤；冒烟 `P10` 已实证任一面都回 200）。
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://localhost:${PORTAL_PORT:-8080}/healthz').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))\""]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
 
     # 密钥**只**走 portal.env（`chmod 600`）：当前只有门户专用 `DASHSCOPE_API_KEY`。
     # 与主 stack 的 `.env` 分开 ⇒ 门户那把 key 可单独吊销/归因（§12.2）。
@@ -42,7 +65,11 @@ services:
       # ── 存储：门户库**必须不在 `/data` 下**（`/data` 是上游的，且被共享卷承载）──────
       PORTAL_DB_PATH: /srv/portal/portal.db
       PORTAL_USERS_ROOT: /data/users
-      PORTAL_ROOT: /app
+      # 注：原先此处有 `PORTAL_ROOT: /app` —— 2026-09-26 **删除**。理由：产品代码
+      #   （`admin_portal/src/**`）的三种真读取形态（zod schema 键 / `raw.X` / `process.env.X`）
+      #   **皆不命中**它（源码里唯一含该子串的是常量 `ADMIN_PORTAL_ROOT`，由 `import.meta.url`
+      #   推导、与 env 无关）⇒ 属「**看起来能配、其实无作用**」的键。判据与「判据方向缺口」
+      #   见 `probes/portal-artifact-contract-probe/`（`B1`：`A2` 只判单向、无法覆盖这一类）。
       PORTAL_VIEWS_ROOT: /app/src/web/views
       PORTAL_STATIC_ROOT: /app/assets
 
@@ -87,6 +114,11 @@ services:
       - portal_data:/srv/portal
       # 上游配置（只读挂载，路径必须与 `$HOME` 推导一致，否则配置**静默落空** —— 见 §7.2 S3）
       - ./config.toml:/data/.config/ai-memory/config.toml:ro
+      # 版本断言的**期望值**输入面（Sprint 5 `#2` 拍板：版本断言整体归 `#2`；读取位在**下一批**落地
+      # —— web-design §3.4 ②/③）。前置：`upstream.lock` **必须与 compose 同目录**落到
+      # `/opt/ai-memory/`（见 deployment.md §12.5）—— 源文件缺失时 Docker 会创建**目录** ⇒ 读取
+      # 失败 ⇒ 自检**拒绝启动**（fail-closed，不是静默）。
+      - ./upstream.lock:/app/upstream.lock:ro
 
     networks:
       - default

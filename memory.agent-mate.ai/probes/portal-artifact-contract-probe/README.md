@@ -17,16 +17,22 @@ PORTAL_BUILD_TAG=<name:tag> bash memory.agent-mate.ai/probes/portal-artifact-con
 **退出码**：`0` 全判且无 FAIL · `10` 有 FAIL · `30` **有未判项**（前置缺失 —— 不伪装通过）· `20` 运行错误。
 **三相**：相 1 离线零依赖（判据可行性）· 相 2 底座镜像代理（需 docker + 能取 `node:22-bookworm-slim`）· 相 3 门户镜像实测（需 `PORTAL_BUILD_TAG`）。
 
-## 本机实测结论（2026-09-26）
+## 实测结论（2026-09-26）
 
-**9 PASS / 0 FAIL / 1 未判 · `rc=30` · 两跑一致**（未判 1 项 = 相 3 的前置：本机无 linux/amd64 门户镜像；构建在本机 arm64 下需 30+ 分钟，见 `#1` 探针 README）。
+**本机**（无 linux/amd64 门户镜像）：**11 PASS / 0 FAIL / 1 未判 · `rc=30` · 两跑一致**（未判 1 项 = 相 3 的前置）。
+**CI**：本脚本已接进 [`portal-image.yml`](../../../.github/workflows/portal-image.yml) 的「制品契约判据」步 ⇒ **相 3 在 CI 里真跑**（镜像刚构建完就在本地守护里）；**首次绿 = run `36235735927`**（本脚本由其持续裁决）。
 
 ### 硬数据（可直接用于施工）
 
 | 来源 | 事实 | 用途 |
 |---|---|---|
 | 相 2（本机真跑，底座 `node:22-bookworm-slim`） | 工具面命中**只有** `/usr/local/bin/node` —— **无 `curl`、无 `wget`** | `healthcheck.test` **只能**用 `node -e fetch` 形态；代理理由：最终镜像 = 底座 + `ca-certificates` + COPY（二进制 / node_modules / src / assets），装证书与拷文件都不会新增 curl / wget |
-| 相 3 骨架冒烟（用「有 `jose` 但无门户」的临时靶镜像，跑完即删；**非产品结论**） | ① `T1` 走通并 PASS · ② `T5` 对无 LABEL 镜像**转红**（敏感性证明）· ③ `T2`/`T4` 按预期 FAIL（无 `/healthz`、`unhealthy`）· ④ **`T3` 实测：坏配置 + `restart: unless-stopped` 在 12 s 内 `RestartCount=7`** | ④ 证明「无限重启循环」不是理论风险，而是**快速且无界**的真实故障模式 ⇒ `#2` 必须定策略 |
+| 相 3 `T1`（CI，权威） | 镜像内探活工具面命中 `/usr/local/bin/node`（无 `curl`/`wget`） | 与相 2 代理同结论 ⇒ 形态定档 |
+| **相 3 `T2`（CI，权威）** | **boot → `/healthz` 200 耗时 = 1 s / 1 s / 2 s**（3 次取样） | **`healthcheck` 参数的取值依据**：`start_period=20s`（≥10× 余量）· `interval=30s` · `timeout=5s` · `retries=3` |
+| 相 3 `T3`（CI，权威） | 坏配置 + `restart: unless-stopped` ⇒ **12 s 内 `RestartCount=7`** 且 `portal_listening=0` | 「无限重启循环」是**快速且无界**的真实故障模式 ⇒ `restart` 定 `on-failure:3`（有界早停），而非 `unless-stopped` |
+| 相 3 `T4`（CI，权威） | `--health-cmd`（`node -e fetch /healthz`）使**健康容器变 `healthy`** | 该断言形态在容器里真能跑通（不只是「命令能执行」） |
+| 相 3 `T5`（CI，权威） | 镜像 `LABEL org.opencontainers.image.version` = **`0.10.0`** ⇄ 锁 `IMAGE_TAG` = **`0.10.0`** | AC12.3「版本由锁注入」的**外部侧**已实证 |
+| 骨架冒烟（用「有 `jose` 但无门户」的临时靶镜像，跑完即删；**非产品结论**） | `T1` 走通并 PASS · `T5` 对无 LABEL 镜像**转红**（敏感性证明）· `T2`/`T4` 按预期 FAIL（无 `/healthz`、`unhealthy`） | 证明这几条判据**能红能绿**（不是恒绿的装饰） |
 
 ### 判据定档（`#2` 四项验收 → 判据形状与归属）
 
@@ -76,10 +82,12 @@ PORTAL_BUILD_TAG=<name:tag> bash memory.agent-mate.ai/probes/portal-artifact-con
 
 ## 未判项与复跑条件
 
-| 未判 | 原因 | 复跑条件 |
+**相 3 已在 CI 判掉**（run `36235735927`：14/0/0）；**本机仍为「未判」**（无 linux/amd64 门户镜像 —— GHCR 包私有、本机 arm64 构建需 30+ 分钟）。
+
+| 未判（仅本机） | 原因 | 复跑条件 |
 |---|---|---|
-| 相 3 全部（`T1`–`T5`） | 本机无 linux/amd64 门户镜像（GHCR 包私有；arm64 构建 30+ 分钟） | 在有镜像的机器上 `PORTAL_BUILD_TAG=<name:tag> bash …/probe.sh`；CI 里 buildx 可用（构建配方见 [`build-portal-image.sh`](../../scripts/build-portal-image.sh)） |
-| `T2` 的耗时取值 | 需要**门户**镜像（相 3），且**模拟下不可用**（arm64 跑 amd64 的耗时无代表性） | 必须取 amd64 的实测值 |
+| 相 3 全部（`T1`–`T5`） | 本机无 linux/amd64 门户镜像 | `PORTAL_BUILD_TAG=<name:tag> bash …/probe.sh`（有镜像的机器）；CI 里 buildx 可用（构建配方见 [`build-portal-image.sh`](../../scripts/build-portal-image.sh)），已接进工作流 |
+| `T2` 的耗时取值 | 需要**门户**镜像，且**模拟下不可用**（arm64 跑 amd64 的耗时无代表性） | amd64 实测值 —— **已由 CI 取得**（1 s / 1 s / 2 s）⇒ 本项已关闭 |
 
 ## 本探针踩到的坑（供后续复用）
 
@@ -88,6 +96,8 @@ PORTAL_BUILD_TAG=<name:tag> bash memory.agent-mate.ai/probes/portal-artifact-con
 3. **样本注入点必须与判据同面**：正样本要注在 `environment:` 块**内**，否则是「用判据看不见的样本证明判据」⇒ 假红。
 4. **双引号里的反引号是命令替换**：`info "…`KEY`…"` 会去执行 `KEY`（实测报 `PORTAL_ADMIN_HOST: command not found`）。
 5. **声明要锚到真源**：uid/gid 的真源是 `web-design.md` §3.2 与 `mcp-design.md` §5.6.3，**不是** `deployment.md`（后者实测 0 命中）—— 锚错了就是假红。
+6. **正样本不能往"真制品"里注入**：`#2` 第 1 批把 `healthcheck` 落地后，再往真 compose 注入一份 ⇒ **重复键**、YAML 直接非法（`mapping key "healthcheck" already defined`）。⇒ 样本要**从一个合成底座派生**，与制品现状解耦。
+7. **「现状」不能当断言**（第二次踩）：首版把「现状无 healthcheck」写进 `H1` 的反样本 ⇒ 落地后必然假红。凡断言里出现「制品当前如何」，都要问一句「正确实现之后它还会成立吗」。
 
 ## 边界
 

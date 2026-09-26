@@ -8,6 +8,24 @@
 
 ## 2026-09-26
 
+### Sprint 5 `#2` 第 1 批「编排可判」交付（`ToDo` → `WIP`）
+
+**为什么先做这批**：用户定「分批 —— 先编排、再启动期断言」。这批的共同点是**判据已在手上**（不依赖产品代码改动）：编排侧四处 + 判据接线。
+
+**改了什么**：
+
+- **[`../deploy/portal.compose.yml`](../deploy/portal.compose.yml)（4 处）**：① 加 `healthcheck` —— `test` = 容器内 `node -e fetch http://localhost:${PORTAL_PORT}/healthz`（**端口不写死**，改 `PORTAL_PORT` 时探活跟着走）；`start_period=20s` / `interval=30s` / `timeout=5s` / `retries=3`。② `restart: unless-stopped` → **`on-failure:3`（有界早停）**。③ volumes 加 `./upstream.lock:/app/upstream.lock:ro`（版本断言的**期望值**输入面；读取位在第 2 批）。④ **删 `PORTAL_ROOT: /app`**。
+- **取值全部来自实测（不是偏好）**：`healthcheck` 形态因**底座无 `curl`/`wget`**（只有 `node`）；参数按相 3 `T2` 的 boot 实测 **1 s / 1 s / 2 s**（`start_period` 取 ≥10× 余量）；`restart` 改有界，因相 3 `T3` 实测「坏配置 + `unless-stopped`」**12 s 内 `RestartCount=7`** 且从未监听 ⇒ 无限重启循环**快速且无界**。**语义分离**：自检失败由**退出**兑现，`healthcheck` 只表**运行期**健康。
+- **CI 接线**：[`../../.github/workflows/portal-image.yml`](../../.github/workflows/portal-image.yml) 新增「制品契约判据」步（相 3 需要镜像 ⇒ 只有 CI / 有镜像的机器能判）+ `paths` 补触发面 + 头部与退出码契约同步。
+- **文档同步**：`deployment.md` §12.5.4（删 `PORTAL_ROOT`，「后三个」→「后两个」）· §12.5（门户落地清单 → **4 个文件**，含 `upstream.lock`，并写明「源文件缺失 ⇒ Docker 建目录 ⇒ 自检**拒绝启动**」的 fail-closed 行为；新增「门户 stack 的探活与重启」条）· §12.5.5（期望补「容器 `healthy` + `RestartCount` 不增长」）· `web-portal/web-design.md` §3.4 ⑤（改述为**已落地**；`depends_on` 由「缺失」改判为「**不适用**」）。
+- **顺带对齐一处文档/制品不一致（第 3 处同类）**：卷名 —— 文档 6 处写 `admin_portal_data`，而 compose（真源）写 **`portal_data`** ⇒ 一并改为 `portal_data`（`web-design.md` ×4 · `web-stories.md` ×1 · `deployment.md` ×1）。**为什么是改文档而不是改 compose**：`portal.compose.yml` 是门户 stack 的真源（§12.5.4 明写「非密钥键全部在此」），且**尚未部署** ⇒ 对齐零成本。
+- **`depends_on` 的口径**：门户 stack 是**单服务**，`depends_on` **没有对象可指**；跨 stack 的耦合由 `external: true` 的共享卷 + `restart` 承担 ⇒ **不适用**，硬加只会造出与 `PORTAL_ROOT` 同类的**空转键**。口径已落 §3.4 ⑤。
+- **探针自伤修正（同批，两次踩坑）**：① 第 1 批落地后本探针的 `H1`/`V2` **假红** —— 它们把「**制品现状**」当样本（口径同 `#1` 探针 `C5` 的教训：**会随正确实现翻转的观察不该写成断言**）；② 改为往**真 compose** 注入后，因真 compose 已有 `healthcheck` ⇒ **重复键、YAML 非法**（`mapping key "healthcheck" already defined`）。⇒ 样本改为**从合成底座派生**（与制品现状彻底解耦），并新增 **`Q1`/`Q2` 两条编排契约断言**（断言落地后的契约 —— 一旦被改坏就该红，体例同 `#1` 探针的 `C1`–`C10`）。本机复跑 **11 PASS / 0 FAIL / 1 未判**。
+
+**验证**：CI run **`36235735927` success** ⇒ `#1` 探针 **31/0/0** · 运行时冒烟 **18/0/0** · 本探针 **14/0/0**（相 3 在 CI 真跑：`T1` 工具面 `/usr/local/bin/node` · `T2` **1/1/2 s** · `T4` 容器变 `healthy` · `T5` `LABEL=0.10.0 ⇄ 锁 0.10.0` · `T3` `RestartCount=7`）· 本机 `docker-compose config` **rc=0**（healthcheck 端口插值正确 · 4 个挂载、锁为 `read_only` · `PORTAL_ROOT` 残留 **0**）· `make doc-links` 零悬空 · `make deploy-doc-audit` 9/0 退 0 · `make secret-check` ✓ · `git diff --check` 干净。
+
+**边界**：**不改产品代码**（`admin_portal/**` 一行未动）· **不改 `upstream.lock`** · **未做**第 2 批（门户自身版本读取位 + 启动期不一致拒绝启动）与判据方向补齐 · 未给 `healthcheck` 加 `--health-start-interval`（无必要）。
+
 ### Sprint 5 `#2` 施工前两项拍板落盘（用户定）
 
 **为什么**：`#2` 开工准备的探针把两处**做法未定**的地方摆出来了 —— 不先定，同一判据会被两行认领，或把「无限重启循环」带进生产。

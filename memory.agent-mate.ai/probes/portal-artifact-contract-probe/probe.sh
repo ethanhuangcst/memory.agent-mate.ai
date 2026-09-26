@@ -120,36 +120,40 @@ hc_ok() { # 0 = 合格；1 = 不合格（含「无块」）
 info "现状：compose ${COMPOSE#${PRODUCT}/} 的 healthcheck 块 —— $([ -n "$(hc_block "${COMPOSE}")" ] && echo '存在' || echo '不存在（与 §3.4 ⑤ 登记的缺口一致）')"
 info "现状：depends_on 命中 $(nocomment "${COMPOSE}" | grep -c 'depends_on') 处 · restart 策略 = $(nocomment "${COMPOSE}" | sed -n 's/^[[:space:]]*restart:[[:space:]]*//p' | head -1)"
 
-# 正样本：把合格 healthcheck 注入**副本**（零污染仓库）；两个反样本各自缺一样最关键的东西
-awk '1; /^[[:space:]]*restart:[[:space:]]*unless-stopped$/ && !d {
+# 样本一律**在 ${TMP} 里造，且不派生自制品现状** —— 口径同 `#1` 探针的 `C5`：**会随正确实现
+# 翻转的观察不该写成断言**。踩过两次：① 首版把「现状无 healthcheck」当反样本 ⇒ `#2` 第 1 批
+# 落地后必然假红；② 第二版往**真 compose** 注入 ⇒ 真 compose 已有 `healthcheck` 时**重复键**、
+# YAML 直接非法（`mapping key "healthcheck" already defined`）。现在先造**最小合法 compose 底座**，
+# 再在其上派生三态样本。
+printf 'name: probe-hc\nservices:\n  portal:\n    image: x\n    container_name: probe-hc\n' >"${TMP}/hc-none.yml"
+awk '1; /^[[:space:]]*container_name:/ && !d {
        print "    healthcheck:";
        print "      test: [\"CMD\", \"node\", \"-e\", \"fetch(\\\"http://localhost:8080/healthz\\\").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\"]";
        print "      interval: 30s";
        print "      timeout: 5s";
        print "      retries: 3";
-       print "      start_period: 40s";
+       print "      start_period: 20s";
        d = 1
-     }' "${COMPOSE}" >"${TMP}/hc-ok.yml"
-awk '1; /^[[:space:]]*restart:[[:space:]]*unless-stopped$/ && !d {
+     }' "${TMP}/hc-none.yml" >"${TMP}/hc-ok.yml"
+awk '1; /^[[:space:]]*container_name:/ && !d {
        print "    healthcheck:";
        print "      interval: 30s";
        print "      timeout: 5s";
        print "      retries: 3";
        d = 1
-     }' "${COMPOSE}" >"${TMP}/hc-no-test.yml"
+     }' "${TMP}/hc-none.yml" >"${TMP}/hc-no-test.yml"
 
 check H1 'healthcheck 判据可判（正/反对照三个方向都被观察到）' \
-  "$(hc_ok "${TMP}/hc-ok.yml" && ! hc_ok "${TMP}/hc-no-test.yml" && ! hc_ok "${COMPOSE}" && echo 0 || echo 1)" \
-  '正样本（四键齐）=合格 · 缺 test =不合格 · 现状（无块）=不合格 ⇒ 缺口能被判据抓到'
+  "$(hc_ok "${TMP}/hc-ok.yml" && ! hc_ok "${TMP}/hc-no-test.yml" && ! hc_ok "${TMP}/hc-none.yml" && echo 0 || echo 1)" \
+  '正样本（四键齐）=合格 · 缺 test =不合格 · 无块 =不合格 ⇒ 判据能分辨三态（样本全部合成）'
 
 # H2：正样本必须是**合法 compose** —— 否则「判据转绿」可能只是因为样本本身非法（防假绿）
 COMPOSE_CMD=()
 command -v docker-compose >/dev/null 2>&1 && COMPOSE_CMD=(docker-compose)
 [ "${#COMPOSE_CMD[@]}" -gt 0 ] || { docker compose version >/dev/null 2>&1 && COMPOSE_CMD=(docker compose); }
 if [ "${#COMPOSE_CMD[@]}" -gt 0 ]; then
-  : >"${TMP}/portal.env"
-  ( cd "${TMP}" && PORTAL_IMAGE=x PORTAL_ADMIN_HOST=a.test PORTAL_MCP_HOST=b.test \
-      PORTAL_ACCESS_TEAM_DOMAIN=c.test PORTAL_ACCESS_AUD=d "${COMPOSE_CMD[@]}" -f hc-ok.yml config >/dev/null 2>"${TMP}/e-hc" )
+  # 合成样本自含（无 `${VAR:?}` 占位、无 `env_file`）⇒ 不需要任何环境变量或 `portal.env`
+  ( cd "${TMP}" && "${COMPOSE_CMD[@]}" -f hc-ok.yml config >/dev/null 2>"${TMP}/e-hc" )
   RC_HC=$?
   if [ "${RC_HC}" -eq 0 ]; then
     HC_DETAIL='compose config rc=0（样本被接受 ⇒ 判据不是靠非法样本假绿）'
@@ -185,10 +189,12 @@ printf 'const v = process.env.PORTAL_IMAGE_TAG ?? "0.0.0";\n' >"${SAMPLE}/sample
 # 样本本身就得是合法的挂载声明，否则又是「用非法样本证明判据」。
 awk '1; /^[[:space:]]*volumes:[[:space:]]*$/ && !d { print "      - ../upstream.lock:/app/upstream.lock:ro"; d = 1 }' \
   "${COMPOSE}" >"${TMP}/mount-ok.yml"
+# 反样本同样**合成**（不拿制品现状当样本 —— 它已随 `#2` 第 1 批挂上锁而翻转）
+printf 'name: probe-mount-none\nservices:\n  portal:\n    image: x\n' >"${TMP}/mount-none.yml"
 check V2 '版本断言的两侧输入面**可判**（自身读取位 / 挂载的锁，两侧对照都观察到）' \
   "$([ "$(ver_read_hits "${SAMPLE}")" -gt 0 ] && [ "$(ver_read_hits "${PRODUCT}/admin_portal/src")" -eq 0 ] \
-     && [ "$(mount_hits "${TMP}/mount-ok.yml")" -gt 0 ] && [ "$(mount_hits "${COMPOSE}")" -eq 0 ] && echo 0 || echo 1)" \
-  '注入样本命中+现状未命中（两侧同向）⇒ 探针能分辨「有没有」'
+     && [ "$(mount_hits "${TMP}/mount-ok.yml")" -gt 0 ] && [ "$(mount_hits "${TMP}/mount-none.yml")" -eq 0 ] && echo 0 || echo 1)" \
+  '两向都由**合成样本**观察（正=命中 / 反=不命中）⇒ 判据能分辨「有没有」，且不随制品落地翻转'
 info "现状：自身版本读取位在 admin_portal/src/ 命中 $(ver_read_hits "${PRODUCT}/admin_portal/src") 处 · 锁挂载在 compose 命中 $(mount_hits "${COMPOSE}") 处 ⇒ **两侧都缺**（§3.4 ③ 把「挂载 + 读取位」记归 #17）"
 info "现状：selfcheck 的版本项 = $(grep -o "name: 'binary_version_matches_lock', status: '[a-z]*'" "${SELFCHECK}" | head -1 || echo '(未匹配)') ⇒ 该项判的是**上游二进制**版本，与门户**自身**版本的断言不是同一件事（归属待拍板）"
 
@@ -251,6 +257,19 @@ grep -q 'E4' "${PRODUCT}/probes/portal-image-verdict-probe/probe.sh" && grep -q 
 grep -q '999' "${DOCKERFILE}" && U_HITS=$((U_HITS + 1))
 check U1 'uid/gid 对齐（AC12.2）判据已存在且**已判**（引用 #1 探针 E4/E5，不重复跑）' \
   "$([ "${U_HITS}" -eq 4 ] && echo 0 || echo 1)" "真源声明/web-design/mcp-design/判据/实现四处命中 ${U_HITS} 个（E4/E5 已实证 999:999 ⇄ 999:999）"
+
+# ── Q：第 1 批「编排可判」的**契约断言**（已落地 ⇒ 可以断言了）──────────────────────────
+# 与 H1/V2 的区别（重要）：H1/V2 证明「**判据能判**」（用合成样本，不随实现翻转）；Q 断言
+# 「**制品现状符合拍板契约**」—— 一旦被改坏就该红。体例同 `#1` 探针的 `C1`–`C10`（编排结构断言）。
+HC_NOW="$(hc_block "${COMPOSE}")"
+HC_KEYS="$(printf '%s\n' "${HC_NOW}" | grep -cE '^[[:space:]]+(test|interval|timeout|retries):' || true)"
+RESTART_NOW="$(nocomment "${COMPOSE}" | sed -n 's/^[[:space:]]*restart:[[:space:]]*//p' | head -1)"
+check Q1 '编排契约：`healthcheck` 四键齐 + `restart` 为**有界**形态（`on-failure:N`）' \
+  "$([ "${HC_KEYS}" -ge 4 ] && printf '%s' "${RESTART_NOW}" | grep -qE '^on-failure:[0-9]+$' && echo 0 || echo 1)" \
+  "healthcheck 键命中 ${HC_KEYS}/4 · restart=${RESTART_NOW:-（无）}"
+check Q2 '编排契约：锁已挂载（版本断言的期望值输入面）且**无读取方的键**（`PORTAL_ROOT`）零残留' \
+  "$([ "$(mount_hits "${COMPOSE}")" -gt 0 ] && [ "$(nocomment "${COMPOSE}" | grep -c 'PORTAL_ROOT')" -eq 0 ] && echo 0 || echo 1)" \
+  "锁挂载 $(mount_hits "${COMPOSE}") 处 · PORTAL_ROOT 可见行 $(nocomment "${COMPOSE}" | grep -c 'PORTAL_ROOT') 处"
 
 # ─────────────────────── 相 2：基础镜像代理（需 docker + 网络）───────────────────────
 echo

@@ -540,7 +540,7 @@ Scenario: 门户 stack 可独立重启而不影响既有服务
 Scenario: 门户库位于独立卷且不在用户数据目录下
   Given 门户 stack 已按标准形态部署
   When 检查门户自身数据的存储位置
-  Then 门户库位于独立卷（如 admin_portal_data 挂载到 /srv/portal）
+  Then 门户库位于独立卷（如 portal_data 挂载到 /srv/portal）
   And 门户库不在 /data 下
 
 @AC9.2 @edge

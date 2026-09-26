@@ -443,9 +443,10 @@ bash scripts/pin-update.sh <ref> [--force]          # 更新锁文件（--force 
 ### 12.2 门户接入部署（本地开发 Sprint 4 起；生产接入在 Sprint 5）
 
 - 门户**不依赖**既有容器运行（共享数据卷是唯一耦合点：`/data/users/<handle>/ai-memory.db` 需同时被两边读写）；**不挂 docker socket**（D1 = β′，[`architecture.md`](./architecture.md) §2.1 #8）。
-- 部署动作：新建 `/opt/ai-memory/` 下门户 compose；**两个 stack 独立**，可单独重启。
+- 部署动作：新建 `/opt/ai-memory/` 下门户 compose；**两个 stack 独立**，可单独重启。**门户侧要落地的文件 = 4 个**：`portal.compose.yml` · `portal.env`（`chmod 600`）· `config.toml`（只读挂载，见下）· [`../upstream.lock`](../upstream.lock) —— **锁必须与 compose 同目录**（compose 以 `./upstream.lock` 挂进容器，作版本断言的**期望值**输入面，Sprint 5 `#2`）；**源文件缺失时 Docker 会创建一个目录** ⇒ 读取失败 ⇒ 自检**拒绝启动**（fail-closed，不是静默）。
 - **前置（须先做，否则建用户必失败）**：§4.4 的 `/data/users` setgid 引导。
-- **门户 stack 的挂载与环境**：`ai_memory_data`(external) → `/data`；`config.toml` → `/data/.config/ai-memory/config.toml:ro`；自带卷 `admin_portal_data` → `/srv/portal`；env 注入**门户专用** `DASHSCOPE_API_KEY`（与主 key 同 workspace/同模型；见 [`architecture.md`](./architecture.md) §2.3 #2）。
+- **门户 stack 的挂载与环境**：`ai_memory_data`(external) → `/data`；`config.toml` → `/data/.config/ai-memory/config.toml:ro`；[`../upstream.lock`](../upstream.lock) → `/app/upstream.lock:ro`（版本断言的**期望值**）；自带卷 `portal_data` → `/srv/portal`；env 注入**门户专用** `DASHSCOPE_API_KEY`（与主 key 同 workspace/同模型；见 [`architecture.md`](./architecture.md) §2.3 #2）。
+- **门户 stack 的探活与重启（Sprint 5 `#2` 落地，2026-09-26）**：`healthcheck` = 容器内 `node -e fetch http://localhost:${PORTAL_PORT}/healthz`（底座 **无 `curl`/`wget`** ⇒ 只能走 `node`），参数按 `#2` 探针相 3 `T2` 的 boot 实测取值（`start_period=20s` · `interval=30s` · `timeout=5s` · `retries=3`）；`restart: on-failure:3`（**有界早停**）—— 「自检是否通过」由**进程退出**兑现，`healthcheck` 只表**运行期**健康（依据与实测见 [`../probes/portal-artifact-contract-probe/`](../probes/portal-artifact-contract-probe/README.md) 相 3）。
 - **门户密钥文件**：`portal.env`（服务器 `/opt/ai-memory/portal.env`，`chmod 600`；本机开发用 `memory.agent-mate.ai/deploy/portal.env`，gitignored）—— 字段只有 `DASHSCOPE_API_KEY`，模板 [`../deploy/portal.env.example`](../deploy/portal.env.example)。**与主 stack 的 `.env` 分开**：门户是公网组件，独立 key 才能单独吊销/归因。
 - **门户 key 轮换/吊销**：控制台新建一把（标签 `memory-agent-mate-portal`）→ 改 `portal.env` → 重启门户 stack → 等启动自检的 embeddings 1024 维通过 → 再吊销旧的那把。**主 stack 的 `.env` 全程不动**，主线服务零中断。
 - **启动自检（fail-closed）**：`/data/users` 可写 · embeddings 可达且 1024 维 · 自身二进制版本 == `upstream.lock` —— 任一不满足**拒绝启动**（[`web-portal/web-design.md`](./web-portal/web-design.md) §3.4）。
@@ -527,7 +528,7 @@ bash scripts/pin-update.sh <ref> [--force]          # 更新锁文件（--force 
 |---|---|---|
 | 运行环境 | `PORTAL_ENV` | `production`（此值下**启用自签测试通道即拒绝启动**） |
 | 面隔离 | `PORTAL_ADMIN_HOST` · `PORTAL_MCP_HOST` · `PORTAL_PORT` | 两个面各自的 Host（面隔离判据的来源）；端口只对同网反代暴露 |
-| 存储 | `PORTAL_DB_PATH` · `PORTAL_USERS_ROOT` · `PORTAL_ROOT` · `PORTAL_VIEWS_ROOT` · `PORTAL_STATIC_ROOT` | 门户库**必须不在 `/data` 下**；`PORTAL_USERS_ROOT=/data/users`（与主 stack 共享卷）；后三个是**镜像内路径**，填错由启动自检**响亮失败** |
+| 存储 | `PORTAL_DB_PATH` · `PORTAL_USERS_ROOT` · `PORTAL_VIEWS_ROOT` · `PORTAL_STATIC_ROOT` | 门户库**必须不在 `/data` 下**；`PORTAL_USERS_ROOT=/data/users`（与主 stack 共享卷）；后两个是**镜像内路径**，填错由启动自检**响亮失败**。（`PORTAL_ROOT` 已于 2026-09-26 **删除** —— 产品代码三种真读取形态皆不命中它，属「看起来能配、其实无作用」的键；判据见 [`../probes/portal-artifact-contract-probe/`](../probes/portal-artifact-contract-probe/README.md) 的 `B1`） |
 | 会话 | `PORTAL_SESSION_IDLE_TIMEOUT` · `PORTAL_SESSION_MAX_DURATION` | 毫秒；**取值归 `4.1`**，compose 里给的是保守初值 |
 | 身份 | `PORTAL_ACCESS_TEAM_DOMAIN` · `PORTAL_ACCESS_AUD` · `PORTAL_ACCESS_JWKS_URL` | 团队域 + Access 应用的 `aud`；`JWKS_URL` **可选**（默认由团队域推导） |
 | 日志 / i18n | `PORTAL_LOG_LEVEL` · `PORTAL_I18N_DEFAULT` | `info` · `zh-CN` |
@@ -539,7 +540,7 @@ bash scripts/pin-update.sh <ref> [--force]          # 更新锁文件（--force 
 | # | 做什么 | 期望 |
 |---|---|---|
 | 1 | `docker compose -f portal.compose.yml --env-file portal.env config` | 无语法 / 插值错误（**落地前先跑**） |
-| 2 | `docker compose ... up -d`，看门户日志 | 启动自检**全过**：`/data/users` 可写 · embeddings 可达且 **1024** 维 · 自身二进制版本 == [`../upstream.lock`](../upstream.lock)；任一不满足**拒绝启动**（fail-closed） |
+| 2 | `docker compose ... up -d`，看门户日志 | 启动自检**全过**：`/data/users` 可写 · embeddings 可达且 **1024** 维 · 自身二进制版本 == [`../upstream.lock`](../upstream.lock)；任一不满足**拒绝启动**（fail-closed）。另看 `docker compose ps`：容器 **`healthy`**（探活形态与参数见 §12.5 的「门户 stack 的探活与重启」条）；并确认 `docker ps` 的 `RestartCount` **不增长**（坏配置最多重启 3 次即停 —— 有界早停） |
 | 3 | `make deploy-doc-audit` | **退出码 `0`**（指南与真源不漂移） |
 | 4 | `make portal-e2e ARGS=--online` | 退出码 `0`（`40` = 前置不足，**不算通过**） |
 | 5 | `make secret-check` | 通过（无密钥 / 无公网 IP / 无私有点） |

@@ -144,7 +144,7 @@ ENTRYPOINT ["node","--import","tsx"] ; CMD ["src/server.ts"]   # 显式声明（
 > - **② 编排不变量**：任一项 `fail` ⇒ 进程**不调用 `listen`** 且退出码非 0（`3.21` 三重证据：合法配置 ⇒ 监听 / `/data/users` 不可写 ⇒ 退出码 `1` / 退出后端口未监听）；**`deferred` 不得当作 pass**（`3.21` 实证：`pass=6 deferred=3 fail=0` 时门户照常启动 —— 这正是本行要收口的缺口）。
 > - **③ 锁侧输入的归属（2026-09-26 用户拍板：整体归 `#2`）**：拆成两半 —— **「构建期注入 `IMAGE_TAG`」已随 `#1` 落地**（[`../../scripts/build-portal-image.sh`](../../scripts/build-portal-image.sh) 从 `upstream.lock` 注入，探针 `D4`/`E6` 已判）；**「挂载锁文件 + 读取位」归 `#2`** —— 口径 = **一条不变量一个落点**（`#2` 的验收条件本就含「不一致拒绝启动」，而 §3.4 ② 表第 3 行的版本断言就是它）⇒ **`#17` 只做三项 `deferred` 转正**，不再认领挂载与读取位。**现状（由 [`../../probes/portal-artifact-contract-probe/`](../../probes/portal-artifact-contract-probe/README.md) 的 `V2` 机械判定）**：`upstream.lock` **未挂进** `deploy/portal.compose.yml` 的 volumes · 产品代码里**无自身版本读取位**（三种真读取形态皆不命中）⇒ **两侧输入面皆缺**，属 `#2` 的施工内容。（探针 `C5` 对挂载状态只以 `info` 记录、**不写成断言**：它会在 `#2` 正确落地时必然反红。）
 > - **④ 第 ② 项的通路选择（**已定档 2026-09-26 用户拍板：直连 MaaS**）**：门户侧目前**没有** embeddings 客户端（`admin_portal/src/**` 无 MaaS HTTP 客户端）⇒ **直连通路必须新增配置键**（MaaS `base_url` + 模型名；key 复用 `portal.env` 的 `DASHSCOPE_API_KEY`）—— 新增键必须同步 [`../deployment.md`](../deployment.md) §12.5.4 的门户 env 真源表与 [`../../deploy/portal.compose.yml`](../../deploy/portal.compose.yml)，否则 `deploy-guide-audit` 的 `A2`（未登记的新键）会转红。**选它的理由**：走 spawn 上游判维度会**假绿** —— `3.21` 实证坏 key 下上游只出「线性扫描 / 无 embeddings」告警而 `tools/call` **仍然返回响应**（判据必须同时断「可达」与「向量长度 == 1024」，且不经上游降级路径）。原候选通路（唯一通路 = spawn 上游）**未被采纳**，实现轮按 `#17` 的拍板结论施工。
-> - **⑤ 编排侧缺口（登记）**：`deploy/portal.compose.yml` **无 `healthcheck`、无 `depends_on`**，且 `/healthz` 固定返回 `ok:true`（**不反映自检结论**）⇒「通过后才对外服务」目前只由「进程内自检不过就不 listen」兑现；`restart: unless-stopped` 与「自检失败退出」的组合需在**实现轮**定策略（避免失败重启循环）。**更新（2026-09-26，Sprint 5 `#1`）**：「**自检不过就不 listen**」**已从文档断言变为可复跑判据** —— [`../../scripts/portal-image-smoke.sh`](../../scripts/portal-image-smoke.sh) 的三条反例（`N1`/`N2`/`N3`）各自断言「非零退出 · 日志点名原因 · **从未监听**」，并实证「断言可在**容器内**用 `node -e fetch` 发起」且 `/healthz` 在**任一面**都放行（`P10`）⇒ 本节的 `healthcheck` 只需把该断言搬进 compose 的 `healthcheck.test:`（归 Sprint 5 `#2`，**原型已就位**）。**决策（2026-09-26 用户拍板，依据 [`../../probes/portal-artifact-contract-probe/`](../../probes/portal-artifact-contract-probe/README.md)）**：① **`healthcheck.test` 的形态 = 容器内 `node -e fetch`** —— 底座 `node:22-bookworm-slim` 实测**无 `curl`、无 `wget`**（只有 `node`）⇒ curl/wget 形态不可用（相 2 实测）；② **`restart` 改 `on-failure:<N>`（有界早停）** —— 实测「坏配置 + `restart: unless-stopped`」在 **12 s 内 `RestartCount=7`**（**无限重启循环，快速且无界**）⇒ 用有界重试让坏配置**早停可发现**；`healthcheck` 只表**运行期健康**，**不承担「自检是否通过」的语义**（后者已由**退出**兑现）；③ 参数（`interval` / `timeout` / `retries` / `start_period`）按相 3 `T2` 的 boot 耗时实测取值。**同批处置**：`depends_on` 缺失 · `/healthz` 固定 `ok:true`（与上述「healthcheck 只表运行期健康」的决策**相容**，故不再要求它反映自检结论）。
+> - **⑤ 编排侧缺口（登记）**：`deploy/portal.compose.yml` **无 `healthcheck`、无 `depends_on`**，且 `/healthz` 固定返回 `ok:true`（**不反映自检结论**）⇒「通过后才对外服务」目前只由「进程内自检不过就不 listen」兑现；`restart: unless-stopped` 与「自检失败退出」的组合需在**实现轮**定策略（避免失败重启循环）。**更新（2026-09-26，Sprint 5 `#1`）**：「**自检不过就不 listen**」**已从文档断言变为可复跑判据** —— [`../../scripts/portal-image-smoke.sh`](../../scripts/portal-image-smoke.sh) 的三条反例（`N1`/`N2`/`N3`）各自断言「非零退出 · 日志点名原因 · **从未监听**」，并实证「断言可在**容器内**用 `node -e fetch` 发起」且 `/healthz` 在**任一面**都放行（`P10`）⇒ 本节的 `healthcheck` 只需把该断言搬进 compose 的 `healthcheck.test:`（归 Sprint 5 `#2`，**原型已就位**）。**决策（2026-09-26 用户拍板，依据 [`../../probes/portal-artifact-contract-probe/`](../../probes/portal-artifact-contract-probe/README.md)）**：① **`healthcheck.test` 的形态 = 容器内 `node -e fetch`** —— 底座 `node:22-bookworm-slim` 实测**无 `curl`、无 `wget`**（只有 `node`）⇒ curl/wget 形态不可用（相 2 实测）；② **`restart` 改 `on-failure:<N>`（有界早停）** —— 实测「坏配置 + `restart: unless-stopped`」在 **12 s 内 `RestartCount=7`**（**无限重启循环，快速且无界**）⇒ 用有界重试让坏配置**早停可发现**；`healthcheck` 只表**运行期健康**，**不承担「自检是否通过」的语义**（后者已由**退出**兑现）；③ 参数（`interval` / `timeout` / `retries` / `start_period`）按相 3 `T2` 的 boot 耗时实测取值。**已落地（2026-09-26，Sprint 5 `#2` 第 1 批「编排可判」）**：[`../../deploy/portal.compose.yml`](../../deploy/portal.compose.yml) 已加 `healthcheck`（`test` = 容器内 `node -e fetch http://localhost:${PORTAL_PORT}/healthz`；`start_period=20s` / `interval=30s` / `timeout=5s` / `retries=3` —— 取值依据 = 相 3 `T2` 的 boot 实测 **1 s / 1 s / 2 s**）+ `restart: on-failure:3`（**有界早停**·依据 = 相 3 `T3` 的 `RestartCount=7 / 12 s`）。**`depends_on` 不适用**（而不是「缺失」）：门户 stack 是**单服务**，没有对象可指；跨 stack 的耦合由 `external: true` 的共享卷 + `restart` 策略承担 ⇒ **硬加只会造出与 `PORTAL_ROOT` 同类的空转键**。`/healthz` 固定 `ok:true` 与上述语义决策**相容**（不再要求它反映自检结论）。
 > 另两条**制品约束**见 §3.2：底座必须 `bookworm` 系 + `ca-certificates`；镜像内 `aimem` 必须显式 `--uid 999 --gid 999`（否则 SSH 路径写不进门户建的目录）。
 
 ---
@@ -197,7 +197,7 @@ ENTRYPOINT ["node","--import","tsx"] ; CMD ["src/server.ts"]   # 显式声明（
 
 **`last_used_at` 的更新粒度（2026-09-23 定档，Sprint 4 `3.1` 开工前置）**：**会话建立（令牌认证成功）时更新一次**，**不是**每个工具调用更新。理由：一次会话内多个请求共用一个上游 stdio 子进程，「使用该令牌」的自然语义是「用它建了会话」；且避免每请求写库。**判据**：[`web-stories.md`](./web-stories.md) `AC3.7`（同一用户的多把令牌 `last_used_at` 各自独立更新）—— 未定档前，请求级与会话级两种实现都能让该 AC 判「过」。
 
-**存储位置**：**独立卷**（`admin_portal_data` → `/srv/portal`），**不在 `/data` 下** —— 避免与用户记忆混放（备份误收 / ai-memory 目录扫描触及）。
+**存储位置**：**独立卷**（`portal_data` → `/srv/portal`），**不在 `/data` 下** —— 避免与用户记忆混放（备份误收 / ai-memory 目录扫描触及）。
 
 ---
 
@@ -314,7 +314,7 @@ ENTRYPOINT ["node","--import","tsx"] ; CMD ["src/server.ts"]   # 显式声明（
 | 3 | Cloudflare Access：仅 `<ADMIN_HOST>` 开启；`<MCP_HOST>` 显式绕过 |
 | 4 | 既有 stack 微调：`docker-compose.prod.yml` 的卷加显式 `name: ai_memory_data`（供门户 `external` 引用）—— **对既有 stack 的唯一改动** |
 | 5 | 构建门户镜像（`<tag>` 由 `upstream.lock` 注入） |
-| 6 | 部署门户 stack：挂载 `ai_memory_data`(external) → `/data`；`admin_portal_data` → `/srv/portal`；`config.toml` → `/data/.config/ai-memory/config.toml:ro` |
+| 6 | 部署门户 stack：挂载 `ai_memory_data`(external) → `/data`；`portal_data` → `/srv/portal`；`config.toml` → `/data/.config/ai-memory/config.toml:ro` |
 | 7 | 建首个用户 + 签发 key（同时验证目录创建） |
 | 8 | 冒烟 + 隔离验收（[`./web-test.md`](./web-test.md)） |
 | 9 | 备份扩展：遍历 `/data/users/*/ai-memory.db`；门户库单独备份 |
@@ -335,7 +335,7 @@ ENTRYPOINT ["node","--import","tsx"] ; CMD ["src/server.ts"]   # 显式声明（
 | 样式 | **原生 CSS + `:root` 设计令牌**（单文件 `portal.css`） | 与参考 mockup **同一手法且同一令牌体系**（令牌集中在自定义属性，见 §13.1）；无 CDN 样式依赖、无打包器 |
 | 字体 | `Outfit`（拉丁 UI）+ `Noto Sans SC` / `Noto Sans TC`（中日韩）+ `JetBrains Mono`（数据与代码） | 经 Google Fonts `@import` 加载（照参考稿）；栈内含 `system-ui` / `ui-monospace` ⇒ **离线降级为系统字体栈** |
 | MCP 桥 | **`@modelcontextprotocol/sdk`**：服务端用 **Streamable HTTP server transport**，客户端用 **stdio client transport** | §10 #4 明令「**优先复用官方 SDK**、**不自行实现协议**」；**不手写帧解析** |
-| 门户库 | **SQLite**（单文件，落在 `admin_portal_data` 卷）；驱动定档 **`better-sqlite3`**（同步 API ⇒ 事务边界清晰，天然支撑 fail-closed 审计；`engines: node >= 22` 与容器底座一致） | 单机、零外部依赖、备份与恢复简单；与上游同技术栈；**不在 `/data` 下**（§4.4） |
+| 门户库 | **SQLite**（单文件，落在 `portal_data` 卷）；驱动定档 **`better-sqlite3`**（同步 API ⇒ 事务边界清晰，天然支撑 fail-closed 审计；`engines: node >= 22` 与容器底座一致） | 单机、零外部依赖、备份与恢复简单；与上游同技术栈；**不在 `/data` 下**（§4.4） |
 | 入参校验 | **Zod** | `handle` 白名单与请求体校验；与 MCP SDK 的 schema 习惯一致 |
 | i18n | **四语言服务端词表**（`en` / `zh-CN` / `zh-HK` / `zh-TW`）+ `Accept-Language` / `?lang=` / `localStorage` | 与参考稿一致的四语言；**协议名、工具名、标识符一律不翻译**；**新增语言不改业务逻辑**（TC-P-L2-05）；纪律见 §12.4，字号规则见 §13.2 |
 | 容器 | `node:22-bookworm-slim` + `ca-certificates`；`aimem` **uid/gid 999**、非 root、只读根（临时目录用 tmpfs） | §3.2 · TC-P-L1-11 / TC-P-L1-12 / TC-P-L1-13 |
@@ -528,7 +528,7 @@ admin_portal/
 - **迁移**：`db/migrate.ts` 以 `schema_version` 表驱动**前向-only** 迁移；升级时先备份（与 §9 升级步骤一致）。
 - **索引**：`keys(key_hash)` **唯一**（认证查询热路径）；`keys(user_id)`；`audit(ts)` 与 `audit(actor)`（审计检索）。
 - **敏感字段纪律**：`keys` 只存 `key_hash` + `key_prefix`，**无明文列**；`audit.detail_json` **不得**含令牌明文或记忆正文（T8 / TC-P-L0-05）。
-- **存储位置**：`admin_portal_data` 卷 → `/srv/portal`，**不在 `/data` 下**（TC-P-L1-10 / TC-P-L3-08）。
+- **存储位置**：`portal_data` 卷 → `/srv/portal`，**不在 `/data` 下**（TC-P-L1-10 / TC-P-L3-08）。
 - **审计写入失败的策略**：**已定：fail-closed（无审计不动作）**（2026-09-22 用户定夺，随 `PSP-W1` 落地）。实现方式：业务写与审计写放在**同一个 SQLite 事务**内（`shared/audit.ts` 的 `withAudit`），审计插入失败即整体回滚 —— 用户/令牌不落库、也不产生半成品；反向亦然：动作抛错时不写审计（失败的动作不留痕）。因二者同库同事务，**不需要补偿逻辑**。**失败的动作也不得写审计**（`AC1.6` / `AC2.9`：不得产生虚假的成功记录）。
 
 ### 12.7 门户自建的并发、限流与超时（§7 的落地形态）
