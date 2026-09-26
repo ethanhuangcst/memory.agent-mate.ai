@@ -8,6 +8,26 @@
 
 ## 2026-09-26
 
+### Sprint 5 `#1`「门户镜像与编排制品」交付：构建链路 + CI + 镜像契约判定
+
+**为什么**：`#1` 是本 Sprint 最关键缺口（全仓无门户 `Dockerfile`）。开工准备的探针把判据定档后，本轮落**产物**：Dockerfile / 构建脚本 / CI / `.dockerignore`，并把「镜像契约」由人工比对升级为**机械断言**。
+
+**改了什么**：
+
+- **Dockerfile**（[`../admin_portal/Dockerfile`](../admin_portal/Dockerfile)）：三 stage —— `FROM ${UPSTREAM_IMAGE} AS upstream`（只取二进制；**最终镜像不继承其 Config**）· `node:22-bookworm AS deps`（带工具链装依赖）· `node:22-bookworm-slim` 最终。非 root **999:999**（与上游镜像对齐，实测值）· 显式 `ENTRYPOINT ["node","--import","tsx"]` + `CMD ["src/server.ts"]` · `ENV` **零 `AI_MEMORY_DB`** · `/srv/portal` 预置占位文件（让首次创建的命名卷带入 999:999 属主，否则非 root 写不进去）。
+- **实现轮暴露并订正三条规范缺陷**（[`web-portal/web-design.md`](./web-portal/web-design.md) §3.2）：① `useradd --gid 999` 前**必须** `groupadd`（干净 slim 上报 `useradd: group '999' does not exist`）；② **`COPY --from=$VAR` 不被 buildx 支持**（`variable expansion is not supported for --from`）⇒ 改**中间 stage**；③ `better-sqlite3` 是原生模块，slim 底座缺 Python 直接失败（`gyp ERR! find Python`）⇒ 需**带工具链的 deps stage**。
+- **唯一构建入口** [`../scripts/build-portal-image.sh`](../scripts/build-portal-image.sh)（`make portal-image`）：从 `upstream.lock` 注入 `IMAGE_TAG` · 强制 **buildx + `--platform linux/amd64`** · 退出码 10/20/30 · `--print-only`；产物 tag 用**专用**变量 `PORTAL_BUILD_TAG`（实测复用 `PORTAL_IMAGE` 会被 shell/compose 残值污染）。
+- **CI** [`../../.github/workflows/portal-image.yml`](../../.github/workflows/portal-image.yml)：构建 → 推 GHCR（`:<tag>` + `:<tag>-sha-<7位>`）→ 跑**同一探针**自检。构建配方与判据**都不复制**（调脚本、调探针）。
+- **A′ 运行时口径**：`tsx` 由 devDependencies 提到 `dependencies`，镜像走 `npm ci --omit=dev` —— **0 处产品代码改动**、省掉 ~112 MB 测试/类型工具；离线回归 **371 passed / 35 files** 零变化。
+- **探针补强**：[`../probes/portal-image-verdict-probe/`](../probes/portal-image-verdict-probe/README.md) 新增 **C9**（同网络 `portainer_network`）· **C10**（共享 `/data` + 门户库**不在** `/data` 下）· **E9**（bookworm + `ca-certificates`）与**相 3 门户镜像契约 `E1–E9`**；`C5` 由断言**降级为状态记录** —— 它断言「锁文件未挂载」，而 `#17` 正要挂它 ⇒ 会**随正确实现翻转**，判据不该这样写。
+- **构建地点定档 = CI**：本机 arm64 实测 `apt` 一层 **1085 s**、原生模块源码编译 **15 分钟未完成**；runner 全流程（构建+推送+自检）**≈66 s**。
+
+**CI 首跑失败与修法（留档）**：失败在「契约自检」步 —— 探针只认**独立** `docker-compose`，而 GitHub runner 只有**插件** `docker compose` ⇒ `C0a`/`C1`/`C2`/`C3` 全以 `rc=127` 失败。本地用「PATH 去掉 `docker-compose`」复现已同形（12 通过 / 4 失败）。修法：解析出「用哪条命令」（独立二进制优先、其次插件，都没有才记失败），**判据本身不变** —— 判据的对象是「`config` 能否解析」，与实现形态无关。
+
+**验证**：CI run **`36226846982` success**（三相全判 ⇒ 探针 `rc=0`）· 本机探针 **22 PASS / 0 FAIL / 1 未判** · `make doc-links` 零悬空 · `make deploy-doc-audit` 9/0 退 0 · `make attestation-paths` ✓ · `make preflight-test` 5/0 · `make secret-check` ✓ · `tsc --noEmit` 0 错 · 离线 371/35 · `git diff --check` 干净。
+
+**边界**：`#1` 标 **`Implemented`**（判据全绿；按 DoD 待用户确认「可用」后置 `Done`）· `upstream.lock` 的**挂载与读取位**归 `#17` · `healthcheck` 归 `#2` · GHCR 包默认私有 ⇒ 拉取凭据登记进 [`deployment.md`](./deployment.md) §1.1（归 `#10`）· 本机 arm64 **不再作为构建路径**。
+
 ### Sprint 5 `#1`「门户镜像与编排制品」开工准备：判据可行性探针 + 判据定档 6 条
 
 **为什么**：按 [`ADR-017`](./adr/ADR-017-complexity-probe-before-real-build.md)（先探针后施工），`#1` 是本 Sprint 的**最关键缺口**（全仓无门户 `Dockerfile`），其验收条件里有两类「不实测就只能靠人工比对」的东西 —— 编排能否自检、镜像侧三项制品契约（二进制路径 / uid·gid 对齐 / 不继承 `ENTRYPOINT`·`CMD`·`ENV`）。

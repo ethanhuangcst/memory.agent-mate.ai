@@ -16,7 +16,9 @@
 #
 # 备注：`.github/workflows/` 必须位于仓库根（GitHub 平台强制），是资产隔离判据中
 #       继 `.gitignore` / `Makefile` 之后的第三个根目录例外，已在
-#       memory.agent-mate.ai/specs/asset_isolation_plan.md §2 显式记录。
+#       memory.agent-mate.ai/specs/architecture.md §5 显式记录。
+#       （2026-09-26 订正：原写 asset_isolation_plan.md §2 —— 该文件已于 specs 整合时并入 architecture.md §5；
+#         `.yml` 与 `.lock` 一样不在 `make doc-links` 的扫描面内，故这类悬空引用长期未被护栏发现。）
 # =============================================================================
 name: upstream-track
 

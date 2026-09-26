@@ -84,25 +84,34 @@
 
 > **制品契约的真源在上游侧**：[`../mcp/mcp-design.md`](../mcp/mcp-design.md) §5.6.3（二进制路径 `/usr/local/bin/ai-memory` · 底座 `bookworm` 系 + `ca-certificates` · 容器用户 `aimem` 且 **UID/GID 必须对齐**）。本节不再复制该表。
 
-### 3.2 门户构建（关键只有一行）
+### 3.2 门户构建（本体 = `admin_portal/Dockerfile`；本节登记契约与定档）
+
+> **真相源与入口**：Dockerfile 本体在 [`../../admin_portal/Dockerfile`](../../admin_portal/Dockerfile)；**唯一构建入口** [`../../scripts/build-portal-image.sh`](../../scripts/build-portal-image.sh)（`make portal-image`）—— 从 `upstream.lock` 注入 `IMAGE_TAG`、强制 **buildx + `--platform linux/amd64`**、退出码 `10`/`20`/`30`。**不要手敲 `docker build`**（见下第 ② 条）。CI：[`../../../.github/workflows/portal-image.yml`](../../../.github/workflows/portal-image.yml) 构建 → 推 GHCR → 跑同一探针自检。
 
 ```dockerfile
-FROM --platform=linux/amd64 node:22-bookworm-slim   # 上游镜像单平台 ⇒ 构建平台钉 amd64
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
- && rm -rf /var/lib/apt/lists/*
-RUN useradd --system --create-home --shell /bin/sh --uid 999 --gid 999 aimem  # 必须与镜像内 aimem 对齐
-COPY --from=ghcr.io/alphaonedev/ai-memory:<tag> \
-     /usr/local/bin/ai-memory /usr/local/bin/ai-memory
-# <tag> 由 upstream.lock 的 IMAGE_TAG 注入（构建参数），不手写
+# 关键结构（三 stage；全文见 admin_portal/Dockerfile）
+FROM ${UPSTREAM_IMAGE} AS upstream      # 只为取二进制；最终镜像**不继承**它的 Config
+FROM node:22-bookworm AS deps           # 带工具链：better-sqlite3 是原生模块
+COPY package.json package-lock.json ./ ; RUN npm ci --omit=dev
+FROM node:22-bookworm-slim
+RUN apt-get install -y --no-install-recommends ca-certificates
+RUN groupadd --system --gid 999 aimem && useradd --system --create-home --shell /bin/sh --uid 999 --gid 999 aimem
+COPY --from=upstream /usr/local/bin/ai-memory /usr/local/bin/ai-memory
+COPY package.json package-lock.json ./ ; COPY --from=deps /app/node_modules ./node_modules
+COPY src ./src ; COPY assets ./assets
+ENTRYPOINT ["node","--import","tsx"] ; CMD ["src/server.ts"]   # 显式声明（base 镜像自带 node 的入口）
 ```
 
-- `<tag>` **不得手写**：构建时注入，使门户与部署制品天然同版本（[`../adr/ADR-004`](../adr/ADR-004-version-contract-single-source-of-truth.md) 单一真相源）
-- 门户镜像**不继承**上游的 `ENTRYPOINT`/`CMD`/`ENV`（避免被上游默认值静默影响）—— 契约依据 [`../mcp/mcp-design.md`](../mcp/mcp-design.md) §5.6.3
-- **构建配方定档（2026-09-26 `#1` 开工准备实测；探针 [`../../probes/portal-image-verdict-probe/`](../../probes/portal-image-verdict-probe/README.md) 20 PASS / 0 FAIL / 1 未判）**：
-  - **必须钉 `linux/amd64` 且需要 BuildKit（`buildx`）**：arm64 宿主 + legacy builder 下 `COPY --from=<上游镜像>` 会**按宿主平台**解析并失败（`invalid from flag value … no match for platform`），退到 `docker cp` 等价路径后仍在**导出**阶段失败 ⇒ 构建放 **amd64 机器 / CI / 服务器侧**，或本机先装 `buildx`。
-  - **必须显式声明自己的 `ENTRYPOINT` / `CMD`**：上游实测 `Entrypoint=["ai-memory"]` / `Cmd=["serve","--host","0.0.0.0"]`，而 base 镜像 `node:22-bookworm-slim` 自带 `docker-entrypoint.sh` / `node` ⇒「不继承上游」**不等于**不用声明。
-  - **「零继承」的判据形式（已定形）**：门户镜像 `inspect` 的 `Env` **零 `AI_MEMORY_DB`** —— 上游实测 `Env` 含 `AI_MEMORY_DB=/data/ai-memory.db`，继承它等于让**每用户库静默指向共享主库**（RID `R1` 的形态）。
-  - **已实测可照写的值**：`aimem` 的 uid/gid = **`999:999`**（`docker run --rm --entrypoint id <img> aimem`）⇒ 上面 `--uid 999 --gid 999` 成立；`/usr/local/bin/ai-memory` 存在且 `--version` = `ai-memory 0.10.0`（末位 semver ⇄ 锁 tag）。
+- `<tag>` / `UPSTREAM_IMAGE` **不得手写**：构建时注入，使门户与部署制品天然同版本（[`../adr/ADR-004`](../adr/ADR-004-version-contract-single-source-of-truth.md) 单一真相源）。
+- 门户镜像**不继承**上游的 `ENTRYPOINT`/`CMD`/`ENV` —— 契约依据 [`../mcp/mcp-design.md`](../mcp/mcp-design.md) §5.6.3；**判据形式**：门户镜像 `inspect` 的 `Env` **零 `AI_MEMORY_DB`**（上游实测 `Env` 含 `AI_MEMORY_DB=/data/ai-memory.db`，继承它等于让**每用户库静默指向共享主库** = RID `R1` 的形态）。
+- **实现轮实测订正三处（2026-09-26 `#1`；三处都是「照本节原先那段简写做会直接失败」）**：
+  1. **`useradd --gid 999` 之前必须先 `groupadd --system --gid 999 aimem`** —— 干净的 `node:22-bookworm-slim` 上直接跑报 `useradd: group '999' does not exist`。
+  2. **`COPY --from=$VAR` 不被 buildx 支持**（`variable expansion is not supported for --from`）⇒ 必须用**中间 stage**（`FROM ${UPSTREAM_IMAGE} AS upstream` + `COPY --from=upstream …`）。最终镜像仍**零继承**（`COPY` 只搬文件；探针 `D5` 的对照实验实证）。
+  3. **原生模块需要工具链 stage**：`better-sqlite3` 取不到预编译包时回落 `node-gyp rebuild`，slim 底座因**缺 Python** 直接失败（`gyp ERR! find Python`）⇒ 用带工具链的 `node:22-bookworm` 做 `deps` stage（同时也避开了在模拟 amd64 下 `apt-get install` 工具链的漫长耗时）。
+- **构建地点定档 = CI（GitHub Actions，原生 amd64）**：本机 arm64 实测 `apt` 一层 **1085 s**、原生模块源码编译 **15 分钟未完成**；runner 全流程（构建 + 推 GHCR + 契约自检）**≈66 s**。本机装 `buildx` 后可自建（`make portal-image`），但不作为迭代路径。
+- **运行时口径 A′**：`tsx` 归 **dependencies**（镜像 `npm ci --omit=dev` 即可跑 TS）—— 0 处产品代码改动，省掉 ~112 MB 测试/类型工具；离线回归 **371 passed / 35 files** 零变化。
+- **镜像坐标**：`ghcr.io/<owner>/memory-agent-mate-portal:<IMAGE_TAG>`（另推 `<IMAGE_TAG>-sha-<7位>`）；**包默认私有** ⇒ 服务器侧拉取需凭据（`#9`/`#10` 的部署前置）。
+- **已实测可照写的值**：`aimem` = **`999:999`** · `/usr/local/bin/ai-memory` 存在且 `--version` = `ai-memory 0.10.0`（末位 semver ⇄ 锁 tag）· 判据全表见探针 README（本机 **22 PASS / 0 FAIL / 1 未判**；CI 三相全判 ⇒ `rc=0`）。
 
 ### 3.3 门户代码里的 ai-memory 知识 = 0
 
@@ -133,7 +142,7 @@ COPY --from=ghcr.io/alphaonedev/ai-memory:<tag> \
 >
 > - **① 判据形状**（四项，均须可机械判定）：`/data/users` 可写 = `isDirectory()` + `accessSync(W_OK)`；**embeddings = 一次最小调用后「非 401 且向量长度 == `1024`」** —— **不得**以「env 非空」或「调用返回成功」代替：`3.21` 实测坏 key 下上游出「线性扫描 / 无 embeddings」告警而 `tools/call` **仍然返回响应**，静默降级真实存在；版本 = 容器内 `ai-memory --version` **取末位 semver**，与 [`../../upstream.lock`](../../upstream.lock) 的 `UPSTREAM_RELEASE_TAG` **去 `v`** 后比对（`v0.10.0` ⇄ `0.10.0`）；关键校验 = `handle` 白名单 + **启动模板断言**（`src/bridge/launch-template.ts` 常量表与 [`../mcp/mcp-design.md`](../mcp/mcp-design.md) §5.6.4 逐字比对，与 `TC-M-L0-01` 同一比对体）。
 > - **② 编排不变量**：任一项 `fail` ⇒ 进程**不调用 `listen`** 且退出码非 0（`3.21` 三重证据：合法配置 ⇒ 监听 / `/data/users` 不可写 ⇒ 退出码 `1` / 退出后端口未监听）；**`deferred` 不得当作 pass**（`3.21` 实证：`pass=6 deferred=3 fail=0` 时门户照常启动 —— 这正是本行要收口的缺口）。
-> - **③ 锁侧输入的归属**：`upstream.lock` **未挂进门户容器**（`deploy/portal.compose.yml` 的 volumes 无此项）⇒「构建期注入 `IMAGE_TAG` + 挂载锁文件」属**镜像侧落地（Sprint 5）**；本行交付**判据 + 读取位 + 失败路径**。
+> - **③ 锁侧输入的归属**：拆成两半 —— **「构建期注入 `IMAGE_TAG`」已随 `#1` 落地**（[`../../scripts/build-portal-image.sh`](../../scripts/build-portal-image.sh) 从 `upstream.lock` 注入，探针 `D4`/`E6` 已判）；**「挂载锁文件 + 读取位」归 `#17`**（启动自检实现轮）—— 现状：`upstream.lock` **未挂进** `deploy/portal.compose.yml` 的 volumes（探针 `C5` 以 `info` 记录该状态，**不写成断言**：它会在 `#17` 正确落地时必然反红）。
 > - **④ 第 ② 项的通路选择（**已定档 2026-09-26 用户拍板：直连 MaaS**）**：门户侧目前**没有** embeddings 客户端（`admin_portal/src/**` 无 MaaS HTTP 客户端）⇒ **直连通路必须新增配置键**（MaaS `base_url` + 模型名；key 复用 `portal.env` 的 `DASHSCOPE_API_KEY`）—— 新增键必须同步 [`../deployment.md`](../deployment.md) §12.5.4 的门户 env 真源表与 [`../../deploy/portal.compose.yml`](../../deploy/portal.compose.yml)，否则 `deploy-guide-audit` 的 `A2`（未登记的新键）会转红。**选它的理由**：走 spawn 上游判维度会**假绿** —— `3.21` 实证坏 key 下上游只出「线性扫描 / 无 embeddings」告警而 `tools/call` **仍然返回响应**（判据必须同时断「可达」与「向量长度 == 1024」，且不经上游降级路径）。原候选通路（唯一通路 = spawn 上游）**未被采纳**，实现轮按 `#17` 的拍板结论施工。
 > - **⑤ 编排侧缺口（登记）**：`deploy/portal.compose.yml` **无 `healthcheck`、无 `depends_on`**，且 `/healthz` 固定返回 `ok:true`（**不反映自检结论**）⇒「通过后才对外服务」目前只由「进程内自检不过就不 listen」兑现；`restart: unless-stopped` 与「自检失败退出」的组合需在**实现轮**定策略（避免失败重启循环）。
 > 另两条**制品约束**见 §3.2：底座必须 `bookworm` 系 + `ca-certificates`；镜像内 `aimem` 必须显式 `--uid 999 --gid 999`（否则 SSH 路径写不进门户建的目录）。
