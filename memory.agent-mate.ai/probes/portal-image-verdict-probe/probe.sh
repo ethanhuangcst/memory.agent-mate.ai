@@ -485,15 +485,21 @@ else
     check E8 "静态资源在位（/app/assets/portal.css —— compose 的 PORTAL_STATIC_ROOT 指向它）" 1 "${P_CSS}"
   fi
 
-  # E9 底座契约：bookworm 系 + ca-certificates 在位（门户要出站访问私有 MaaS 的 HTTPS 与 CF 的 JWKS）
+  # E9 底座契约：bookworm 系 + ca-certificates **在位**（门户要出站访问私有 MaaS 的 HTTPS 与 CF 的 JWKS）
+  # **判据锚在语义、不在形态**（2026-09-26 订正）：原判据用 `dpkg -s ca-certificates` 查**包数据库** ——
+  # 那判的是「包管理元数据」而不是「证书可用」。Sprint 5 `#4` 按 S13 `AC13.3` ③ **移除了 dpkg** ⇒ 该
+  # 判据随之失效（CI run `36248576689` 的「契约自检」步即因此转红 —— **跨行耦合的正确处置是改判据，
+  # 不是把 dpkg 装回来**）。现在直接断 **CA 束文件**：存在、非空、且含 PEM 证书 —— 这才是「出站 TLS
+  # 有根可验」的实质。
   P_OS="$(docker run --rm --entrypoint /bin/cat "${PORTAL_TAG}" /etc/os-release 2>&1 | tr '\n' ' ')"
-  P_CA="$(docker run --rm --entrypoint /usr/bin/dpkg "${PORTAL_TAG}" -s ca-certificates 2>&1 | grep -m1 'install ok installed')"
-  if echo "${P_OS}" | grep -q "bookworm" && [ -n "${P_CA}" ]; then
-    check E9 "底座为 bookworm 系且 ca-certificates 已装（#1 验收条件里的底座契约）" 0 \
-      "$(echo "${P_OS}" | grep -o 'VERSION_CODENAME=[a-z]*') · ${P_CA}"
+  P_CA="$(docker run --rm --entrypoint /bin/cat "${PORTAL_TAG}" /etc/ssl/certs/ca-certificates.crt 2>/dev/null | grep -c 'BEGIN CERTIFICATE' || true)"
+  P_CA="${P_CA:-0}"
+  if echo "${P_OS}" | grep -q "bookworm" && [ "${P_CA}" -ge 1 ]; then
+    check E9 "底座为 bookworm 系且 **CA 束在位**（`/etc/ssl/certs/ca-certificates.crt` 含 PEM 证书；#1 验收条件里的底座契约）" 0 \
+      "$(echo "${P_OS}" | grep -o 'VERSION_CODENAME=[a-z]*') · PEM 证书 ${P_CA} 张"
   else
-    check E9 "底座为 bookworm 系且 ca-certificates 已装（#1 验收条件里的底座契约）" 1 \
-      "os-release=${P_OS:0:70} · dpkg=${P_CA:-未装}"
+    check E9 "底座为 bookworm 系且 **CA 束在位**（`/etc/ssl/certs/ca-certificates.crt` 含 PEM 证书；#1 验收条件里的底座契约）" 1 \
+      "os-release=${P_OS:0:70} · PEM 证书 ${P_CA} 张"
   fi
 fi
 
