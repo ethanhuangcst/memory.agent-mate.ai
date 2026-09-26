@@ -223,10 +223,15 @@ if [ -z "${JWKS}" ]; then
   finish
 fi
 USERS_DIR="${TMP}/users"; mkdir -p "${USERS_DIR}"; chmod 1777 "${USERS_DIR}"
+# **必要挂载必须齐**（AC13.3 的原文就是「根文件系统**除必要挂载外**为只读」）：门户要写
+# `/srv/portal`（门户库 —— compose 里是 `portal_data` 命名卷）与 `/tmp`（tmpfs）。首版漏了前者 ⇒
+# CI 首跑转红（**探针自伤**：夹具不完整会把「产品不可行」误报成结论 —— 实测依据见 change-log 同日小节）。
+PDPORTAL_DIR="${TMP}/srv-portal"; mkdir -p "${PDPORTAL_DIR}"; chmod 1777 "${PDPORTAL_DIR}"
 docker rm -f "${NAME}" >/dev/null 2>&1 || true
 docker run -d --name "${NAME}" \
   --read-only --tmpfs /tmp:mode=1777 \
   -v "${USERS_DIR}:/data/users" \
+  -v "${PDPORTAL_DIR}:/srv/portal" \
   -v "${PRODUCT}/upstream.lock:/app/upstream.lock:ro" \
   -e PORTAL_ENV=development \
   -e PORTAL_ADMIN_HOST=localhost \
