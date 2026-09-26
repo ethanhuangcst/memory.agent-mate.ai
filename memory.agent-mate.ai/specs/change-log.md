@@ -23,7 +23,7 @@
 - **探针自伤第三次（同族）**：[`../probes/portal-artifact-contract-probe/`](../probes/portal-artifact-contract-probe/README.md) 的 `V2` 又把「**现状**无自身版本读取位」写进断言 ⇒ 本批落地后必然假红。已改为**合成样本对照**，并新增 **`Q3`**（两侧输入面**齐备**的契约断言）承接「现状」的角色。
 - **口径**：`A2c` 的存在使「部署侧声明了但代码从不读」的键**首次有了判据** ⇒ 本轮 `PORTAL_ROOT` 的删除有了**守门人**（白名单当前为空）。
 
-**验证（本机）**：离线 **379 passed / 35 files**（+8 用例）· 覆盖率 **93.70 / 87.30 / 97.87 / 94.80**（`selfcheck.ts` 行覆盖 **100%**）· `tsc --noEmit` 0 错 · `make deploy-doc-audit` **12/0 退 0** · `#2` 探针 **12 PASS / 0 FAIL / 1 未判** · `make doc-links` 零悬空 · `make secret-check` ✓ · `git diff --check` 干净。**CI 复跑（镜像侧 `P11` 与相 3）待确认** —— 这两项需要真镜像。
+**验证（本机）**：离线 **379 passed / 35 files**（+8 用例）· 覆盖率 **93.70 / 87.30 / 97.87 / 94.80**（`selfcheck.ts` 行覆盖 **100%**）· `tsc --noEmit` 0 错 · `make deploy-doc-audit` **12/0 退 0** · `#2` 探针 **12 PASS / 0 FAIL / 1 未判** · `make doc-links` 零悬空 · `make secret-check` ✓ · `git diff --check` 干净。**CI 复跑（镜像侧，run `36241730842` success）**：`#1` 探针 **31/0/0** · 运行时冒烟 **19/0/0**（**含新增 `P11`** —— 该断言在容器内**真跑过**，且镜像**确实烘入了**版本）· `#2` 探针 **17/0/0**（含 `Q3`）。
 
 **边界**：不改 `upstream.lock` · 不改 `deploy/portal.compose.yml`（第 1 批已挂锁）· **未**改第 1 批的 `healthcheck` / `restart` 取值 · 开发姿态的 `deferred` 是**刻意**的（本地不挂锁 ⇒ 记「未判」而非记通过）· `#2` 暂留 `WIP`（待 CI 复跑确认后置 `Done`）。
 
