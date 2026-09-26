@@ -8,6 +8,23 @@
 
 ## 2026-09-26
 
+### Sprint 5 `#4` 本体交付：容器最小攻击面（`ToDo` → `Done`）
+
+**为什么**：判据可行性上一轮已定档（只读根**可行性**、资源基线、包管理能力缺口都在手上）⇒ 本轮按 S13 `AC13.1`–`AC13.3` 落地，并把探针从「现状记录」升为「**契约断言**」（落地之后就该被改坏即红）。
+
+**改了什么**：
+
+- **compose 加固**（[`../deploy/portal.compose.yml`](../deploy/portal.compose.yml)）：`read_only: true` + `tmpfs: /tmp:mode=1777`（**可写的必要挂载** = 两个命名卷 `/data` 与 `/srv/portal`；`config.toml` / `upstream.lock` 只读）· `cap_drop: ALL` + `security_opt: no-new-privileges:true`（互补：前者管当前进程，后者管「镜像残留 setuid」那条路）· `mem_limit: 512m` + `pids_limit: 128`。**取值全部来自实测**（相 3 `T5`：空闲 **71.54 MiB** · `pids.current=21`；会话上限每 key 2 / 全局 4 · ~27 MiB/会话 ⇒ 峰值 ≈180 MiB、2.8× 余量）。
+- **去包管理能力**（[`../admin_portal/Dockerfile`](../admin_portal/Dockerfile)）：装完 `ca-certificates` 即移除 `apt` / `dpkg` 的二进制与元数据。**不走 `apt-get purge`** —— dpkg 是 Debian 的 essential 包，purge 会被它自己拦下，而目标只是「镜像里不存在可用的包管理能力」。**保留 `sh`**（`healthcheck` 的 `CMD-SHELL`、运维排障、`docker exec` 探活都要它）。
+- **口径订正一处**：T1（威胁面 6 项措施）里「无 **shell**/包管理器」⇒「**无包管理器**」；判据固化为「包管理器全空 **且** `sh` 仍在」。**替代方案已评估并否决**：把 `healthcheck` 改成 exec 形式本可连 `sh` 一起不要，但会一并失去运维探活与 `#1` 冒烟的 `--entrypoint sh` 能力 —— 收益（少一个 `dash`）远小于代价。
+- **探针接管现状**：`T4`（镜像含包管理能力）由 `info` **升为契约断言** · 新增编排契约断言 **`Q1`**（只读根配齐 + 限额齐备）与 **`Q2`**（权限加固齐备）+ 判据自检 **`S6`** · `T3` 的夹具升级为「**按 compose 的最终加固设置**起容器」（`--read-only --tmpfs --cap-drop ALL --security-opt no-new-privileges --memory 512m --pids-limit 128`）⇒ 断言的是「**我们发出去的那套设置**跑得起来」，而不只是「只读根理论上可行」。
+- **🔗 跨行耦合同批修正（本轮最值得记住的一条）**：`#4` 移除 dpkg ⇒ **`#1` 探针的 `E9`**（「底座 bookworm 系 + ca-certificates 已装」）**立刻失效** —— 它原用 `dpkg -s ca-certificates` 读**包数据库**（**形态**），CI run `36248576689` 的「契约自检」步即因此转红。**处置 = 改判据，不是把 dpkg 装回来**（装回来等于放弃 `AC13.3` ③）：`E9` 现直接断 `/etc/ssl/certs/ca-certificates.crt` **在位且含 PEM 证书**（**语义**：「出站 TLS 有根可验」）。**一般规则**：判据若依赖别的行的**实现细节**（包数据库、某二进制存在、某条日志措辞），那细节被改时判据必须**同批复核** —— 已记进 `#1` 探针 README 的坑 11。
+- **文档同步**：[`deployment.md`](./deployment.md) §12.5 新增「门户 stack 的攻击面加固」条（含**运维影响**：容器内**没有**包管理器、`sh` 保留、临时文件只在 `/tmp` 重启即失）· [`web-portal/web-design.md`](./web-portal/web-design.md) T1 六项措施逐项标注落地状态并订正「无 shell」口径 · `#4` 行 · 探针 README。
+
+**验证**：CI run **`36252233989` success** ⇒ **四条判据步全绿**：`#1` 探针 **31/0/0**（`E9` 改判后）· 运行时冒烟 **19/0/0** · `#2` 探针 **17/0/0** · `#4` 探针 **17/0/0**。落地后的**权威实测值**：`T4` 命中 **只剩 `/usr/bin/sh`**（`apt` / `apt-get` / `dpkg` 全无 ⇒ `AC13.3` ③ 闭合）· `T3` 按最终加固设置 ⇒ `/healthz` **200** · `portal_listening=1` 次 · 自检全过 · `Q1` / `Q2` 合格。本机：探针 **12/0/1** · `docker-compose config` **rc=0** · `make doc-links` 零悬空 · `make deploy-doc-audit` **12/0 退 0** · `make secret-check` ✓ · `git diff --check` 干净。
+
+**边界**：**不改产品代码逻辑**（只动 `Dockerfile` 的包与证书处理）· **不改 `upstream.lock`** · **未**在生产机复核限额数字（**唯一待办**：CI runner 内存总量 ≠ 生产机）· 主 stack 的同类加固**不在本行**（登记备查，归属 `#10`/后续）。
+
 ### Sprint 5 `#4`「deploy:容器攻击面」开工准备：判据可行性探针（只探不造）
 
 **为什么**：按 [`ADR-017`](./adr/ADR-017-complexity-probe-before-real-build.md) 先出判据 —— `#4` 的三条 AC（S13）此前**从未被机械判定过**：「无 docker socket」只有一句人读的声明，**只读根**与**资源限额**连制品里都没有键，而「镜像不含包管理能力」在底座里**注定不合规**（需要先知道**怎么判**、以及**删得掉吗**）。

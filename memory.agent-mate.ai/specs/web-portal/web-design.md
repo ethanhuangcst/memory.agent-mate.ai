@@ -264,7 +264,7 @@ ENTRYPOINT ["node","--import","tsx"] ; CMD ["src/server.ts"]   # 显式声明（
 
 | # | 威胁 | 缓解 |
 |---|---|---|
-| T1 | **门户被攻破 = 全部用户记忆泄露** | 门户是唯一能触及所有库的组件，必须最小化：① 无 docker socket（D1=β′）② 无 shell/包管理器 ③ 最小依赖 ④ 只读根文件系统（除必要挂载）⑤ 只以 `aimem` 运行 ⑥ 容器资源限额 |
+| T1 | **门户被攻破 = 全部用户记忆泄露** | 门户是唯一能触及所有库的组件，必须最小化：① 无 docker socket（D1=β′）② **无包管理器**（原文「无 shell/包管理器」—— **2026-09-26 订正**：`sh` **保留**，因为 compose 的 `healthcheck` 用 `CMD-SHELL` 需要它，且运维排障 / `docker exec` 探活都依赖它；判据已固化为「包管理器全空 **且** `sh` 仍在」，见 [`../../probes/container-attack-surface-probe/`](../../probes/container-attack-surface-probe/README.md) 的 `pkgmgrs_ok`）③ 最小依赖 ④ 只读根文件系统（除必要挂载）⑤ 只以 `aimem` 运行 ⑥ 容器资源限额。**落地状态（Sprint 5 `#4`，2026-09-26）**：①–⑥ **全部落地且各有判据** —— ① compose 0 处 socket 引用 + 容器内不存在 `/var/run/docker.sock`；② 镜像内 `apt`/`dpkg` 已移除（`sh` 按上述保留）；③ 运行期依赖 = `node` + `node_modules`（`--omit=dev`）+ 上游二进制；④ `read_only: true` + `tmpfs: /tmp`（**必要挂载清单已被 CI 实证**：`/data` 与 `/srv/portal` 为可写命名卷，`config.toml` 与 `upstream.lock` 只读）；⑤ `USER 999:999` + `cap_drop: ALL` + `no-new-privileges:true`；⑥ `mem_limit: 512m` + `pids_limit: 128`（取值依据 = 相 3 实测基线）。判据真源 [`web-stories.md`](./web-stories.md) S13，证据与未决项见该探针 README。 |
 | T2 | 令牌泄露 | 只存 sha256；常时比较；可吊销；`memo_` 前缀便于扫查；`last_used_at` 异常可发现 |
 | T3 | **路径穿越**（handle 拼进路径） | 正则白名单 + 值只取门户 DB + 二次断言 |
 | T4 | 跨用户串号 | S4 断言 + 每会话独立子进程 + 禁跨用户复用 |

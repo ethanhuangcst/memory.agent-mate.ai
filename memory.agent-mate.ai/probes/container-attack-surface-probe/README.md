@@ -20,38 +20,40 @@ PORTAL_BUILD_TAG=<name:tag> bash memory.agent-mate.ai/probes/container-attack-su
 
 ## 本机实测结论（2026-09-26）
 
-**本机**（无 linux/amd64 门户镜像）：**9 PASS / 0 FAIL / 1 未判 · `rc=30`**（未判 1 项 = 相 3 的前置）。
-**CI**（run **`36247341377`** success）：**13 PASS / 0 FAIL / 0 未判** —— 相 3 真跑（接入后的**前两轮红都是探针自伤**，见下「踩坑」4/5，非产品问题）。
+**本机**（无 linux/amd64 门户镜像）：**12 PASS / 0 FAIL / 1 未判 · `rc=30`**（未判 1 项 = 相 3 的前置）。
+**CI（`#4` 本体落地后，run `36252233989` success）：17 PASS / 0 FAIL / 0 未判** —— 相 3 真跑，且 `T3` 用的是 **compose 的最终加固设置**。接入过程**前两轮红都是探针自伤**（见下「踩坑」4/5），本轮还有一次**跨行耦合**（见「三处缺口」第 3 条的 `E9` 修正）。
 
 ### 硬数据
 
 | 来源 | 事实 | 用途 |
 |---|---|---|
-| **相 3 `T3`（CI，权威）** | **只读根可行**：`--read-only` + 必要挂载（`/srv/portal` **rw** · `/tmp` **tmpfs** · `/data/users` rw · `upstream.lock` ro）⇒ `/healthz` **200** · `portal_listening=1` 次 · 自检全过 | AC13.3 ① **可落地** ⇒ 施工按该挂载集合配 `read_only: true` + `tmpfs` 即可（**待拍板 ② 由此结案**） |
-| **相 3 `T5`（CI，权威）** | 资源基线（**空闲态**）：内存 **71.54 MiB** · cgroup `pids.current=21` | AC13.3 ② 的限额取值依据；**含会话时更高**（`4.1` 实测 ~27 MiB/会话、全局 4 路）⇒ `pids_limit` 需覆盖 node 线程 + 4 个上游子进程 + 余量 |
+| **相 3 `T3`（CI，权威）** | **只读根可行**：`--read-only` + 必要挂载（`/srv/portal` **rw** · `/tmp` **tmpfs** · `/data/users` rw · `upstream.lock` ro）⇒ `/healthz` **200** · `portal_listening=1` 次 · 自检全过 | AC13.3 ① **可落地** ⇒ 施工按该挂载集合配 `read_only: true` + `tmpfs`（**待拍板 ② 由此结案**）。`#4` 本体落地后该用例升级为「**按 compose 的最终加固设置**起容器」（再加 `--cap-drop ALL --security-opt no-new-privileges --memory 512m --pids-limit 128`）⇒ 断言的是「我们发出去的那套设置跑得起来」 |
+| **相 3 `T5`（CI，权威）** | 资源基线（**空闲态**）：内存 **71.54 MiB** · cgroup `pids.current=21` | AC13.3 ② 的限额取值依据 ⇒ 落成 `mem_limit: 512m`（峰值 ≈71.5 + 4×27 ≈ 180 MiB，2.8× 余量）与 `pids_limit: 128`；**含会话时更高**（`4.1` 实测 ~27 MiB/会话、全局 4 路） |
 | 相 3 `T1` / `T2`（CI，权威） | 容器内 `uid=999` ✓ · `/var/run/docker.sock` **不存在** ✓ | AC13.2 / AC13.1 的**容器侧已合规** |
-| 相 2（本机真跑，底座 `node:22-bookworm-slim`） | 包管理能力命中 **`/usr/bin/apt-get` · `/usr/bin/apt` · `/usr/bin/dpkg` · `/usr/bin/sh`** | **AC13.3 第三条当前不合规**（最终镜像 = 底座 + `ca-certificates` + COPY ⇒ 不会自动变「更小」） |
+| 相 2（本机真跑，底座 `node:22-bookworm-slim`） | **施工前**：包管理能力命中 `/usr/bin/apt-get` · `/usr/bin/apt` · `/usr/bin/dpkg`（底座自带 ⇒ 最终镜像默认也带） | AC13.3 ③ 的**缺口**来源 ⇒ `#4` 本体在 `Dockerfile` 里移除之（保留 `sh`） |
 | Dockerfile（静态） | `USER 999:999` ✓（AC13.2 的镜像侧；uid/gid 已由 `#1` 探针 `E4`/`E5` 实证） | 已判 |
 
 ### 判据定档（S13 三条 AC → 判据形状与现状）
 
 | AC | 判据形状 | 现状 |
 |---|---|---|
-| **AC13.1** 无容器编排能力 | **两层**：compose 层 = 非注释行零 `docker.sock` / `/var/run/docker`；容器层 = 容器内**不存在** `/var/run/docker.sock`（`TC-P-L1-08` 的容器侧） | compose **0 处** ✓（合规）· 容器侧待相 3 |
-| **AC13.2** 非特权用户运行 | **两层**：compose 层 = 零 `privileged: true` / `pid: host` / `network_mode: host` / `userns_mode: host` / `cap_add`；容器层 = `id -u != 0` | compose **0 处** ✓ · Dockerfile `USER 999:999` ✓ · 容器侧待相 3 |
-| **AC13.3** 最小依赖与资源限额 | **三条**：① `read_only: true` **且**给出可写的必要挂载（`tmpfs`）—— 只看 `read_only` 会**假绿**；② `mem_limit` 与 `pids_limit` **二者齐备**才算；③ 容器内包管理能力集合**只剩 `/bin/sh`**（`apt-get`/`apt`/`dpkg`/`apk`/`rpm`/`yum`/`dnf` 全空；**不能把 `sh` 一起删** —— healthcheck 的 `CMD-SHELL` 依赖它） | ① **未配齐 ✗** ② **未配齐 ✗** ③ **不合规 ✗**（底座带 apt/dpkg） |
+| **AC13.1** 无容器编排能力 | **两层**：compose 层 = 非注释行零 `docker.sock` / `/var/run/docker`；容器层 = 容器内**不存在** `/var/run/docker.sock`（`TC-P-L1-08` 的容器侧） | compose **0 处** ✓ · 容器内不存在 ✓（相 3 `T2`） |
+| **AC13.2** 非特权用户运行 | **两层 + 加固侧**：compose 层 = 零 `privileged: true` / `pid: host` / `network_mode: host` / `userns_mode: host` / `cap_add`；容器层 = `id -u != 0`；加固 = `cap_drop: ALL` **且** `no-new-privileges:true`（互补，判据要求**二者齐备**） | compose **0 处** ✓ · `USER 999:999` ✓ · 容器内 `uid=999` ✓（相 3 `T1`）· 加固已配齐 ✓ |
+| **AC13.3** 最小依赖与资源限额 | **三条**：① `read_only: true` **且**给出可写的必要挂载（`tmpfs`）—— 只看 `read_only` 会**假绿**；② `mem_limit` 与 `pids_limit` **二者齐备**才算；③ 容器内包管理能力集合**只剩 `/bin/sh`**（`apt-get`/`apt`/`dpkg`/`apk`/`rpm`/`yum`/`dnf` 全空；**不能把 `sh` 一起删** —— healthcheck 的 `CMD-SHELL` 依赖它） | ① 已配齐 ✓ ② 已配齐 ✓（`512m` / `128`）③ 已合规 ✓（镜像内 apt/dpkg 已移除、`sh` 保留）—— 三者均由 `Q1` 与相 3 `T4` **断言** |
 
-判据可行性由 **`S1`–`S5` 五组正/反对照**证明（样本全部**合成**，不拿制品现状当样本）：socket 命中/不命中 · 特权键命中/不命中 · 只读根**三态**（只读+tmpfs / 只读无 tmpfs / 无只读）· 限额「配一半不算」· 包管理能力「含 apt 不合格 · 只剩 sh 合格 · **空输出不合格**」。
+判据可行性由 **`S1`–`S6` 六组正/反对照**证明（样本全部**合成**，不拿制品现状当样本）：socket 命中/不命中 · 特权键命中/不命中 · 只读根**三态**（只读+tmpfs / 只读无 tmpfs / 无只读）· 限额「配一半不算」· 包管理能力「含 apt 不合格 · 只剩 sh 合格 · **空输出不合格**」· 权限加固「`cap_drop` 与 `no-new-privileges` 二者齐备才算」。
 
-## 三处缺口（登记）
+## 三处缺口（**已随 `#4` 本体闭合**，保留登记）
 
-1. **只读根未配齐**（AC13.3 ①）：compose 无 `read_only`，也无 `tmpfs`。
-2. **资源限额未配齐**（AC13.3 ②）：compose 无 `mem_limit` / `pids_limit`。
-3. **镜像带包管理能力**（AC13.3 ③）：底座自带 `apt` / `dpkg`；**留意**：删掉它们的同时必须**保留 `sh`**（`healthcheck` 用 `CMD-SHELL`），且 `node`/`tsx`/`better-sqlite3` 的运行不受影响。
+1. ~~**只读根未配齐**（AC13.3 ①）~~ ⇒ 已落 `read_only: true` + `tmpfs: /tmp`（`Q1` 断言）。
+2. ~~**资源限额未配齐**（AC13.3 ②）~~ ⇒ 已落 `mem_limit: 512m` + `pids_limit: 128`（`Q1` 断言；取值依据见上表 `T5`）。
+3. ~~**镜像带包管理能力**（AC13.3 ③）~~ ⇒ `Dockerfile` 装完 `ca-certificates` 即移除 `apt`/`dpkg` 的二进制与元数据（`T4` 断言）；**保留 `sh`**（`healthcheck` 用 `CMD-SHELL`）。**踩到一次跨行耦合**：`#1` 探针的 `E9` 原用 `dpkg -s ca-certificates` 判「证书已装」⇒ dpkg 一移除该判据即失效（CI 红）⇒ 已把 `E9` 改判 **CA 束文件**（`/etc/ssl/certs/ca-certificates.crt` 在位且含 PEM 证书）—— **改判据，不是把 dpkg 装回来**。
 
-## 待拍板（⚠️ 施工前须定）
+## 取值与口径（`#4` 本体落地后）
 
-- **① 资源限额的取值**：基线已实测（相 3 `T5`：**空闲 71.54 MiB · `pids.current=21`**）⇒ 待定的是**乘数与余量**：内存上限 = 基线 + 全局 4 路会话（~27 MiB/会话，取自 `4.1`/`3.17`）× 安全系数；`pids_limit` = node 线程 + 最多 4 个上游子进程 + 余量。**注意**：CI runner 的内存总量（15.61 GiB）与生产机不同，**上限取值要按生产机定**，不能用 runner 的数字直接套。
+- **① 资源限额 —— 已取值，待生产机复核**：`mem_limit: 512m`（基线 71.54 MiB + 全局 4 路会话 × ~27 MiB ≈ 180 MiB ⇒ **2.8× 余量**）· `pids_limit: 128`（覆盖 node 主进程线程 + 4 个上游子进程及其线程 + 余量）。**唯一待办**：CI runner 的内存总量（15.61 GiB）≠ 生产机 ⇒ 换机后复核这两个数字并同批更新 compose 注释。
+- **③ 包管理能力 —— 已按「删」处置，但 AC 措辞订正一处**：删除可行且已被 → `T4` **断言**；**但 `sh` 必须保留**（compose 的 `healthcheck` 用 `CMD-SHELL`，运维排障与 `docker exec` 探活也依赖它）⇒ T1 的「无 **shell**/包管理器」订正为「**无包管理器**」，判据固化为「包管理器全空 **且** `sh` 仍在」。**替代方案已评估并否决**：把 `healthcheck` 改成 exec 形式（`CMD`）本可连 `sh` 一起不要，但会一并失去运维探活与 `#1` 冒烟的 `--entrypoint sh` 能力 —— 收益（少一个 `dash`）远小于代价。
+
 - **② 只读根的可写点白名单 —— 已结案（CI `T3` 实证可行）**：AC13.3 的原文就是「根文件系统**除必要挂载外**为只读」⇒ 判据必须**连同必要挂载一起**判（否则把「夹具不完整」误报成「产品不可行」，实测已踩过一次）。**必要挂载集合（`T3` 已实证可起可服）**：`/data`（**rw**，与主 stack 共享的命名卷 —— 上游库与 `/data/users`）、`/srv/portal`（**rw**，门户库 —— compose 的 `portal_data` 卷）、`/tmp`（**tmpfs**）、`upstream.lock`（**ro**）、`config.toml`（**ro**）。**无需额外的 `HOME` 等隐藏写入点**（实测自检全过且 `portal_listening` 出现）。
 - **③ 包管理能力的处置**：删（施工）还是**改 AC**？删的话需要实证「最终镜像仍能起 + `sh` 保留 + 体积/启动不受影响」；若发现无法安全删除（例如某原生模块构建期依赖），则应把该条 AC 的口径改述为「**无凭据与无公网可达的包源**」并在 S13 里写明理由。
 

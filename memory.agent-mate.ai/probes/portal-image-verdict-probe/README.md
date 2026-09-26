@@ -76,6 +76,7 @@ PORTAL_BUILD_TAG=ghcr.io/<owner>/memory-agent-mate-portal:0.10.0 bash …/probe.
 8. **判据的调用路径本身也是判据** ⇒ D6 必须用与构建脚本同款的 `buildx + --platform + --load`。
 9. **只认一种实现** ⇒ 相 1 只认独立 `docker-compose` ⇒ CI（只有插件）rc=127；本地用「PATH 去掉 `docker-compose`」复现。（教训：判据要锚在**语义**（`config` 能否解析）上，不是某个安装形态。）
 10. **会随正确实现翻转的断言不该写成断言** ⇒ C5 原本断言「锁文件未挂载」，而 `#17` 正是要挂它 ⇒ 改为 `info` 状态记录。
+11. **跨行耦合：判据会被「别的行」改坏** ⇒ `E9` 原用 `dpkg -s ca-certificates` 判「证书已装」—— 那判的是**形态**（包数据库里的 `install ok installed`）。Sprint 5 `#4` 按 S13 `AC13.3` ③ **移除镜像内的 `apt`/`dpkg`** ⇒ `E9` 立刻失效（CI run `36248576689` 的契约自检步转红）。**处置：改判据，不是把 dpkg 装回来** —— `E9` 现直接断 `/etc/ssl/certs/ca-certificates.crt` **在位且含 PEM 证书**（这才是「出站 TLS 有根可验」）。**一般规则**：判据若依赖别的制品/行的**实现细节**（包数据库、某个二进制的存在、某条日志措辞），那细节被改时判据必须**同批复核**。
 
 ## 边界（如实登记）
 
@@ -83,4 +84,4 @@ PORTAL_BUILD_TAG=ghcr.io/<owner>/memory-agent-mate-portal:0.10.0 bash …/probe.
 - **`#1` 的产物**（`Dockerfile` / 构建脚本 / CI / `.dockerignore`）不在探针内 —— 探针只判「契约是否成立」。
 - 相 2 的 D2–D5 只在 **D1 成功且相 1 零失败**时执行（避免在坏基线上重复拉取镜像）。
 - **GHCR 包默认私有** ⇒ 服务器侧拉镜像需凭据（已登记为 `#9`/`#10` 的部署前置）；本机若要 pull 回来复跑相 3 也需登录。
-- `upstream.lock` 的**挂载与读取位**归 `#17`（启动自检实现轮），本探针只记录现状。
+- `upstream.lock` 的**挂载与读取位**归 `#2`（2026-09-26 拍板并已落地：compose 挂锁 + `own_version_matches_lock` 自检），本探针只记录现状。
