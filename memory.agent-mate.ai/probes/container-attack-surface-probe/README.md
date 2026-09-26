@@ -20,14 +20,18 @@ PORTAL_BUILD_TAG=<name:tag> bash memory.agent-mate.ai/probes/container-attack-su
 
 ## 本机实测结论（2026-09-26）
 
-**9 PASS / 0 FAIL / 1 未判 · `rc=30`**（未判 1 项 = 相 3 的前置：本机无 linux/amd64 门户镜像）。
+**本机**（无 linux/amd64 门户镜像）：**9 PASS / 0 FAIL / 1 未判 · `rc=30`**（未判 1 项 = 相 3 的前置）。
+**CI**（run **`36247341377`** success）：**13 PASS / 0 FAIL / 0 未判** —— 相 3 真跑（接入后的**前两轮红都是探针自伤**，见下「踩坑」4/5，非产品问题）。
 
 ### 硬数据
 
-| 来源 | 事实 |
-|---|---|
-| 相 2（本机真跑，底座 `node:22-bookworm-slim`） | 包管理能力命中 **`/usr/bin/apt-get` · `/usr/bin/apt` · `/usr/bin/dpkg` · `/usr/bin/sh`** ⇒ **AC13.3 第三条当前不合规**（最终镜像 = 底座 + `ca-certificates` + COPY ⇒ 不会自动变「更小」） |
-| Dockerfile（静态） | `USER 999:999` ✓（AC13.2 的镜像侧；uid/gid 已由 `#1` 探针 `E4`/`E5` 实证） |
+| 来源 | 事实 | 用途 |
+|---|---|---|
+| **相 3 `T3`（CI，权威）** | **只读根可行**：`--read-only` + 必要挂载（`/srv/portal` **rw** · `/tmp` **tmpfs** · `/data/users` rw · `upstream.lock` ro）⇒ `/healthz` **200** · `portal_listening=1` 次 · 自检全过 | AC13.3 ① **可落地** ⇒ 施工按该挂载集合配 `read_only: true` + `tmpfs` 即可（**待拍板 ② 由此结案**） |
+| **相 3 `T5`（CI，权威）** | 资源基线（**空闲态**）：内存 **71.54 MiB** · cgroup `pids.current=21` | AC13.3 ② 的限额取值依据；**含会话时更高**（`4.1` 实测 ~27 MiB/会话、全局 4 路）⇒ `pids_limit` 需覆盖 node 线程 + 4 个上游子进程 + 余量 |
+| 相 3 `T1` / `T2`（CI，权威） | 容器内 `uid=999` ✓ · `/var/run/docker.sock` **不存在** ✓ | AC13.2 / AC13.1 的**容器侧已合规** |
+| 相 2（本机真跑，底座 `node:22-bookworm-slim`） | 包管理能力命中 **`/usr/bin/apt-get` · `/usr/bin/apt` · `/usr/bin/dpkg` · `/usr/bin/sh`** | **AC13.3 第三条当前不合规**（最终镜像 = 底座 + `ca-certificates` + COPY ⇒ 不会自动变「更小」） |
+| Dockerfile（静态） | `USER 999:999` ✓（AC13.2 的镜像侧；uid/gid 已由 `#1` 探针 `E4`/`E5` 实证） | 已判 |
 
 ### 判据定档（S13 三条 AC → 判据形状与现状）
 
@@ -47,15 +51,15 @@ PORTAL_BUILD_TAG=<name:tag> bash memory.agent-mate.ai/probes/container-attack-su
 
 ## 待拍板（⚠️ 施工前须定）
 
-- **① 资源限额的取值**：需以相 3 的资源基线（内存峰值 / `pids.current`）为据 —— 会话上限已知（每 key 2 / 全局 4，见 `4.1`；`3.17` 探针实测 ~27 MiB/会话、容器**当时无内存上限**）。`pids_limit` 需覆盖 node 主进程线程 + 最多 4 个上游子进程 + 余量。
-- **② 只读根的可写点白名单**：AC13.3 的原文就是「根文件系统**除必要挂载外**为只读」⇒ 判据必须**连同必要挂载一起**判（否则把「夹具不完整」误报成「产品不可行」，实测已踩过一次）。**必要挂载清单（`T3` 夹具即按此构造）**：`/data`（**rw**，与主 stack 共享的命名卷 —— 上游库与 `/data/users`）、`/srv/portal`（**rw**，门户库 —— compose 的 `portal_data` 卷）、`/tmp`（**tmpfs**）、`upstream.lock`（**ro**）、`config.toml`（**ro**）。**其余是否还有隐藏写入点**（如 `HOME`）由相 3 `T3` 实证（`--read-only` + 上述挂载下门户能否起来并答 `/healthz`）。
+- **① 资源限额的取值**：基线已实测（相 3 `T5`：**空闲 71.54 MiB · `pids.current=21`**）⇒ 待定的是**乘数与余量**：内存上限 = 基线 + 全局 4 路会话（~27 MiB/会话，取自 `4.1`/`3.17`）× 安全系数；`pids_limit` = node 线程 + 最多 4 个上游子进程 + 余量。**注意**：CI runner 的内存总量（15.61 GiB）与生产机不同，**上限取值要按生产机定**，不能用 runner 的数字直接套。
+- **② 只读根的可写点白名单 —— 已结案（CI `T3` 实证可行）**：AC13.3 的原文就是「根文件系统**除必要挂载外**为只读」⇒ 判据必须**连同必要挂载一起**判（否则把「夹具不完整」误报成「产品不可行」，实测已踩过一次）。**必要挂载集合（`T3` 已实证可起可服）**：`/data`（**rw**，与主 stack 共享的命名卷 —— 上游库与 `/data/users`）、`/srv/portal`（**rw**，门户库 —— compose 的 `portal_data` 卷）、`/tmp`（**tmpfs**）、`upstream.lock`（**ro**）、`config.toml`（**ro**）。**无需额外的 `HOME` 等隐藏写入点**（实测自检全过且 `portal_listening` 出现）。
 - **③ 包管理能力的处置**：删（施工）还是**改 AC**？删的话需要实证「最终镜像仍能起 + `sh` 保留 + 体积/启动不受影响」；若发现无法安全删除（例如某原生模块构建期依赖），则应把该条 AC 的口径改述为「**无凭据与无公网可达的包源**」并在 S13 里写明理由。
 
 ## 未判项与复跑条件
 
 | 未判（本机） | 原因 | 复跑条件 |
 |---|---|---|
-| 相 3 全部（`T1`–`T5`） | 本机无 linux/amd64 门户镜像（GHCR 包私有；arm64 构建 30+ 分钟） | `PORTAL_BUILD_TAG=<name:tag> bash …/probe.sh`；CI 已接入（buildx 可用） |
+| 相 3 全部（`T1`–`T5`） | 本机无 linux/amd64 门户镜像（GHCR 包私有；arm64 构建 30+ 分钟） | `PORTAL_BUILD_TAG=<name:tag> bash …/probe.sh`；**CI 已接入并已判**（run `36247341377` ⇒ 13/0/0） |
 
 **范围边界（登记）**：S13 三条 AC 说的是**门户容器**（唯一公网可达、且唯一能触及全部用户库的组件）。**主 stack**（`docker-compose.prod.yml`）的同类加固**不在本行范围** —— 探针以 `info` 记录其现状（当前同样无 `read_only` / 限额），归属 `#10` 或后续行。
 

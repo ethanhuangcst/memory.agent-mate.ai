@@ -21,7 +21,7 @@
 - **CI 接线**：[`../../.github/workflows/portal-image.yml`](../../.github/workflows/portal-image.yml) 新增「攻击面判据」步（相 3 需要镜像）+ `paths` 补触发面 + 头部同步 —— 相 3 的**只读根可行性**（`--read-only` + `tmpfs` 下门户能否起来并答 `/healthz`）与**资源基线**（内存 / `pids.current`）是施工前必须知道的数。
 - **范围边界（登记）**：S13 说的是**门户容器**；主 stack 的同类加固**不在本行范围**（探针以 `info` 记录其现状），归属 `#10`/后续。
 
-**验证（本机）**：探针 **9 PASS / 0 FAIL / 1 未判 · `rc=30`** · `make doc-links` 零悬空 · `make secret-check` ✓ · `git diff --check` 干净。CI 复跑（相 2/相 3）随本批推送触发。
+**验证**：本机探针 **9 PASS / 0 FAIL / 1 未判 · `rc=30`**；**CI 实跑（run `36247341377` success）13 PASS / 0 FAIL / 0 未判** ⇒ **只读根可行**（`--read-only` + 必要挂载 ⇒ `/healthz` 200 · `portal_listening=1`）· 资源基线（空闲 **71.54 MiB** · `pids.current=21`）· 容器侧 `uid=999` 与 socket 不存在**已合规**。**接入过程两轮红均为探针自伤**（① `T3` 夹具漏 `/srv/portal` 必要挂载 ⇒ 只读根下无处写库；② 漏 `-e PORTAL_PORT` ⇒ 门户在默认 **8788** 正常监听、探活却打 **8080** ⇒ 20 s 空等）⇒ 已修，并记 README 坑 4/5（**「夹具不完整」会被误读成「产品不可行」**）。`make doc-links` 零悬空 · `make secret-check` ✓ · `git diff --check` 干净。
 
 **边界**：不改产品代码 / `deploy/` / `scripts/` · **`#4` 未开工**（待三项拍板）· 主 stack 加固只登记不处置。
 
