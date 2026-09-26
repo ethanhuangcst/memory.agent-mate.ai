@@ -98,10 +98,19 @@ echo
 
 # ───────────────────────────── 相 0：前置（在位性）─────────────────────────────
 missing=''
-for f in "${MAIN_COMPOSE}" "${PORTAL_COMPOSE}" "${CONFIG_TMPL}" "${CONFIG_PROD}" "${CONFIG_LOCAL}" "${STORIES}" "${BACKLOG}" "${MCP_DESIGN}" "${DEPLOYMENT}"; do
+for f in "${MAIN_COMPOSE}" "${PORTAL_COMPOSE}" "${CONFIG_TMPL}" "${STORIES}" "${BACKLOG}" "${MCP_DESIGN}" "${DEPLOYMENT}"; do
   [ -s "${f}" ] || missing="${missing} $(basename "${f}")"
 done
-check C0 '判据输入文件全部在位且非空' "$([ -z "${missing}" ] && echo 0 || echo 1)" "${missing:-9/9 在位}"
+# ⚠️ **干净检出**（CI）里 `config.toml` / `config.local.toml` **不入仓**（gitignored 的本地/生产副本）
+# ⇒ 它们是**可选**输入：在场则一并判，缺席**不算缺失**（判据真源是**模板** `config.toml.tmpl`）。
+# 首版把两者当必需 ⇒ 本机 **16/0/0** 而 CI **红** —— 即「**本机比 CI「富」**造成的假绿」（已记坑 5）。
+optional_present=''
+for f in "${CONFIG_PROD}" "${CONFIG_LOCAL}"; do
+  [ -s "${f}" ] && optional_present="${optional_present} $(basename "${f}")"
+done
+check C0 '判据输入文件在位（**入仓必需 7 件** + 本地副本 2 件**可选**）' \
+  "$([ -z "${missing}" ] && echo 0 || echo 1)" \
+  "必需 7/7${missing:+ · 缺:${missing}} · 本机副本:${optional_present:-无（干净检出 ⇒ 期望如此）}"
 [ -z "${missing}" ] || finish
 
 SRC_HITS=0
@@ -195,7 +204,13 @@ check Q3 'AC「绑容器回环」：`serve` **显式**绑 `127.0.0.1` **且显�
   "$(loopback_ok "${MAIN_COMPOSE}" && explicit_port_ok "${MAIN_COMPOSE}" && echo 0 || echo 1)" \
   "command = $(nocomment "${MAIN_COMPOSE}" | grep -o '\["serve".*\]' | head -1 | cut -c1-90)"
 
-KEY_TOP=$(( $(top_api_key_hits "${CONFIG_TMPL}") + $(top_api_key_hits "${CONFIG_PROD}") + $(top_api_key_hits "${CONFIG_LOCAL}") ))
+KEY_TOP=0
+KEY_JUDGED=''
+for f in "${CONFIG_TMPL}" "${CONFIG_PROD}" "${CONFIG_LOCAL}"; do
+  [ -s "${f}" ] || continue
+  KEY_TOP=$((KEY_TOP + $(top_api_key_hits "${f}")))
+  KEY_JUDGED="${KEY_JUDGED} $(basename "${f}")=$(top_api_key_hits "${f}")"
+done
 KEY_REQ=$(require_api_key_hits "${CONFIG_TMPL}")
 # 只数**生效行**（`nocomment` 口径）：制品多处出现该键名是在**注释**里写「将来映射时必须启用」——
 # 那是旁证不是违规。首版按 `grep -rIc`（**含注释**）数 ⇒ 把 4 个文件的注释算成违规（`S` 自检没覆盖
@@ -204,9 +219,9 @@ KEY_REQ_ALL=0
 for f in "${DEPLOY}"/.env* "${DEPLOY}"/*.toml "${DEPLOY}"/*.yml "${DEPLOY}"/*.example; do
   [ -f "${f}" ] && KEY_REQ_ALL=$((KEY_REQ_ALL + $(require_api_key_hits "${f}")))
 done
-check Q4 'AC #30-③：`config.toml` **未启用顶层 `api_key`**（模板 / 生产 / 本地三处）**且**未启用 `AI_MEMORY_REQUIRE_API_KEY`' \
+check Q4 'AC #30-③：配置文件**未启用顶层 `api_key`**（**在场**的配置文件；干净检出下即模板）**且**未启用 `AI_MEMORY_REQUIRE_API_KEY`' \
   "$([ "${KEY_TOP}" -eq 0 ] && [ "${KEY_REQ}" -eq 0 ] && [ "${KEY_REQ_ALL}" -eq 0 ] && echo 0 || echo 1)" \
-  "顶层 api_key 命中 ${KEY_TOP} 处（模板/生产/本地）· 模板内 REQUIRE_API_KEY ${KEY_REQ} 处 · 制品中出现的文件数 ${KEY_REQ_ALL}"
+  "顶层 api_key 命中 ${KEY_TOP} 处（逐文件:${KEY_JUDGED:- 无}）· 模板内 REQUIRE_API_KEY ${KEY_REQ} 处 · 制品内生效行出现的文件数 ${KEY_REQ_ALL}"
 
 PROXY_HITS="$(proxy_9077_hits)"
 FACILITY="$(proxy_facility_hits)"
