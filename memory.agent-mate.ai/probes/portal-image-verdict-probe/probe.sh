@@ -68,13 +68,24 @@ echo
 # ─────────────────────────────── 相 0：前置 ───────────────────────────────
 info "产品目录：${PRODUCT}"
 
+# compose 命令行：**两种实现都接受**（独立二进制 docker-compose / 插件 docker compose）。
+# 实测差异：本机只有**独立二进制**（无插件），GitHub runner 只有**插件** —— 首版只认前者 ⇒ 在 CI 上
+# 直接以 rc=127 失败（本地用「PATH 去掉 docker-compose」复现过）。判据的对象是「config 能否解析」，
+# 与用哪种实现无关，故这里只解析出「用哪条命令」，判据本身不变。
+COMPOSE_CMD=()
+COMPOSE_IMPL=""
 if command -v docker-compose >/dev/null 2>&1; then
-  COMPOSE_BIN="$(command -v docker-compose)"
-  COMPOSE_VER="$("${COMPOSE_BIN}" version 2>&1 | head -1)"
-  check C0a "独立 docker-compose 在位（本机无 docker compose 插件）" 0 "${COMPOSE_VER}"
+  COMPOSE_CMD=(docker-compose)
+  COMPOSE_IMPL="独立二进制"
+elif docker compose version >/dev/null 2>&1; then
+  COMPOSE_CMD=(docker compose)
+  COMPOSE_IMPL="docker compose 插件"
+fi
+if [ "${#COMPOSE_CMD[@]}" -gt 0 ]; then
+  COMPOSE_VER="$("${COMPOSE_CMD[@]}" version 2>&1 | head -1)"
+  check C0a "compose 命令行可用（独立二进制或插件，二者取其一）" 0 "${COMPOSE_IMPL}：${COMPOSE_VER}"
 else
-  COMPOSE_BIN=""
-  check C0a "独立 docker-compose 在位（本机无 docker compose 插件）" 1 "未找到 docker-compose"
+  check C0a "compose 命令行可用（独立二进制或插件，二者取其一）" 1 "两者都没有"
 fi
 
 if [ -s "${COMPOSE}" ]; then
@@ -97,7 +108,7 @@ cp "${COMPOSE}" "${TMP}/portal.compose.yml"
 # C1 反向对照 A：变量全缺 ⇒ 必须非 0，且点名缺失键（fail-loud）
 ( cd "${TMP}" && env -u PORTAL_IMAGE -u PORTAL_ADMIN_HOST -u PORTAL_MCP_HOST \
     -u PORTAL_ACCESS_TEAM_DOMAIN -u PORTAL_ACCESS_AUD \
-    "${COMPOSE_BIN}" -f portal.compose.yml config >/dev/null 2>"${TMP}/e1" )
+    "${COMPOSE_CMD[@]}" -f portal.compose.yml config >/dev/null 2>"${TMP}/e1" )
 RC1=$?
 if [ "${RC1}" -ne 0 ] && grep -q "required variable" "${TMP}/e1"; then
   check C1 "反向对照：缺必需变量时 compose 非 0 退出并点名缺失键" 0 \
@@ -110,7 +121,7 @@ fi
 # C2 反向对照 B：变量齐但 env_file 不存在 ⇒ 必须非 0（判据的隐藏前置）
 ( cd "${TMP}" && PORTAL_IMAGE="x/y:0.0.0" PORTAL_ADMIN_HOST="a.test" PORTAL_MCP_HOST="b.test" \
     PORTAL_ACCESS_TEAM_DOMAIN="t.test" PORTAL_ACCESS_AUD="z" \
-    "${COMPOSE_BIN}" -f portal.compose.yml config >/dev/null 2>"${TMP}/e2" )
+    "${COMPOSE_CMD[@]}" -f portal.compose.yml config >/dev/null 2>"${TMP}/e2" )
 RC2=$?
 if [ "${RC2}" -ne 0 ] && grep -q "portal.env not found" "${TMP}/e2"; then
   check C2 "反向对照：变量齐但 env_file 缺失时仍非 0（前置 = portal.env 必须存在）" 0 \
@@ -124,7 +135,7 @@ fi
 printf 'DASHSCOPE_API_KEY=dummy-for-probe\n' >"${TMP}/portal.env"
 ( cd "${TMP}" && PORTAL_IMAGE="ghcr.io/example/portal:0.0.0" PORTAL_ADMIN_HOST="admin.example.test" \
     PORTAL_MCP_HOST="mcp.example.test" PORTAL_ACCESS_TEAM_DOMAIN="example.test" PORTAL_ACCESS_AUD="deadbeef" \
-    "${COMPOSE_BIN}" -f portal.compose.yml config >"${TMP}/out.yaml" 2>"${TMP}/e3" )
+    "${COMPOSE_CMD[@]}" -f portal.compose.yml config >"${TMP}/out.yaml" 2>"${TMP}/e3" )
 RC3=$?
 OK3=1
 if [ "${RC3}" -eq 0 ] \
