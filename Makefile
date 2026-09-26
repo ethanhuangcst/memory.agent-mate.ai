@@ -20,11 +20,12 @@ PORTAL_MCP_PROBE := memory.agent-mate.ai/scripts/probes/portal-mcp-probe.sh
 PORTAL_MCP_SESSION_PROBE := memory.agent-mate.ai/scripts/probes/portal-mcp-session-probe.sh
 PORTAL_ACCEPTANCE := memory.agent-mate.ai/scripts/portal-acceptance.sh
 PORTAL_IMAGE_BUILD := memory.agent-mate.ai/scripts/build-portal-image.sh
+PORTAL_IMAGE_SMOKE := memory.agent-mate.ai/scripts/portal-image-smoke.sh
 DEPLOY_GUIDE_AUDIT := memory.agent-mate.ai/probes/deploy-guide-audit/probe.mjs
 # 本机快速路径的环境文件（回环 Host + PORTAL_TEST_JWT_EMAIL），已 gitignore。
 PORTAL_LOCAL_ENV := memory.agent-mate.ai/admin_portal/.env.local
 
-.PHONY: help upstream pin pin-update preflight preflight-test backup restore-drill secret-check doc-links attestation-paths maintain-user-dbs hooks-install up down portal-up portal-down portal-dev portal-test portal-e2e portal-tunnel portal-coverage portal-image portal-mcp-probe portal-mcp-session-probe portal-acceptance
+.PHONY: help upstream pin pin-update preflight preflight-test backup restore-drill secret-check doc-links attestation-paths maintain-user-dbs hooks-install up down portal-up portal-down portal-dev portal-test portal-e2e portal-tunnel portal-coverage portal-image portal-image-smoke portal-mcp-probe portal-mcp-session-probe portal-acceptance
 
 help:
 	@grep -E '^[a-zA-Z0-9_-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*## "} {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
@@ -123,6 +124,9 @@ portal-acceptance: ## 本地完整集成验收收口入口（Sprint 4 `#8`：离
 
 portal-image: ## 构建门户镜像（Sprint 5 `#1`：buildx + linux/amd64，tag 由 upstream.lock 注入；ARGS=--print-only 只打印命令）
 	bash $(PORTAL_IMAGE_BUILD) $(ARGS)
+
+portal-image-smoke: ## 门户镜像运行时冒烟（Sprint 5 `#1`：真起容器 + /healthz + 身份姿态三条反例；ARGS=--tag <name:tag>）
+	bash $(PORTAL_IMAGE_SMOKE) $(ARGS)
 
 deploy-doc-audit: ## 上线配置指南与真源的一致性审计（Sprint 4 `4.4`/`3.16`；零依赖、纯静态）
 	node $(DEPLOY_GUIDE_AUDIT)

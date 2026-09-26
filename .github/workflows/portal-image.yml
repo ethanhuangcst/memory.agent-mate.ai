@@ -1,8 +1,9 @@
 # =============================================================================
-# portal-image.yml — 门户镜像：构建 · 推 GHCR · 契约自检（Sprint 5 `#1`）
+# portal-image.yml — 门户镜像：构建 · 推 GHCR · 契约自检 · 运行时冒烟（Sprint 5 `#1`）
 #
 # 职责边界（重要）：
 #   ✅ 构建 linux/amd64 门户镜像 → 推 GHCR → 跑**仓库里那一个探针**做契约自检
+#      → 再跑**仓库里那一个冒烟脚本**真起容器验「起得来、答得应、坏姿态必拒」
 #   ❌ 不部署、不碰服务器、不改 upstream.lock（部署决策与执行**始终人工**）
 #
 # 为什么放在 CI（实测依据，不是偏好）：
@@ -14,9 +15,11 @@
 #   · 构建配方 → 一律调 memory.agent-mate.ai/scripts/build-portal-image.sh（本文件**不复制** build-args / 平台）
 #   · 契约判据 → 一律跑 memory.agent-mate.ai/probes/portal-image-verdict-probe/（本机与 CI 同一脚本；
 #     CI 里 buildx 可用 ⇒ 探针的 D6「构建对照实验」也会被真正判掉，不再停留在「未判」）
+#   · 运行时判据 → 一律跑 memory.agent-mate.ai/scripts/portal-image-smoke.sh（本机 `make portal-image-smoke`
+#     同一脚本；CI 里镜像刚构建完就在本地守护里 ⇒ 不需要 GHCR 凭据，故这里能判而本机不能）
 #
-# 退出码契约：构建 10 前置缺失 / 20 用法错 / 30 构建失败；探针 0 全判且无失败 / 10 有失败 / 30 有「未判」项
-#   —— 任一步非 0，本工作流即红（不把「未判」当通过）。
+# 退出码契约：构建 10 前置缺失 / 20 用法错 / 30 构建失败；探针 0 全判且无失败 / 10 有失败 / 30 有「未判」项；
+#   冒烟 0 全判且无失败 / 10 有失败 / 30 未判 —— 任一步非 0，本工作流即红（不把「未判」当通过）。
 #
 # 备注：`.github/workflows/` 必须位于仓库根（GitHub 平台强制），是资产隔离判据中继 `.gitignore` /
 #       `Makefile` 之后的第三个根目录例外，已在 memory.agent-mate.ai/specs/architecture.md §5 记录。
@@ -36,6 +39,7 @@ on:
       - 'admin_portal/**'
       - 'memory.agent-mate.ai/upstream.lock'
       - 'memory.agent-mate.ai/scripts/build-portal-image.sh'
+      - 'memory.agent-mate.ai/scripts/portal-image-smoke.sh'
       - 'memory.agent-mate.ai/probes/portal-image-verdict-probe/**'
       - '.github/workflows/portal-image.yml'
 
@@ -110,6 +114,11 @@ jobs:
           PORTAL_BUILD_TAG: ${{ env.IMAGE_NAME }}:${{ steps.lock.outputs.tag }}-sha-${{ steps.lock.outputs.sha7 }}
         run: bash memory.agent-mate.ai/probes/portal-image-verdict-probe/probe.sh
 
+      - name: 运行时冒烟（真起容器 · /healthz · 身份姿态三条反例）
+        env:
+          PORTAL_SMOKE_TAG: ${{ env.IMAGE_NAME }}:${{ steps.lock.outputs.tag }}-sha-${{ steps.lock.outputs.sha7 }}
+        run: bash memory.agent-mate.ai/scripts/portal-image-smoke.sh
+
       - name: 写入运行摘要
         if: always()
         run: |
@@ -123,4 +132,6 @@ jobs:
             echo "| 源码 sha7 | \`${{ steps.lock.outputs.sha7 }}\` |"
             echo ""
             echo "契约判据由 \`probes/portal-image-verdict-probe/\` 判定（含相 3 门户镜像契约）；退出码 30 = 有「未判」项。"
+            echo ""
+            echo "运行时判据由 \`scripts/portal-image-smoke.sh\` 判定（正例：起容器 + \`/healthz\` 200 + 受保护路径 401 + 三条 \`deferred\` 如实登记；反例：身份姿态三条守卫必拒启动且从未监听）。"
           } >> "$GITHUB_STEP_SUMMARY"
