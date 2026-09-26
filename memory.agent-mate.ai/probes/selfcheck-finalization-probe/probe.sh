@@ -22,6 +22,9 @@
 #
 # 退出码：0 = 本行应判项全绿 · 10 = 有 FAIL · 30 = 有未判项 · 20 = 运行错误
 #
+# **状态（2026-09-27）**：`#17` **本体已交付** ⇒ 相 1 的 `Q` 类已从「现状/缺口登记」**升级为契约断言**
+#   （三项转正的形态 · 客户端判据形状 · 测试面同批改 · 新键双向登记）——「被改坏即红」。
+#
 # 只读边界：不改产品代码 / specs / deploy 制品；改写只落 `${TMP}`（trap 清理）；相 2 只起本地 stub。
 #
 # 用法：
@@ -146,27 +149,49 @@ check S4 'AC11.5 编排不变量判据可判（fail ⇒ **阻断** · deferred �
   "$([ "$(verdict_kind fail)" = 'blocking' ] && [ "$(verdict_kind deferred)" = 'nonblocking' ] && [ "$(verdict_kind pass)" = 'pass' ] && echo 0 || echo 1)" \
   '三态分得清 ⇒ 「deferred 被当成 pass」这种缺口能被判据识别'
 
-# ── Q：现状与缺口（机械核实）──────────────────────────────────────────────────────────────
+# ── Q：**落地后的契约断言**（`#17` 本体已交付 ⇒ 这些是「被改坏即红」的断言）──────────────────
 echo
-echo '--- 相 1（续）：现状与缺口（机械核实）---'
+echo '--- 相 1（续）：契约断言（落地后：被改坏即红）---'
 
+# Q1（转正后的形态）：三项各由**具名检查函数**产出；`deferred` 只剩「姿态包装」这一条路径
+FN_EMB="$(grep -c 'async function checkEmbeddingsReachable1024' "${SELFCHECK}" || true)"
+FN_BIN="$(grep -c 'function checkBinaryVersionMatchesLock' "${SELFCHECK}" || true)"
+FN_TPL="$(grep -c 'function checkLaunchTemplateAssertions' "${SELFCHECK}" || true)"
+POSTURE_FN="$(grep -c 'function posture(' "${SELFCHECK}" || true)"
 DEFER_AT="$(grep -c "status: 'deferred'" "${SELFCHECK}" || true)"
-check Q1 '缺口的**确切形态**：三项在自检里显式登记为 `deferred`（**不是** `fail` ⇒ 不阻断启动 ⇒ 门户照常对外服务）' \
-  "$([ "${DEFER_AT}" -ge 3 ] && echo 0 || echo 1)" \
-  "selfcheck.ts 里 status: deferred 出现 ${DEFER_AT} 处（含 §3.4 ② 记录的开发姿态缺锁项）"
+check Q1 '三项**已转正**：各自有具名检查函数，且 `deferred` 只来自**姿态包装**（生产 fail / 开发 deferred）' \
+  "$([ "${FN_EMB}" -ge 1 ] && [ "${FN_BIN}" -ge 1 ] && [ "${FN_TPL}" -ge 1 ] && [ "${POSTURE_FN}" -ge 1 ] && [ "${DEFER_AT}" -le 2 ] && echo 0 || echo 1)" \
+  "具名函数 ${FN_EMB}/${FN_BIN}/${FN_TPL} · posture 包装 ${POSTURE_FN} · 源码内 status: deferred ${DEFER_AT} 处（姿态包装 + 自身版本项 ⇒ 期望 ≤2）"
 
-# 测试面**互斥点**：施工不同批改这里，测试必红（这是本行最容易被漏的耦合）
-TEST_DEFER="$(grep -c "toBe('deferred')" "${SELFCHECK_TEST}" || true)"
-TEST_DETAIL="$(grep -c "toContain('4.3')" "${SELFCHECK_TEST}" || true)"
-TEST_SUMMARY="$(grep -c 'embeddings_reachable_1024=deferred' "${SELFCHECK_TEST}" || true)"
-check Q2 '测试面**互斥断言**已定位（`tests/unit/selfcheck.test.ts`：三项 `toBe(deferred)` + `detail` 含 4.3 + **摘要里 `=deferred` 字符串**）⇒ 施工必须同批改' \
-  "$([ "${TEST_DEFER}" -ge 1 ] && [ "${TEST_DETAIL}" -ge 1 ] && [ "${TEST_SUMMARY}" -ge 1 ] && echo 0 || echo 1)" \
-  "命中 toBe(deferred) ${TEST_DEFER} 处 · toContain('4.3') ${TEST_DETAIL} 处 · 摘要断言 ${TEST_SUMMARY} 处"
+# Q2：直连 MaaS 客户端**在位**且判据形状正确（这条同时把「非 401/403 且长度 == 1024」钉进源码）
+CLIENT="${ADMIN}/src/shared/embeddings.ts"
+CLIENT_SHAPE=0
+[ -s "${CLIENT}" ] && CLIENT_SHAPE=$((CLIENT_SHAPE + 1))
+grep -q 'DEFAULT_EMBEDDING_DIM = 1024' "${CLIENT}" && CLIENT_SHAPE=$((CLIENT_SHAPE + 1))
+grep -q 'response.status === 401 || response.status === 403' "${CLIENT}" && CLIENT_SHAPE=$((CLIENT_SHAPE + 1))
+grep -q 'vector.length !== expectedDim' "${CLIENT}" && CLIENT_SHAPE=$((CLIENT_SHAPE + 1))
+grep -q '/embeddings' "${CLIENT}" && CLIENT_SHAPE=$((CLIENT_SHAPE + 1))
+check Q2 '直连 MaaS 客户端在位且判据形状正确（`/embeddings` · 401/403 ⇒ unauthorized · **长度 ≠ 期望 ⇒ dimension**）' \
+  "$([ "${CLIENT_SHAPE}" -eq 5 ] && echo 0 || echo 1)" "命中 ${CLIENT_SHAPE}/5（含默认维度常量 = 1024）"
 
-# 配置面缺口：门户侧**无** MaaS embeddings 客户端（只有注释提到 embeddings）
-CLIENT_HITS="$(grep -rInE '(/embeddings|POST[^)]*embedding)' "${ADMIN}/src" 2>/dev/null | grep -c . || true)"
-check Q3 '配置面缺口：门户侧**没有** MaaS embeddings 客户端（`admin_portal/src/**` 零 `/embeddings` 调用）⇒ 施工须新增键 + 客户端' \
-  "$([ "${CLIENT_HITS}" -eq 0 ] && echo 0 || echo 1)" "源码内 /embeddings 调用命中 ${CLIENT_HITS} 处"
+# Q3：测试面的**互斥断言已同批改**（旧断言不存在 + 新用例在位 + 空串容忍）
+OLD_DETAIL="$(grep -c "toContain('4.3')" "${SELFCHECK_TEST}" || true)"
+ASYNC_RUN="$(grep -c 'await runSelfCheck(' "${SELFCHECK_TEST}" || true)"
+NEW_CASES="$(grep -c 'embeddingProbe' "${SELFCHECK_TEST}" || true)"
+BLANK_CASE="$(grep -c '空串等价于' "${SELFCHECK_TEST}" || true)"
+check Q3 '测试面已同批改（旧「三项 = deferred 且 detail 含 4.3」**已移除**；新增探测注入 / 空串容忍用例）' \
+  "$([ "${OLD_DETAIL}" -eq 0 ] && [ "${ASYNC_RUN}" -ge 1 ] && [ "${NEW_CASES}" -ge 1 ] && [ "${BLANK_CASE}" -ge 1 ] && echo 0 || echo 1)" \
+  "旧断言 ${OLD_DETAIL} 处（期望 0）· await runSelfCheck ${ASYNC_RUN} 处 · embeddingProbe 用例 ${NEW_CASES} 处 · 空串用例 ${BLANK_CASE} 处"
+
+# Q5：两个新键**各自双向登记**（compose 真源 + deployment.md §12.5.4）—— 缺任一侧 A2/A2c 转红
+#     **按键逐个判，不数行**：两个键在同一行登记是正常的（首版数行数 ⇒ 假红）。
+KEY_C_BASE="$(grep -c 'PORTAL_EMBEDDINGS_BASE_URL' "${COMPOSE}" || true)"
+KEY_C_MODEL="$(grep -c 'PORTAL_EMBEDDINGS_MODEL' "${COMPOSE}" || true)"
+KEY_D_BASE="$(grep -c 'PORTAL_EMBEDDINGS_BASE_URL' "${DEPLOYMENT}" || true)"
+KEY_D_MODEL="$(grep -c 'PORTAL_EMBEDDINGS_MODEL' "${DEPLOYMENT}" || true)"
+check Q5 '两个新键**各自**双向登记（compose 真源 + `deployment.md` §12.5.4）⇒ 两侧都有输入面' \
+  "$([ "${KEY_C_BASE}" -ge 1 ] && [ "${KEY_C_MODEL}" -ge 1 ] && [ "${KEY_D_BASE}" -ge 1 ] && [ "${KEY_D_MODEL}" -ge 1 ] && echo 0 || echo 1)" \
+  "compose: BASE_URL=${KEY_C_BASE} MODEL=${KEY_C_MODEL} · deployment.md: BASE_URL=${KEY_D_BASE} MODEL=${KEY_D_MODEL}"
 
 # 可复用件：请求形状（现成真源）+ launch 模板与比对体
 SHAPE_OK=0

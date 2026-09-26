@@ -8,6 +8,21 @@
 
 ## 2026-09-27
 
+### Sprint 5 `#17` 本体交付：门户启动自检三项 `deferred` **转正**（`ToDo` → 待 CI 确认）
+
+**拍板（2026-09-27 用户定）**：① **开发姿态** = 生产 `fail` / 非生产**显式 `deferred` 并明写**；② **键名** = `PORTAL_EMBEDDINGS_BASE_URL` + `PORTAL_EMBEDDINGS_MODEL`；③ 探针接入 CI。
+
+**改了什么**：
+
+- **新键**（[`../admin_portal/src/config.ts`](../admin_portal/src/config.ts)）：schema **刻意不加 `min(1)`** —— compose 用 `${PORTAL_EMBEDDINGS_BASE_URL:-}` 从 `portal.env` 插值（该值是**私有主机名、不入仓**），未设时传进来的是**空串**，而空串的语义是「未配置」⇒ 归一交给新增的 `blankToNull`，再由启动自检按姿态判。**若加 `min(1)`**：开发姿态会在 `loadConfig` 就抛 `config_invalid`（把「没配」误报成「配置非法」）且本机 `docker compose` 起不来 —— **这是本批修掉的一个真陷阱**（测试「空串等价于未配置」先红后绿）。
+- **直连 MaaS 客户端**（新增 [`../admin_portal/src/shared/embeddings.ts`](../admin_portal/src/shared/embeddings.ts)）：`POST {base}/embeddings` + body `{"model","input"}`（**形状照搬** [`../scripts/probes/qwen-verify.sh`](../scripts/probes/qwen-verify.sh)，不重新发明）；判据 = `401/403` ⇒ unauthorized · 其他非 2xx ⇒ http · 取不到 `data[0].embedding` ⇒ shape · **长度 ≠ 期望 ⇒ dimension** · 网络 ⇒ network。**模块不决定姿态**（fail / deferred 由自检按 `PORTAL_ENV` 决定）。
+- **三项 `deferred` 转正**（[`../admin_portal/src/selfcheck.ts`](../admin_portal/src/selfcheck.ts)）：`embeddings_reachable_1024` · `binary_version_matches_lock`（**两侧同用「取末位 semver」** —— 否则锁里的 `v0.10.0` 与二进制的 `0.10.0` 会假红）· `launch_template_assertions`（**镜像里没有 `specs/`** ⇒ 运行期断言的是「常量 vs 自检内**转录**的真源值」；真源文件本身的一致性由测试与 CI 把住 —— **如实登记**，不假装运行期读到了真源）。`runSelfCheck` **因此变 `async`**（要发一次真 HTTP）：调用方 `await` 之后才 `listen`（顺序不可颠倒）。
+- **测试同批改**：`tests/unit/selfcheck.test.ts` 的三处互斥断言（`toBe('deferred')` · `toContain('4.3')` · 摘要 `=deferred`）换成转正后的预期 + 新增 7 个用例（生产缺配置 ⇒ fail · 768 维 ⇒ fail · 401 ⇒ 生产 fail / 开发 deferred · 1024 ⇒ pass · 版本漂移 ⇒ fail · 生产读不到锁 ⇒ fail · 空串容忍）；新增 `tests/unit/embeddings.test.ts`（判据五形态 + 请求形状）。**`await` 改写踩坑**：`perl -pi -e 's/…\s*$/…/'` 把**行尾换行也吃掉** ⇒ 两行被合并；改用不带 `\s*$` 的模式并回滚重做。
+- **compose / 文档 / 冒烟 / 探针**：compose 加两键（`MODEL` 字面写、`BASE_URL` 插值）· [`deployment.md`](./deployment.md) §12.5.4 新增行（含「空串 = 未配置」的语义）· 冒烟 `P5` 改判「dev 未配 MaaS ⇒ `embeddings=deferred` 且明写 / 另两项 `pass`」· 探针 `Q1`–`Q3`/`Q5` 从「现状登记」**升级为落地后契约断言**并接入 CI。
+
+**验证（本机）**：`tsc --noEmit` **0 错** · 离线 **395 passed / 36 files**（36 → 36 文件、+12 用例）· 探针 **14/0/0 · rc=0** · `make deploy-doc-audit` **12/0 退 0**（**新键过 `A2`/`A2c`**：两侧登记面齐全）· compose 渲染 rc=0（`PORTAL_EMBEDDINGS_BASE_URL: ""`）· `make doc-links` 零悬空 · `make secret-check` ✓ · `git diff --check` 干净。
+**边界**：**真 MaaS 的 1024 维实测不在本行**（归 `#11`/`#14` 生产；本机可用 `qwen-verify.sh` 手验）· 产品行为判据（假 MaaS / 坏维度 / 假锁 / 坏模板 ⇒ 必拒启动）由冒烟 + 单测覆盖（**未**新增容器级负例容器：同一条 fail-closed 通路已由 `#1` 冒烟 `N1`–`N3` 与 `#3` 的 `B2` 覆盖，避免重复造夹具）。
+
 ### Sprint 5 `#17` 开工准备：门户启动自检「三项 `deferred` 转正」判据探针（**只探不造**）
 
 **为什么**：本行是本 Sprint **唯一要写产品代码**的行，且它的「缺口」很特殊 —— 三项自检项现在是 `deferred`**而不是 `fail`** ⇒ **不阻断启动**、门户照常对外服务（`3.21` 曾实证 `pass=6 deferred=3 fail=0`）。开工前先把**判据形状**与**施工清单**都钉死。

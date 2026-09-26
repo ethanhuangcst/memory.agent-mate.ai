@@ -208,8 +208,20 @@ check 'P3' '日志出现 portal_listening' "$([ "${INFO}" -ge 1 ] && echo 0 || e
   "${INFO} 处（超时 ${READY_TIMEOUT} s，末次状态码 '${STATUS}'）"
 check 'P4' '启动自检零 fail' "$([ "${SELFCHECK_FAIL}" -eq 0 ] && echo 0 || echo 1)" \
   "status=fail 计 ${SELFCHECK_FAIL} 处【${DIAG}】"
-check 'P5' '三条 deferred 如实登记（不伪装通过）' "$([ "${DEFERRED}" -eq 3 ] && echo 0 || echo 1)" \
-  "status=deferred 计 ${DEFERRED} 处（期望 3）"
+# Sprint 5 `#17`：§3.4 三项**已转正** —— 本用例是 **dev 姿态且未配 MaaS**，故：
+#   · `embeddings_reachable_1024` = **deferred**（如实登记 + **明写**「开发姿态」，不伪装通过）；
+#   · `binary_version_matches_lock` = **pass**（镜像内有上游二进制 + 版本锁已挂 ⇒ 真跑过比对）；
+#   · `launch_template_assertions` = **pass**（纯常量比对，不依赖外部）。
+ITEM_STATUS=''
+for item in embeddings_reachable_1024 binary_version_matches_lock launch_template_assertions; do
+  ITEM_STATUS="${ITEM_STATUS} ${item}=$(printf '%s\n' "${LOGS}" | grep -o "\"name\":\"${item}\",\"status\":\"[a-z]*\"" | head -1 | sed 's/.*"status":"//; s/"$//')"
+done
+EMB_STATUS="$(printf '%s' "${ITEM_STATUS}" | sed -n 's/.*embeddings_reachable_1024=\([a-z]*\).*/\1/p')"
+BIN_STATUS="$(printf '%s' "${ITEM_STATUS}" | sed -n 's/.*binary_version_matches_lock=\([a-z]*\).*/\1/p')"
+TPL_STATUS="$(printf '%s' "${ITEM_STATUS}" | sed -n 's/.*launch_template_assertions=\([a-z]*\).*/\1/p')"
+check 'P5' '三项转正后的姿态如实（dev 未配 MaaS：embeddings=deferred 且明写；binary_version 与 launch_template=pass）' \
+  "$([ "${EMB_STATUS}" = 'deferred' ] && [ "${BIN_STATUS}" = 'pass' ] && [ "${TPL_STATUS}" = 'pass' ] && echo 0 || echo 1)" \
+  "embeddings=${EMB_STATUS:-缺} · binary_version=${BIN_STATUS:-缺} · launch_template=${TPL_STATUS:-缺} · status=deferred 总数 ${DEFERRED}（期望 1：只剩 embeddings）"
 check 'P6' '/healthz 回 200（管理面 Host）' "$([ "${STATUS}" = '200' ] && echo 0 || echo 1)" \
   "状态码 '${STATUS}'【${DIAG}】"
 check 'P7' '/healthz 回体含 ok:true 与 schemaVersion' \

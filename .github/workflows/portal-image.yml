@@ -8,6 +8,7 @@
 #      → 再跑 **Sprint 5 `#4` 的攻击面探针**（相 3 同样需要镜像：运行身份 / socket / 只读根可行性 / 资源基线）
 #      → 再跑 **Sprint 5 `#3` 的库边界探针**（相 2 需要能起门户：库位置合规 / 误放必拒启动 / 备份遍历面）
 #      → 再跑 **Sprint 5 `#5` 的上游 HTTP 面探针**（**不需要镜像**：制品无 9077 映射 + 绑回环 + 顶层 `api_key` + 同网可达性）
+#      → 再跑 **Sprint 5 `#17` 的启动自检探针**（**不需要镜像**：三项 `deferred` 转正的判据形状 + 端到端 stub + 新键双向登记）
 #   ❌ 不部署、不碰服务器、不改 upstream.lock（部署决策与执行**始终人工**）
 #
 # 为什么放在 CI（实测依据，不是偏好）：
@@ -50,6 +51,7 @@ on:
       - 'memory.agent-mate.ai/probes/container-attack-surface-probe/**'
       - 'memory.agent-mate.ai/probes/portal-db-boundary-probe/**'
       - 'memory.agent-mate.ai/probes/upstream-http-surface-probe/**'
+      - 'memory.agent-mate.ai/probes/selfcheck-finalization-probe/**'
       - '.github/workflows/portal-image.yml'
 
 permissions:
@@ -147,6 +149,10 @@ jobs:
       - name: 上游 HTTP 面判据（Sprint 5 `#5` 探针：制品无 9077 映射 + 绑回环 + 顶层 api_key + 同网可达性）
         run: bash memory.agent-mate.ai/probes/upstream-http-surface-probe/probe.sh
 
+      # 本步也**不需要镜像**（自检判据形状 + 端到端 stub 只需 node）
+      - name: 启动自检判据（Sprint 5 `#17` 探针：三项 deferred 转正 + 判据形状 + 新键双向登记）
+        run: bash memory.agent-mate.ai/probes/selfcheck-finalization-probe/probe.sh
+
       - name: 写入运行摘要
         if: always()
         run: |
@@ -166,4 +172,6 @@ jobs:
             echo "库边界判据由 \`probes/portal-db-boundary-probe/\` 判定（库位置合规：独立卷 + 不在 \`/data\` 下；误放必拒启动：非零退出 + 日志点名 + 从未监听；AC9.2 第一半：备份遍历面 \`/data/users/*\` 不含门户库）。"
             echo ""
             echo "上游 HTTP 面判据由 \`probes/upstream-http-surface-probe/\` 判定（制品无 9077 映射：注释态不算生效、\`expose\` 不算发布；\`serve\` 显式绑 \`127.0.0.1\` + 显式端口；未启用顶层 \`api_key\`；同网可达性由合成靶正/反对照；**公网不可达归生产** \`#13\`/\`#14\`）。"
+            echo ""
+            echo "启动自检判据由 \`probes/selfcheck-finalization-probe/\` 判定（三项 \`deferred\` 转正的判据形状：embeddings = 非 401/403 且长度 == 1024、版本 = 两侧同用取末位 semver、模板 = 逐字比对；端到端 stub 三态；新键双向登记面）。"
           } >> "$GITHUB_STEP_SUMMARY"

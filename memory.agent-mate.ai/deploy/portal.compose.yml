@@ -90,6 +90,13 @@ services:
       # ── 存储：门户库**必须不在 `/data` 下**（`/data` 是上游的，且被共享卷承载）──────
       PORTAL_DB_PATH: /srv/portal/portal.db
       PORTAL_USERS_ROOT: /data/users
+      # ── 直连 MaaS 的 embeddings 判据（Sprint 5 `#17`；自检项 `embeddings_reachable_1024`）─────────═
+      # 模型名是**公开值** ⇒ 字面写在这里；`base_url` 是**环境私有主机名** ⇒ **不入仓**
+      # （`make secret-check` 会拦私有主机名）⇒ 用 `${…:-}` 从 `portal.env` 插值（该文件已 gitignore）。
+      # 未设时插值成**空串**，`config.ts` 把空串当作「未配置」⇒ 由启动自检按姿态判
+      # （生产 `fail` / 开发 `deferred`），**不是** config_invalid。
+      PORTAL_EMBEDDINGS_MODEL: qwen3.7-text-embedding
+      PORTAL_EMBEDDINGS_BASE_URL: ${PORTAL_EMBEDDINGS_BASE_URL:-}
       # 注：原先此处有 `PORTAL_ROOT: /app` —— 2026-09-26 **删除**。理由：产品代码
       #   （`admin_portal/src/**`）的三种真读取形态（zod schema 键 / `raw.X` / `process.env.X`）
       #   **皆不命中**它（源码里唯一含该子串的是常量 `ADMIN_PORTAL_ROOT`，由 `import.meta.url`

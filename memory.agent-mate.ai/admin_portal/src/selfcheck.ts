@@ -1,15 +1,29 @@
 /**
  * 启动自检（fail-closed）—— 依据 specs/web-portal/web-design.md §3.4。
  *
- * §3.4 原列四项断言（用户目录可写 · embeddings 可达且 1024 维 · 自身二进制版本 == 锁文件 ·
- * handle 白名单与模板断言在位）。其中三项属 **PSP-W2 接入批次**（本批不 spawn 上游子进程，
- * 无 embeddings / 无二进制版本 / 无 launch 模板）。本模块**不伪装通过**它们：
- * 以 `deferred` 状态显式登记「随接入批次启用」，其余项真实执行、失败即拒绝启动。
+ * §3.4 列四项断言（用户目录可写 · embeddings 可达且 1024 维 · **上游二进制**版本 == 锁文件 ·
+ * `handle` 白名单与**模板断言**在位）。
+ *
+ * **2026-09-27（Sprint 5 `#17`）：三项 `deferred` 已全部转正** —— `embeddings_reachable_1024` /
+ * `binary_version_matches_lock` / `launch_template_assertions`。姿态规则（沿用仓内既有分工：
+ * 开发姿态放宽的那部分必须**如实登记**、不得伪装通过）：
+ *   · **生产**：任一项不过 ⇒ `fail` ⇒ 进程**不调用 `listen`**、退出码非 0（fail-closed）；
+ *   · **开发**（`PORTAL_ENV=development`）：缺配置 / 不通 / 维度不符 / 无上游二进制 ⇒ `deferred`，
+ *     并**明写**「开发姿态 + 原因」（日志与摘要面都能一眼看出是「未判」而不是「通过」）。
+ * **`deferred` 永远不算 `pass`**（不阻断，但 `summarizeSelfCheck` 逐项列出 ⇒ 运维可辨）。
  */
 
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import type { PortalConfig } from './config';
 import { isLoopbackHost } from './shared/host-split';
+import {
+  DEFAULT_EMBEDDING_DIM,
+  probeEmbeddingDimension,
+  type EmbeddingProbeOptions,
+  type EmbeddingProbeResult,
+} from './shared/embeddings';
+import { LAUNCH_ARGS, LAUNCH_BINARY, LAUNCH_ENV_TEMPLATE, LAUNCH_HOME } from './bridge/launch-template';
 
 export type SelfCheckStatus = 'pass' | 'fail' | 'deferred';
 
@@ -29,10 +43,22 @@ export const LOCK_PATH = '/app/upstream.lock';
 export interface SelfCheckDeps {
   /** 覆盖版本锁路径（仅测试用；生产恒为 {@link LOCK_PATH}）。 */
   readonly lockPath?: string;
+  /** 覆盖 embeddings 探测实现（仅测试用）。 */
+  readonly embeddingProbe?: (options: EmbeddingProbeOptions) => Promise<EmbeddingProbeResult>;
+  /** 覆盖「执行上游 `--version`」（仅测试用）；默认 `execFileSync(LAUNCH_BINARY, ['--version'])`。 */
+  readonly binaryVersionRunner?: () => string;
 }
 
-/** 逐项检查，返回全部结论（调用方据 fail 项决定是否拒绝启动）。 */
-export function runSelfCheck(cfg: PortalConfig, deps: SelfCheckDeps = {}): SelfCheckResult[] {
+/**
+ * 逐项检查，返回全部结论（调用方据 fail 项决定是否拒绝启动）。
+ *
+ * **自 `#17` 起是 `async`** —— 第 7 项要发一次真实 HTTP（embeddings 探测）；调用方必须 `await` 后
+ * 再决定是否 `listen`（顺序不可颠倒：**自检不过就不 listen**）。
+ */
+export async function runSelfCheck(
+  cfg: PortalConfig,
+  deps: SelfCheckDeps = {},
+): Promise<SelfCheckResult[]> {
   const results: SelfCheckResult[] = [];
 
   // 1. 用户目录可写（§3.4 前置 1 的消费侧断言）
@@ -68,13 +94,10 @@ export function runSelfCheck(cfg: PortalConfig, deps: SelfCheckDeps = {}): SelfC
   //    本项判**镜像自身**的版本（陈旧门户镜像操作未知 schema 的形态）。
   results.push(checkOwnVersionMatchesLock(cfg, deps.lockPath ?? LOCK_PATH));
 
-  // 7-9. §3.4 的其余三项 —— 归属 Sprint 4 `4.3`「web-portal:启动自检」（实现轮按用户指示落为本 Sprint `#17`）。
-  //      接入批次（`3.1`）只保证「起得来上游子进程」，不替自检定判据 ⇒ 仍显式登记为未启用（不伪装通过）。
-  const selfcheckBatch =
-    '待 §4.3「web-portal:启动自检」落地（`3.1` 已能 spawn 上游，三项自检的判据与镜像侧验收属 `4.3`）';
-  results.push({ name: 'embeddings_reachable_1024', status: 'deferred', detail: selfcheckBatch });
-  results.push({ name: 'binary_version_matches_lock', status: 'deferred', detail: selfcheckBatch });
-  results.push({ name: 'launch_template_assertions', status: 'deferred', detail: selfcheckBatch });
+  // 7-9. §3.4 的其余三项 —— **Sprint 5 `#17` 已全部转正**（不再是 `deferred`；姿态规则见文件头）。
+  results.push(await checkEmbeddingsReachable1024(cfg, deps));
+  results.push(checkBinaryVersionMatchesLock(cfg, deps));
+  results.push(checkLaunchTemplateAssertions());
 
   return results;
 }
@@ -214,6 +237,167 @@ function checkAuthPosture(cfg: PortalConfig): SelfCheckResult {
     name: 'auth_posture',
     status: 'pass',
     detail: `身份来源 = Cloudflare Access（团队域 ${cfg.access.teamDomain}，JWKS ${cfg.access.jwksUrl}）`,
+  };
+}
+
+/** 姿态包装：**生产 = `fail`**（fail-closed，不带病服务）；**开发 = `deferred`**（**明写**原因）。 */
+function posture(cfg: PortalConfig, name: string, reason: string): SelfCheckResult {
+  return cfg.isProduction
+    ? { name, status: 'fail', detail: reason }
+    : { name, status: 'deferred', detail: `开发姿态：${reason}（生产必须通过）` };
+}
+
+function reasonOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+/**
+ * 自检项 7：**embeddings 可达且向量长度 == `1024`**（AC11.2 / §3.4 ①）。
+ *
+ * **判据**：一次最小调用后「**非 401/403 且长度 == 1024**」—— **不得**以「env 非空」或「调用成功」
+ * 代替（坏 key 下上游只出「线性扫描 / 无 embeddings」告警，而 `tools/call` **仍然返回响应** ⇒
+ * 静默降级真实存在；`3.21` 实证）。
+ * **姿态**：生产 —— 缺配置 / 401-403 / 维度不符 / 网络不通 **一律 `fail`**；开发 —— 如实登记 `deferred`。
+ */
+async function checkEmbeddingsReachable1024(
+  cfg: PortalConfig,
+  deps: SelfCheckDeps,
+): Promise<SelfCheckResult> {
+  const name = 'embeddings_reachable_1024';
+  const missing = [
+    cfg.embeddingsBaseUrl ? '' : 'PORTAL_EMBEDDINGS_BASE_URL',
+    cfg.embeddingsModel ? '' : 'PORTAL_EMBEDDINGS_MODEL',
+    cfg.upstreamApiKey ? '' : 'DASHSCOPE_API_KEY',
+  ].filter((item) => item.length > 0);
+  if (missing.length > 0) {
+    return posture(cfg, name, `未配置 ${missing.join(' / ')} ⇒ 无法判定 embeddings 可达性与维度`);
+  }
+
+  const probe = deps.embeddingProbe ?? probeEmbeddingDimension;
+  const result = await probe({
+    baseUrl: cfg.embeddingsBaseUrl as string,
+    apiKey: cfg.upstreamApiKey,
+    model: cfg.embeddingsModel as string,
+    expectedDim: DEFAULT_EMBEDDING_DIM,
+  });
+  if (result.ok) {
+    return {
+      name,
+      status: 'pass',
+      detail: `embeddings 可达且向量长度 == ${result.dim}（模型 ${cfg.embeddingsModel}）`,
+    };
+  }
+  return posture(cfg, name, `embeddings 判据未过（${result.kind}）：${result.detail}`);
+}
+
+/**
+ * 自检项 8：**上游二进制**版本 == 版本锁（AC11.3）。
+ *
+ * 与第 6 项（`own_version_matches_lock` 判**门户自身**镜像版本）**不是同一件事**：本项判镜像内
+ * `/usr/local/bin/ai-memory --version` 的**末位 semver** ⇄ 锁的 `UPSTREAM_RELEASE_TAG` **去 `v`**。
+ * **两侧必须用同一个提取函数**（{@link lastSemver}）—— 否则 `v0.10.0` 与 `0.10.0` 会因写法差异**假红**。
+ * **姿态**：锁读不到 / 二进制跑不起来（开发机上是常态）⇒ 生产 `fail`、开发 `deferred`。
+ */
+function checkBinaryVersionMatchesLock(cfg: PortalConfig, deps: SelfCheckDeps): SelfCheckResult {
+  const name = 'binary_version_matches_lock';
+  const lockPath = deps.lockPath ?? LOCK_PATH;
+
+  let raw: string;
+  try {
+    raw = fs.readFileSync(lockPath, 'utf8');
+  } catch (error) {
+    return posture(cfg, name, `读不到版本锁 ${lockPath}（${reasonOf(error)}）⇒ 无法确认上游二进制坐标`);
+  }
+  const lockTag = /^UPSTREAM_RELEASE_TAG="([^"]+)"$/m.exec(raw)?.[1] ?? '';
+  if (!lockTag) {
+    return { name, status: 'fail', detail: `版本锁缺 UPSTREAM_RELEASE_TAG 行：${lockPath}` };
+  }
+
+  let output: string;
+  try {
+    output =
+      deps.binaryVersionRunner?.() ??
+      execFileSync(LAUNCH_BINARY, ['--version'], { encoding: 'utf8', timeout: 10_000 });
+  } catch (error) {
+    return posture(cfg, name, `执行 ${LAUNCH_BINARY} --version 失败（${reasonOf(error)}）`);
+  }
+
+  const actual = lastSemver(output);
+  const expected = lastSemver(lockTag);
+  if (actual.length === 0) {
+    return {
+      name,
+      status: 'fail',
+      detail: `${LAUNCH_BINARY} --version 输出里找不到 semver：${output.trim().slice(0, 120)}`,
+    };
+  }
+  if (actual !== expected) {
+    return {
+      name,
+      status: 'fail',
+      detail: `上游二进制版本 ${actual} ≠ 锁 UPSTREAM_RELEASE_TAG ${lockTag}（**版本漂移**：镜像与上游坐标不一致）`,
+    };
+  }
+  return {
+    name,
+    status: 'pass',
+    detail: `上游二进制版本 ${actual} == 锁 UPSTREAM_RELEASE_TAG ${lockTag}（${lockPath}）`,
+  };
+}
+
+/** 取**末位** semver（两侧同用 —— 见 {@link checkBinaryVersionMatchesLock} 的注释）。 */
+function lastSemver(text: string): string {
+  const matches = text.match(/\d+\.\d+\.\d+/g);
+  return matches && matches.length > 0 ? (matches[matches.length - 1] as string) : '';
+}
+
+/**
+ * 自检项 9：**启动模板断言**（AC11.4）—— 模板常量与真源逐字一致。
+ *
+ * **运行期能做什么、不能做什么（如实登记）**：镜像里**没有** `specs/`（构建上下文只有
+ * `admin_portal/`）⇒ 运行期**无法**读真源文件做逐字比对。本项因此断言「**常量 vs 自检内转录的真源值**」
+ * —— 期望值是从 [`mcp-design.md` §5.6.4] **逐字转录**到这里的**第二处独立副本**（与
+ * `tests/unit/launch-template.test.ts` 同一组字面量），所以**改 `launch-template.ts` 而不同步真源会在启动期炸**。
+ * **真源文件本身**的逐字一致性（`TC-M-L0-01`）由测试与 CI 把住（那里能读到 `specs/`）。
+ */
+function checkLaunchTemplateAssertions(): SelfCheckResult {
+  const name = 'launch_template_assertions';
+  const expectedArgs = ['mcp', '--tier', 'smart', '--profile', 'core'];
+  const expectedEnv: Record<string, string> = {
+    AI_MEMORY_DB: '/data/users/{handle}/ai-memory.db',
+    AI_MEMORY_AGENT_ID: 'human:{handle}',
+    AI_MEMORY_KEY_DIR: '/data/users/{handle}/keys',
+    AI_MEMORY_REQUIRE_AGENT_ATTESTATION: '0',
+  };
+
+  const diffs: string[] = [];
+  if (LAUNCH_BINARY !== '/usr/local/bin/ai-memory') {
+    diffs.push(`二进制 ${LAUNCH_BINARY}`);
+  }
+  if (JSON.stringify([...LAUNCH_ARGS]) !== JSON.stringify(expectedArgs)) {
+    diffs.push(`argv ${JSON.stringify([...LAUNCH_ARGS])}`);
+  }
+  if (LAUNCH_HOME !== '/data') {
+    diffs.push(`HOME ${LAUNCH_HOME}`);
+  }
+  for (const [key, value] of Object.entries(expectedEnv)) {
+    const actual = (LAUNCH_ENV_TEMPLATE as Record<string, string>)[key];
+    if (actual !== value) {
+      diffs.push(`env ${key}=${String(actual)}`);
+    }
+  }
+  const actualKeys = Object.keys(LAUNCH_ENV_TEMPLATE).length;
+  if (actualKeys !== Object.keys(expectedEnv).length) {
+    diffs.push(`env 键数 ${actualKeys} ≠ ${Object.keys(expectedEnv).length}`);
+  }
+
+  if (diffs.length > 0) {
+    return { name, status: 'fail', detail: `启动模板与真源不一致：${diffs.join(' · ')}` };
+  }
+  return {
+    name,
+    status: 'pass',
+    detail: '启动模板与真源逐字一致（argv / env 四键 / HOME）',
   };
 }
 

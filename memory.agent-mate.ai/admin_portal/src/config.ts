@@ -58,6 +58,12 @@ export interface PortalConfig {
    * `scripts/build-portal-image.sh` 构建的）。
    */
   readonly ownImageTag: string;
+  /**
+   * 直连 MaaS 的 embeddings 端点与模型（`PORTAL_EMBEDDINGS_BASE_URL` / `PORTAL_EMBEDDINGS_MODEL`，
+   * Sprint 5 `#17`）；`null` = 未配置 ⇒ 生产由自检判 `fail`、development 记 `deferred`。
+   */
+  readonly embeddingsBaseUrl: string | null;
+  readonly embeddingsModel: string | null;
   readonly port: number;
   readonly logLevel: LogLevel;
   readonly adminHosts: string[];
@@ -138,6 +144,18 @@ const RawEnvSchema = z.object({
   // 与主 key 同 workspace / 同模型权限 —— 否则 embeddings 模型或维度不一致会**静默降级**
   //（见 knowledge/web-portal/portal-launch-mechanism.md E4）。
   DASHSCOPE_API_KEY: z.string().min(1).optional(),
+  // **直连 MaaS 的 embeddings 判据**（Sprint 5 `#17`，自检项 `embeddings_reachable_1024`）。
+  // §3.4 ④ 已拍板「**直连 MaaS**」—— 经上游判会假绿（`3.21` 实证：坏 key 下上游只出「线性扫描」告警
+  // 而 `tools/call` 仍返回），判据必须同时断「可达」与「向量长度 == 1024」且不经降级路径。
+  // 两个键均**非密钥**（base_url 是环境私有主机名、模型名是公开值）⇒ 真源 = compose 的 `environment:`；
+  // **取值**（model 可字面写、base_url 从 `portal.env` 插值）见 `deployment.md` §12.5.4。
+  // 姿态：生产缺任一键 ⇒ 自检 **fail**（无法验证即不得对外服务）；development 缺 ⇒ **deferred**（明写）。
+  // **刻意不加 `min(1)`**：compose 用 `${PORTAL_EMBEDDINGS_BASE_URL:-}` 插值 ⇒ 未设时传进来的是
+  // **空串**，而空串的语义是「未配置」。若在这里 `min(1)`，**开发姿态**会在 loadConfig 就抛
+  // `config_invalid`（把「没配」误报成「配置非法」，且让本机 `docker compose` 起不来）。
+  // 归一化交给 `blankToNull`（空串/纯空白 ⇒ `null`），再由**启动自检**按姿态判 fail / deferred。
+  PORTAL_EMBEDDINGS_BASE_URL: z.string().optional(),
+  PORTAL_EMBEDDINGS_MODEL: z.string().optional(),
   // 会话回收的两个**限额**（`3.4`）：正整数毫秒；**未提供 = 不启用该触发**。
   // 键名已在 `web-design.md` §12.9 登记（「必填」），但**取值归 `4.1`** —— 本批只做读取位，
   // 不写死默认值（否则等于替 `4.1` 定了值）。
@@ -161,6 +179,20 @@ function formatIssues(error: z.ZodError): string {
   return error.issues
     .map((issue) => `${issue.path.join('.') || '(root)'}: ${issue.message}`)
     .join('; ');
+}
+
+/**
+ * 空串等价于「未配置」（返回 `null`）。
+ *
+ * **为什么需要**：`deploy/portal.compose.yml` 用 `${PORTAL_EMBEDDINGS_BASE_URL:-}` 从 `portal.env`
+ * 插值（该值是环境私有主机名、不入仓）⇒ **未设时传进来的是空串**。若把空串当「已配置」，zod 的
+ * `min(1)` 会在**开发姿态**就抛 `config_invalid`（把「没配」误报成「配置非法」），而正确行为是
+ * 让**启动自检**按姿态判 `fail`（生产）/ `deferred`（开发）。
+ */
+function blankToNull(value: string | undefined): string | null {
+  if (value === undefined) return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
 }
 
 /** `/data` 及其子路径判定（门户库不得落此，见 AC9.4）。 */
@@ -279,6 +311,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): PortalConfig {
     testJwt,
     launchOverride,
     upstreamApiKey: raw.DASHSCOPE_API_KEY ?? null,
+    embeddingsBaseUrl: blankToNull(raw.PORTAL_EMBEDDINGS_BASE_URL),
+    embeddingsModel: blankToNull(raw.PORTAL_EMBEDDINGS_MODEL),
     sessionIdleTimeoutMs: raw.PORTAL_SESSION_IDLE_TIMEOUT,
     sessionMaxDurationMs: raw.PORTAL_SESSION_MAX_DURATION,
     maxConcurrencyPerKey: raw.PORTAL_MAX_CONCURRENCY_PER_KEY,

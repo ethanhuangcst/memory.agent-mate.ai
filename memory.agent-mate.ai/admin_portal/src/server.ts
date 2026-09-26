@@ -226,7 +226,9 @@ async function main(): Promise<void> {
     return;
   }
 
-  const results = runSelfCheck(cfg);
+  // **必须 await**：自检第 7 项要发一次真实的 HTTP（embeddings 探测）⇒ `runSelfCheck` 自 `#17` 起是
+  // `async`。顺序不可颠倒：**自检不过就不 listen**（下面 hasBlockingFailure 为真即 return，不走 listen）。
+  const results = await runSelfCheck(cfg);
   for (const item of results) {
     process.stdout.write(`${JSON.stringify({ event: 'selfcheck', ...item })}\n`);
   }
