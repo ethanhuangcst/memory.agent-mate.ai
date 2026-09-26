@@ -8,6 +8,18 @@
 
 ## 2026-09-26
 
+### Sprint 5 `#2` 施工前两项拍板落盘（用户定）
+
+**为什么**：`#2` 开工准备的探针把两处**做法未定**的地方摆出来了 —— 不先定，同一判据会被两行认领，或把「无限重启循环」带进生产。
+
+**拍板 ①：版本断言整体归 `#2`**（连**挂载 `upstream.lock`** 与**门户自身版本读取位**一起归本行）；**`#17` 只做三项 `deferred` 转正**。**理由 = 一条不变量一个落点**：`#2` 的验收条件本就含「不一致拒绝启动」，而 [`web-portal/web-design.md`](./web-portal/web-design.md) §3.4 ② 表第 3 行的「版本断言」正是它；原 §3.4 ③ 把「挂载锁 + 读取位」记归 `#17` ⇒ 同一判据被两行认领。**同批改指 4 处**：§3.4 ②（加归属标注）· §3.4 ③（归属改 `#2` + 记现状「两侧输入面皆缺」）· Sprint 5 `#1` 行（「挂载与读取位」改指 `#2`）· `#17` 行（范围收口为三项 `deferred` 转正）。**注**：`#17` 的 `binary_version_matches_lock` 判的是**上游二进制**版本（`ai-memory --version` 末位 semver ⇄ 锁 `UPSTREAM_RELEASE_TAG` 去 `v`），与「**门户自身**版本 vs 锁」**不是同一件事**（探针 `V2`/`V3` 已机械定位）。
+
+**拍板 ②：`healthcheck` 与重启策略** —— `healthcheck.test` = **容器内 `node -e fetch`**（底座 `node:22-bookworm-slim` 实测**无 `curl`、无 `wget`**）· `restart` 改 **`on-failure:<N>`（有界早停）** · 参数（`interval`/`timeout`/`retries`/`start_period`）按探针相 3 `T2` 的 boot 耗时取值 · `healthcheck` **只表运行期健康**、**不承担「自检是否通过」的语义**（后者已由**退出**兑现）· 同批补 `depends_on`。**依据**：实测「坏配置 + `restart: unless-stopped`」**12 s 内 `RestartCount=7`** ⇒ 无限重启循环**快速且无界**；`/healthz` 固定 `ok:true` 与该语义决策**相容**。真源改 §3.4 ⑤。
+
+**施工附加项（已登记进 `#2` 行）**：`PORTAL_ROOT` 的处置（删键，或为其补实现读取位 —— 二选一须写明理由）+ 给 `deploy-doc-audit` 补「**部署侧声明的键 → 代码读取方**」方向的判据（体例同 `A2b`：白名单带理由且条目仍被引用）。
+
+**边界**：本轮**只改真源与排期** —— **不改** `deploy/portal.compose.yml` / 产品代码 / `scripts/`（`#2` 本体**未开工**）。验证：`make doc-links` 零悬空 · `make deploy-doc-audit` 9/0 退 0 · `git diff --check` 干净。
+
 ### `D5` 状态收口（`Implemented` → `Pending`，用户定夺）
 
 **为什么**：`D5`（上线前负向验收门禁）原标 `Implemented`，而 R1 行与 Sprint 5 收尾句写着「**上线前 `D5` 必须关闭**」—— 读起来自相矛盾（已实现却还必须关闭）。这是上一轮 review 留给用户定夺的第三项。
@@ -23,7 +35,7 @@
 - **判据定档 4 条**：① AC12.1「三项制品契约」与 ② AC12.2「uid/gid 对齐」**均已判**（`#1` 探针 `E1`–`E9` / `E4`/`E5`；本探针 `U1` 只登记、不重跑 —— 并纠正一处锚错：uid/gid 的真源是 `web-design.md` §3.2 + `mcp-design.md` §5.6.3，**不是** `deployment.md`，后者实测 0 命中）③ AC12.3「版本由锁注入、不手写」= 探针 `V1` 链路上 **5 个点位全命中**（锁 `IMAGE_TAG` → 构建脚本 `sed` + `--build-arg` → `ARG IMAGE_TAG` → `LABEL …version="${IMAGE_TAG}"`）④ `healthcheck` 判据 = 块内**四键齐**（`test`/`interval`/`timeout`/`retries`，按缩进切块），并用 `docker-compose config` 证明**正样本本身合法**（防「靠非法样本假绿」）。
 - **硬数据（可直接用于施工）**：底座 `node:22-bookworm-slim` 实测**无 `curl`、无 `wget`**（只有 `node`）⇒ `healthcheck.test` **只能**用容器内 `node -e fetch` 形态；坏配置 + `restart: unless-stopped` 实测 **12 s 内 `RestartCount=7`** ⇒「无限重启循环」是**快速且无界**的真实故障模式（相 3 `T3`；用临时靶镜像冒烟所得，**非产品结论**）。
 - **两处缺口**：**A** 编排侧（无 `healthcheck` / 无 `depends_on` / `/healthz` 固定 `ok:true` —— 与 §3.4 ⑤ 一致）；**B 本轮新发现** —— `PORTAL_ROOT` 在 compose 的 `environment:` 与 `deployment.md` §12.5.4 各登记 **1 处**，而产品代码（`admin_portal/src/**`）**三种真读取形态皆不命中**（源码里唯一含该子串的是常量 `ADMIN_PORTAL_ROOT`，由 `import.meta.url` 推导）⇒「**看起来能配、其实无作用**」。**且这是判据的方向缺口**：`deploy-guide-audit` 的 `A2` = `[...portalKeys].filter((key) => !deployKeys.has(key) && !docKeys.has(key))` ⇒ **只判「代码会读 → 必须被登记」**（单向）、`A2b` 只扫源码令牌 ⇒ **部署侧多出来的键不在任何判据面内**（`make deploy-doc-audit` 恒绿也可能漏，本次即实证）。
-- **两项待拍板（⚠️ 施工前须定，详见探针 README）**：① **版本断言的归属与形态** —— `#2` 的「不一致拒绝启动」（**门户自身**版本 vs 挂载锁）与 `#17` 的 `binary_version_matches_lock`（**上游二进制** vs 锁）**不是同一件事**，而 §3.4 ③ 把「挂载锁文件 + 读取位」记归 `#17` ⇒ 同一判据被两行认领（现状**两侧输入面皆缺**：源码读取位 0 处、compose 未挂 `upstream.lock`）；候选 = 整体归 `#2` / 整体归 `#17` / 拆成「外部断言归 `#2` + 启动期断言归 `#17`」。② **`healthcheck` 的语义与重启策略** —— `/healthz` 只表达「进程活着」（自检失败已由**退出**兑现），候选 = 接受语义 + 告警 / 改 `restart: on-failure:<N>` 有界早停 / 先由 `#17` 让 `/healthz` 反映自检再定。
+- **两项待拍板（⚠️ 施工前须定，详见探针 README）**：① **版本断言的归属与形态** —— `#2` 的「不一致拒绝启动」（**门户自身**版本 vs 挂载锁）与 `#17` 的 `binary_version_matches_lock`（**上游二进制** vs 锁）**不是同一件事**，而 §3.4 ③ 把「挂载锁文件 + 读取位」记归 `#17` ⇒ 同一判据被两行认领（现状**两侧输入面皆缺**：源码读取位 0 处、compose 未挂 `upstream.lock`）；候选 = 整体归 `#2` / 整体归 `#17` / 拆成「外部断言归 `#2` + 启动期断言归 `#17`」。② **`healthcheck` 的语义与重启策略** —— `/healthz` 只表达「进程活着」（自检失败已由**退出**兑现），候选 = 接受语义 + 告警 / 改 `restart: on-failure:<N>` 有界早停 / 先由 `#17` 让 `/healthz` 反映自检再定。（**两项均已于同日拍板**：见本日「施工前两项拍板落盘」小节 —— 版本断言整体归 `#2`；`restart` 取 `on-failure:<N>` 有界早停。）
 - **未判项**：相 3 全部（`T1`–`T5`；本机无 linux/amd64 门户镜像）⇒ 复跑条件 = `PORTAL_BUILD_TAG=<img> bash …/probe.sh`。
 - **本轮自伤 5 条（已记 README，供后续复用）**：判据要锚在**语义**（`environment:` 块内的键 ≠ compose 自身的插值变量 ⇒ `PORTAL_IMAGE` 假阳性）· `comm` 的输入**必须有序**（收窄判据时漏 `sort -u` ⇒ 吐出 14 个假孤儿）· 样本注入点必须与判据**同面**（否则假红）· **双引号里的反引号是命令替换**（实测报 `PORTAL_ADMIN_HOST: command not found`）· 声明要锚**真源**（uid/gid 锚 `deployment.md` ⇒ 假红）。
 
@@ -69,7 +81,7 @@
 
 **验证**：CI run **`36226846982` success**（三相全判 ⇒ 探针 `rc=0`）· 本机探针 **22 PASS / 0 FAIL / 1 未判** · `make doc-links` 零悬空 · `make deploy-doc-audit` 9/0 退 0 · `make attestation-paths` ✓ · `make preflight-test` 5/0 · `make secret-check` ✓ · `tsc --noEmit` 0 错 · 离线 371/35 · `git diff --check` 干净。
 
-**边界**：`#1` 标 **`Implemented`**（判据全绿；按 DoD 待用户确认「可用」后置 `Done`）· `upstream.lock` 的**挂载与读取位**归 `#17` · `healthcheck` 归 `#2` · GHCR 包默认私有 ⇒ 拉取凭据登记进 [`deployment.md`](./deployment.md) §1.1（归 `#10`）· 本机 arm64 **不再作为构建路径**。
+**边界**：`#1` 标 **`Implemented`**（判据全绿；按 DoD 待用户确认「可用」后置 `Done`）· `upstream.lock` 的**挂载与读取位**归 `#17`（**→ 2026-09-26 拍板改归 `#2`**，见本日「施工前两项拍板落盘」小节）· `healthcheck` 归 `#2` · GHCR 包默认私有 ⇒ 拉取凭据登记进 [`deployment.md`](./deployment.md) §1.1（归 `#10`）· 本机 arm64 **不再作为构建路径**。
 
 ### Sprint 5 `#1`「门户镜像与编排制品」开工准备：判据可行性探针 + 判据定档 6 条
 
