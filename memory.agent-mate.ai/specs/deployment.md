@@ -621,8 +621,10 @@ cd /opt/ai-memory && docker compose -f portal.compose.yml --env-file portal.env 
 2. **两个目录的属主要先交给容器用户（`999:999`）** —— `portal_data` 卷为 `root:root` 时门户**写不了库**；`/data/users` 不存在时自检 `users_root_writable` **fail**（§4.4 的 setgid 引导必须先做，实机当时尚未做 ⇒ `ENOENT`）：
 
 ```bash
-docker run --rm -v portal_data:/p alpine chown 999:999 /p
-docker run --rm -v ai_memory_data:/data alpine sh -c "mkdir -p /data/users && chown 999:999 /data/users && chmod 755 /data/users"
+docker run --rm -v ai_memory_data:/data alpine sh -c "install -d -m 2775 -o root -g 999 /data/users"
+   > **订正（2026-09-27 晚，实机核对）**：本文早先给的是 `chown 999:999` + `chmod 755` 两条 —— **口径错**（丢了 setgid 与属组），已改为上面这一行（`deployment.md` §4.4 的设计口径：`root:999` + setgid `2775`，让非 root 门户能自建 `0700` 用户目录）。
+   >
+   > 另：**`portal_data` 不需要手工 chown** —— ① 它的真实卷名是 **`memory-agent-mate-portal_portal_data`**（compose 未写 `name:` ⇒ 带 project 前缀），早先那条 `-v portal_data:/p` 既**挂错了卷**、又**多建了一个裸卷**（2026-09-27 已清）；② 命名卷**首次挂载时 Docker 会用镜像内该路径的属主初始化**（镜像里 `/srv/portal` 属 `999:999`）⇒ 属主自动正确。核对用：`docker volume ls --format '{{.Name}}' | grep portal_data`。
 ```
 
 3. **`PORTAL_ACCESS_JWKS_URL` 必须显式填**（口径见 §12.5.4 的订正）—— 否则 `config_invalid`。

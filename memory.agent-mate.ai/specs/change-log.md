@@ -8,6 +8,24 @@
 
 ## 2026-09-27
 
+### Sprint 5 `#11` 验收执行：§6.2 V1–V4 全部实测 + §3 清单 7/10（并订正两处我自己的错）
+
+**做了什么**：在生产卷上执行 `#11` 的正式验收判据，并顺手订正两处本轮暴露的**我自己的错**。
+
+**验收结果（实测，非推断）**：
+- **`mcp-design.md` §6.2 V1–V4 全部有证据**：V1 漏设 `AI_MEMORY_DB` ⇒ `CRIT` + `rc=2`（对照 `rc=0`）；V2 用户库 1 条、主库零用户记忆；V3 跨真实用户 `ethan-test` → `code-buddy-tester` ⇒ `not found` + `count: 0` + 主库 0；V4 传用户 env ⇒ `source` 指向该用户库。
+- **`web-test.md` §3 十项清单：已验 7 项** —— 写入落自己库 · `/data/users` 无残留 · 面隔离双向拒绝 · **无 `docker.sock`**（挂载命中 0）· 门户镜像与上游 `aimem` **同 `999:999`** · 门户库 `/srv/portal/portal.db` 不在 `/data` 下 · 备份不含门户库。
+- **剩 3 项需门户/客户端操作**：会话结束子进程回收 · `{handle}` 路径穿越 · 吊销 key 即时生效 ⇒ `#11` 维持 `WIP`。
+- **⚠️ 路径如实标注**：V1–V4 走的是 **CLI + 显式注入 env** 的等价路径（身份由库路径决定），**不是** AC 字面的「生产 **forced command** 路径」—— 后者归 `#7`（未做）。不把等价路径写成 AC 原义。
+
+**订正两处我自己的错**：
+1. **`/data/users` 口径**：我当初用 `chown 999:999` + `chmod 755`，而 `deployment.md` §4.4 的设计口径是 **`root:999` + setgid `2775`**（让非 root 门户能自建 `0700` 用户目录）⇒ 已按设计口径重建（实机现为 `drwxrwsr-x root:999`，两个用户目录仍 `0700`），并把 §12.6 动作 2b 里的错误命令订正为 `install -d -m 2775 -o root -g 999 /data/users`。
+2. **`portal_data` 卷名与多余卷**：我早先跑的 `-v portal_data:/p chown` **既挂错了卷**（真实卷名是 `memory-agent-mate-portal_portal_data`，compose 未写 `name:` ⇒ 带 project 前缀）、**又多建了一个裸卷**（已删除）。且**该 chown 本来就多余** —— 命名卷首次挂载时 Docker 会用**镜像内该路径的属主**初始化（镜像里 `/srv/portal` 属 `999:999`）⇒ 属主自动正确。
+
+**验证（改后）**：门户容器 `Up (healthy)` · `/healthz` 200（返回 `faces.admin/mcp` 正确）· `/data/users` = `root:999 2775` · 真卷唯一。
+
+**边界**：不改产品代码 · `#7`（forced command 路径复验）未做 · §3 剩 3 项需门户/客户端操作。
+
 ### Sprint 5 门户上生产并端到端实测通过（`#10` 窗口续 · `#11` 转 `WIP`）
 
 **做了什么**：门户 stack 在野草云4 上线（`memory-agent-mate-portal` · 部署目录 `/opt/ai-memory/`），两个面各自暴露并按 **Host 头**分流，端到端跑通「门户签发 token → 客户端经 `/mcp` 写入记忆」。
