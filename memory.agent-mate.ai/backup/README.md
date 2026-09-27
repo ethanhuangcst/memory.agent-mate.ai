@@ -67,3 +67,18 @@ bash backup/restore-drill.sh --from-oss --doctor-cmd 'docker exec ai-memory-mcp 
    ⇒ **脚本输出文案一律不用反引号**。
 2. **`local` 不能在同一句里「先声明后引用」**：`local src="$1" rel="$2" dst="${DEST}/${rel}"` 在 `set -u` 下报
    `rel: unbound variable`（同一 `local` 从左到右赋值，`dst` 展开时 `rel` 还没赋）⇒ **分行声明**。
+
+## 7. 外迁段实测通过（2026-09-27）
+
+首次**真跑**（真实桶），两条脚本的外迁 / 回读路径均验证：
+
+- `backup-and-push.sh` ⇒ 3 个库上传到 `oss://memory-agent-mate-bak/ai-memory-backup/<stamp>/`，**回读比对 3 项一致**，**`rc=0`**；
+- `restore-drill.sh --from-oss` ⇒ **从桶拉最新** → 校验 → 隔离恢复 → `integrity_check` 全过；**`rc=30`** 仅因 `doctor` 通路需生产容器（**执行点归 `#16`**）。
+
+环境：macOS + ossutil **v1.7.19** · 桶**私有 + SSE（OSS 完全托管 / AES256）** · RAM 子账号策略**不含 `DeleteObject`**（过期清理交给桶的**生命周期规则** —— 见 `../specs/deployment.md` §1.1）。
+
+### 新增踩坑
+
+1. **`ossutil cp -r oss://bucket/prefix/ localdir/` 的落点因版本而异** —— v1.7.19 把 prefix 下的**内容直接**放进 `localdir/`（**不多建**一层以 prefix 末段命名的目录），别的形态会保留那一层 ⇒ 解析下载结果的脚本**必须两种都探测**（本仓首版只赌了后者，真跑即报「快照缺 SHA256SUMS」）。
+2. **zsh 交互模式下 `#` 不是注释**（`setopt interactive_comments` 未开时）⇒ 粘给别人的**一行命令里不要写行内注释**，否则 `#` 后面的字会被当成参数执行（实测报 `export: not valid in this context`）。
+3. **`ossutil config` 的输入是明文回显**，且注意 `stsToken` 提示（用长期 AK 时**直接回车跳过**）；配置文件路径默认 `~/.ossutilconfig`，装完记得 `chmod 600`。

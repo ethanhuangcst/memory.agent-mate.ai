@@ -8,6 +8,17 @@
 
 ## 2026-09-27
 
+### Sprint 5 `#8` / `#15` 收口：云资源就绪 + 备份外迁真跑（两行 `Done`）
+
+**`#8`（阿里云 OSS 私有桶 + RAM 子账号 AK）——「阻塞」→ `Done`**：建 RAM 子账号 `memory-agent-mate` + 自定义策略 `oss-aimem-backup-rw`（**仅该桶 + 前缀 `ai-memory-backup/`**：`PutObject`/`GetObject`/`HeadObject`/`ListObjects`；**不给 `DeleteObject`** —— 过期清理交给桶的生命周期规则）；桶 `memory-agent-mate-bak`（**中国香港**）**私有 + SSE 已开**（OSS 完全托管 / AES256）；AK/SK 仅落 `~/.ossutilconfig`（`chmod 600`）与 gitignored 的 `secrets.local.hk_vps_4.md`，**不入仓**。**实测**（macOS + ossutil **v1.7.19**）：`ls` → `Object Number is: 0` ✓ · 上传 `OK num: 1` ✓ · 回读得 `probe` ✓ ⇒ 原登记的「`ossutil` 机器核查**未执行**」**已销**。
+
+**`#15`（备份脚本）——`WIP` → `Done`**：外迁段首次**真跑**（真实桶、测试夹具）—— `backup-and-push.sh`（快照 3 库 → sha256 → 上传 `oss://…/20260927T024450Z` → **回读比对 3 项一致** → **`rc=0`**）· `restore-drill.sh --from-oss`（**从桶拉最新** → 校验 → 隔离恢复 3 库 → `integrity_check`（门户库三表）→ **`rc=30`**）。**唯一未判 = `doctor` 通路**（需生产容器 ⇒ **执行点归 `#16`**，口径同 `#9` 的 R7/R8）。
+
+**同批修一处真 bug + 记三条坑**：① **`ossutil cp -r` 的落点因版本而异**（v1.7.19 把 prefix 下的内容**直接**放进目标目录、**不多建**一层）⇒ `--from-oss` 改为**两种落点都探测**（首版只赌一种，真跑即报「快照缺 SHA256SUMS」）；② **zsh 交互模式下 `#` 不是注释** ⇒ 给用户的命令**不写行内注释**；③ **`ossutil config` 输入明文回显**、`stsToken` 提示直接回车（长期 AK 场景）。均记入 [`../backup/README.md`](../backup/README.md) 的踩坑段与新增第 7 节。
+
+**验证**：`backup-and-push.sh` `rc=0`（回读比对通过）· `restore-drill.sh --from-oss` `rc=30`（仅 doctor 未判）· `bash -n` 两脚本 ✓ · `make doc-links` 零悬空 · `make secret-check` ✓ · `git diff --check` 干净。
+**边界**：**未在生产机跑过**（`/data`、`/srv/portal` 的真实数据）· `doctor` 与 RPO/RTO 量化归 `#16` · 测试快照（约几十 KB）留在桶里（无 `DeleteObject` 权限，交由生命周期规则清理）。
+
 ### Sprint 5 `#15` 开工准备（**补记**）：只读判据探针 + 一处「判据假通过」被自检抓出
 
 **为什么补**：`#15` 的本体（`backup/` 两脚本）**先落地**、探针**后补** —— **偏离仓内「判据先行」惯例**（`#1`–`#9`/`#17` 都是先落探针再施工）。补它的价值当场兑现：探针首跑即抓出一处**判据假通过**。

@@ -50,11 +50,20 @@ if [ "${FROM_OSS}" = '1' ]; then
   [ -n "${OSS_BUCKET:-}" ] || { printf '未判：OSS_BUCKET 未设 ⇒ 无法从 OSS 拉最新（本机可先用 --snapshot）\n'; exit 30; }
   PREFIX="oss://${OSS_BUCKET}/${OSS_PREFIX:-ai-memory-backup}/"
   LATEST="$(ossutil ls "${PREFIX}" 2>/dev/null | grep -oE "${PREFIX}[0-9]{8}T[0-9]{6}Z/" | sort | tail -1)"
-  [ -n "${LATEST}" ] || die 'OLS 上找不到任何快照目录' 10
+  [ -n "${LATEST}" ] || die 'OSS 上找不到任何快照目录（前缀下还没有快照？先跑一次 backup）' 10
   PULL="$(mktemp -d)"
   log "① 拉最新：${LATEST} → ${PULL}"
   ossutil cp -r "${LATEST}" "${PULL}/" -f >/dev/null || die '下载快照失败'
-  SNAPSHOT="${PULL}/$(basename "${LATEST}")"
+  # ⚠️ `ossutil cp -r oss://bucket/prefix/ localdir/` 的**落点因版本而异**：
+  #   v1.7.19 实测把 prefix 下的**内容**直接放进 localdir/（**不多建**一层以 prefix 末段命名的目录），
+  #   别的形态可能保留 `<末段>/` 那一层 ⇒ 这里**两种都探测**，别赌（2026-09-27 首次真跑 `--from-oss` 时踩到）。
+  if [ -s "${PULL}/SHA256SUMS" ]; then
+    SNAPSHOT="${PULL}"
+  elif [ -s "${PULL}/$(basename "${LATEST}")/SHA256SUMS" ]; then
+    SNAPSHOT="${PULL}/$(basename "${LATEST}")"
+  else
+    die "下载回来的快照结构不认识（既无 SHA256SUMS、也无一层同名目录）：$(ls -A "${PULL}" | tr '\n' ' ')"
+  fi
 else
   [ -n "${SNAPSHOT}" ] || { printf '未判：未指定快照（--snapshot DIR 或 --from-oss）\n'; exit 30; }
   [ -d "${SNAPSHOT}" ] || { printf '未判：快照目录不存在：%s\n' "${SNAPSHOT}"; exit 30; }
