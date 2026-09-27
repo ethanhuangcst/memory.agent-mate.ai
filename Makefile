@@ -6,6 +6,7 @@
 UPSTREAM_URL := https://github.com/alphaonedev/ai-memory-mcp.git
 LOCK := memory.agent-mate.ai/upstream.lock
 PREFLIGHT := memory.agent-mate.ai/scripts/upstream-preflight.sh
+RELEASE_PREFLIGHT := memory.agent-mate.ai/scripts/release-preflight.sh
 SECRET_CHECK := memory.agent-mate.ai/scripts/secret-check.sh
 PRE_COMMIT_HOOK := memory.agent-mate.ai/scripts/git-hooks/pre-commit
 LINK_CHECK := memory.agent-mate.ai/scripts/link-check.sh
@@ -25,7 +26,7 @@ DEPLOY_GUIDE_AUDIT := memory.agent-mate.ai/probes/deploy-guide-audit/probe.mjs
 # 本机快速路径的环境文件（回环 Host + PORTAL_TEST_JWT_EMAIL），已 gitignore。
 PORTAL_LOCAL_ENV := memory.agent-mate.ai/admin_portal/.env.local
 
-.PHONY: help upstream pin pin-update preflight preflight-test backup restore-drill secret-check doc-links attestation-paths maintain-user-dbs hooks-install up down portal-up portal-down portal-dev portal-test portal-e2e portal-tunnel portal-coverage portal-image portal-image-smoke portal-mcp-probe portal-mcp-session-probe portal-acceptance
+.PHONY: help upstream pin pin-update preflight preflight-test release-preflight backup restore-drill secret-check doc-links attestation-paths maintain-user-dbs hooks-install up down portal-up portal-down portal-dev portal-test portal-e2e portal-tunnel portal-coverage portal-image portal-image-smoke portal-mcp-probe portal-mcp-session-probe portal-acceptance
 
 help:
 	@grep -E '^[a-zA-Z0-9_-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*## "} {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
@@ -44,6 +45,9 @@ preflight: ## 升级预检：准入判定 + CHANGELOG 摘要（追加 ARGS，如
 
 preflight-test: ## 预检脚本离线自测（fixture 驱动，无网络依赖）
 	bash memory.agent-mate.ai/scripts/tests/run-fixtures.sh
+
+release-preflight: ## 上线预演：本机可判的预演项一条命令跑完（Sprint 5 `#9`；ARGS="--out FILE" 存档）
+	bash $(RELEASE_PREFLIGHT) $(ARGS)
 
 backup: ## 备份并外迁：快照 → sha256 → ossutil 上传 → 回读比对（见 memory.agent-mate.ai/backup/）
 	bash memory.agent-mate.ai/backup/backup-and-push.sh

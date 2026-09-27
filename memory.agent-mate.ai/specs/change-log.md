@@ -8,6 +8,22 @@
 
 ## 2026-09-27
 
+### Sprint 5 `#9` 本体交付：上线剧本 + `make release-preflight` + 缺口 A/B 闭合（`ToDo` → `Done`）
+
+**拍板（2026-09-27 用户定）**：① 落点 = **新建 `specs/release-readiness.md`**；② 预演入口 = **新增 `make release-preflight` + 脚本**；③ 回滚与 `#15` 的接口 = **引用真实入口 + 显式标注「待 `#15` 就绪」**（不写虚构命令）。
+
+**为什么**：开工准备把三条 AC 判据化后，发现两处**真缺口**（升级 runbook 引用不存在的命令；预演无单一入口）—— 本轮正是补它们的本体。
+
+**改了什么**：
+- **新增上线剧本** [`release-readiness.md`](./release-readiness.md)：§0「一条命令的预演」判据表（R1–R8 各自对应哪条真源）· §1 上线顺序与 `#10`–`#14` 的对应 · §2 **三份清单待执行项**（当场枚举、不手抄，避免与真源漂移）· §3 **回滚点 R-a–R-d + 回滚步骤**（代码层 / 数据层分列；数据层**引用 `make backup`/`make restore-drill` 并标注「待 `#15` 就绪」**）+ §3.3 回滚后验证· §4 与 `#14` 的接缝（RID `D5`/`V1` 执行点）。**明确写了「`30` 是本行正常态」**：R7（`#15` 未交付）与 R8（需生产机）如实登记为未判。
+- **新增预演脚本 + make 目标**：`make release-preflight` → [`../scripts/release-preflight.sh`](../scripts/release-preflight.sh)。8 个判据 + 一份**可存档报告**（`ARGS="--out FILE"`）。设计要点：**三份清单当场枚举**（从真源 grep，不手抄）· 模板渲染**两种 compose 命令都试**（`docker compose` / `docker-compose` ⇒ 本机与 CI 都能判）· 生产侧与 `#15` 依赖**显式未判**。
+- **缺口 A 闭合**：[`deployment.md`](./deployment.md) §9.1 的**三处悬空引用**（`scripts/check-upstream.sh` · `diff-upstream.sh` · `pin-update.sh` —— 本仓并不存在）**改引真实入口** `make preflight` / `make pin` / `make pin-update`，并加**订正说明**：**「diff 路线」已由 [`../upstream.lock`](../upstream.lock) 的 NOTES 否决** —— 上游 main 与 release tag 的**提交图不连通**（历史被重写）⇒ 升级预检**不得**依赖 git 谱系/diff，只能用 **releases API + CHANGELOG + 镜像指纹**。§9.2 七步同步改引（第 2 步从「读 diff」改为「人工读 CHANGELOG 摘要」）。
+- **缺口 B 闭合**：[`deployment.md`](./deployment.md) §12.2 新增一条**指向 `make release-preflight` 与剧本**的入口 —— 「一条命令」才是**可复跑的一步**。
+
+**验证（本机）**：预演脚本 **6 PASS / 0 FAIL / 2 未判**（未判 = R7 快照归 `#15` · R8 生产侧；`R3` 模板渲染绿 —— 本机 `docker-compose` 生效）· 探针 **11 PASS / 0 FAIL / 1 未判**（未判 = 生产侧）· 两脚本 `bash -n` ✓。
+**⚠️ 本轮未接 CI**：两件都含**真实未判项** ⇒ 接了即 `rc=30` 红；**接线前置 = `#15` 交付后 `R7` 转判**。口径同 `#5` —— **不把未判当通过，也不为了绿而删判据**。
+**边界**：不改产品代码 · 快照能力（`#15`）不在本行 · 生产侧预演（`#10`）不在本行。
+
 ### Sprint 5 `#9` 开工准备：上线准备包（预演 · 三份清单 · 回滚成文）判据探针（**只探不造**）
 
 **为什么**：本行是**上线动作的输入物**（与 `#14` 配对），而它的三条 AC 都是「文档侧」的 —— 最容易被写成**看着齐、真跑不起来**的散文。开工前先把它们判据化，并把「到底还缺什么」用机械核实钉死。

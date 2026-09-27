@@ -341,17 +341,24 @@ make curl-probe                # 参考用：直连容器 HTTP API 探针（生�
 ### 9.1 三件套
 
 ```bash
-bash scripts/check-upstream.sh                      # 看上游有没有新版本
-bash scripts/diff-upstream.sh <ref-or-tag>          # 看差异，人工判断是否锁
-bash scripts/pin-update.sh <ref> [--force]          # 更新锁文件（--force 用于绕过 dirty 检查，须人工确认）
+make preflight                      # 升级预检：准入判定 + CHANGELOG 摘要（可加 ARGS=--with-image）
+make pin                            # 打印当前版本契约（读 upstream.lock，零网络依赖）
+make pin-update                     # 重新校验上游并回写 upstream.lock（需网络；不部署）
 ```
+
+> **订正（2026-09-27，Sprint 5 `#9`）**：本节原先写的 `scripts/check-upstream.sh` / `scripts/diff-upstream.sh` /
+> `scripts/pin-update.sh` **三个脚本在本仓并不存在**（`deployment.md` 引用了悬空入口 ⇒ runbook 跑不起来）。
+> 真实入口是上表三条 `make` 目标，其实现为 [`../scripts/upstream-preflight.sh`](../scripts/upstream-preflight.sh)。
+> **「diff 路线」已由 [`../upstream.lock`](../upstream.lock) 的 NOTES 否决**：上游 main 与 release tag 的
+> **提交图不连通**（历史被重写）⇒ 升级预检**不得**依赖 git 谱系/diff，只能用 **releases API + CHANGELOG + 镜像指纹**
+> —— 这正是 `make preflight` 做的事。
 
 ### 9.2 七步升级流程
 
-1. 执行 `check-upstream.sh`
-2. 有更新 → `diff-upstream.sh`（**人工读差异**）
+1. 执行 `make preflight`（准入判定 + CHANGELOG 摘要）
+2. 有更新 → **人工读 CHANGELOG 摘要**（不做 git diff：谱系不连通，见 §9.1 订正）
 3. 判断是否需要锁（安全/bugfix 通常跟进；破坏性变更先不動）
-4. 需要 → `pin-update.sh`（更新 `upstream.lock`）
+4. 需要 → `make pin-update`（更新 `upstream.lock`）
 5. 通知用户 **review 后**提交（**不自动提交**）
 6. 更新 compose /配置 → 重建容器 → 跑 §7 冒烟
 7. **升级后立即跑 `iso-probe.sh`**（exit 0 才准入）
@@ -452,6 +459,7 @@ bash scripts/pin-update.sh <ref> [--force]          # 更新锁文件（--force 
 - **门户 key 轮换/吊销**：控制台新建一把（标签 `memory-agent-mate-portal`）→ 改 `portal.env` → 重启门户 stack → 等启动自检的 embeddings 1024 维通过 → 再吊销旧的那把。**主 stack 的 `.env` 全程不动**，主线服务零中断。
 - **启动自检（fail-closed）**：`/data/users` 可写 · embeddings 可达且 1024 维 · 自身二进制版本 == `upstream.lock` —— 任一不满足**拒绝启动**（[`web-portal/web-design.md`](./web-portal/web-design.md) §3.4）。
 - 上线门禁：[`web-portal/web-test.md`](./web-portal/web-test.md) 的 L3（含 V1 负向隔离验收）全绿。
+- **上线预演与回滚剧本（Sprint 5 `#9`）**：部署前跑 **`make release-preflight`**（本机可判的预演项一条命令跑完，报告可 `ARGS="--out FILE"` 存档）；**回滚点、回滚步骤与快照口径**见 [`release-readiness.md`](./release-readiness.md) —— 它与 `#14`（上线验收）配对使用，§2 的三份清单待执行项即验收时的执行清单。
 
 ### 12.3 毕业路径（架构未变，只是扩展）
 

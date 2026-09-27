@@ -31,6 +31,8 @@ DEPLOYMENT="${SPECS}/deployment.md"
 MCP_DESIGN="${SPECS}/mcp/mcp-design.md"
 WEB_TEST="${SPECS}/web-portal/web-test.md"
 PRODUCT_BACKLOG="${SPECS}/product-backlog.md"
+READINESS="${SPECS}/release-readiness.md"                 # 上线剧本（本行产出物）
+REPO_MAKEFILE="$(cd "${PRODUCT}/.." && pwd)/Makefile"     # 仓库根 Makefile（预演入口在其中）
 PORTAL_COMPOSE="${DEPLOY}/portal.compose.yml"
 MAIN_COMPOSE="${DEPLOY}/docker-compose.prod.yml"
 LOCK="${PRODUCT}/upstream.lock"
@@ -113,8 +115,11 @@ section_items() { # $1=文件 $2=起始锚(ERE) $3=结束锚(ERE)
   ' "$1" | grep -cE '^\|[^|]+\||^[0-9]+\.[[:space:]]|^-[[:space:]]' || true
 }
 # ③ 命令引用判据：文档里引用的**仓内脚本/入口**是否真的存在（回滚/预演要可执行，就得引用真命令）。
-referenced_entries() { # $1=文件 → 打印被引用的 `scripts/...` 或 `backup/...` 路径
-  grep -oE '(scripts|backup)/[A-Za-z0-9._-]+\.(sh|mjs)' "$1" | sort -u
+# ⚠️ **只扫围栏代码块**（``` 之间）—— 正文里的**说明文字**也会提到脚本名（例如「本节原先写的 X 并不存在」
+# 这种订正说明），按全文 grep 会把说明当引用 ⇒ 假红（本批实证：订正段落的三个旧脚本名把 `Q4` 判红）。
+referenced_entries() { # $1=文件 → 打印**代码块内**被引用的 scripts/… 或 backup/… 路径
+  awk '/^[[:space:]]*```/{ fence = !fence; next } fence' "$1" \
+    | grep -oE '(scripts|backup)/[A-Za-z0-9._/-]+\.(sh|mjs)' | sort -u
 }
 
 # ── S：判据自检（样本全合成）──────────────────────────────────────────────────────────────
@@ -129,11 +134,11 @@ T_ROWS="$(table_rows "${TMP}/table.md")"
 check S2 '清单行判据可判（表格式 ⇒ 计得出数据行；散文式 ⇒ 计不出）' \
   "$([ "${T_ROWS}" -ge 3 ] && [ "$(table_rows "${TMP}/prose.md")" -eq 0 ] && echo 0 || echo 1)" \
   "表格样本 ${T_ROWS} 行 · 散文样本 0 行"
-printf '跑 scripts/secret-check.sh 与 backup/backup-and-push.sh\n' >"${TMP}/ref.txt"
-printf '跑一个不存在的脚本\n' >"${TMP}/ref-none.txt"
-check S3 '命令引用判据可判（能列出被引用的仓内入口 ⇒ 可逐个核在不在）' \
+printf '```bash\nbash scripts/secret-check.sh\nbash backup/backup-and-push.sh\n```\n正文提到 scripts/nope.sh 但不该被当引用\n' >"${TMP}/ref.txt"
+printf '正文提到 scripts/nope.sh 但没有代码块\n' >"${TMP}/ref-none.txt"
+check S3 '命令引用判据可判（**只扫围栏代码块**：块内 2 个入口被列出 · 正文提及不算 · 无代码块 ⇒ 0）' \
   "$([ "$(referenced_entries "${TMP}/ref.txt" | wc -l | tr -d ' ')" -eq 2 ] && [ "$(referenced_entries "${TMP}/ref-none.txt" | wc -l | tr -d ' ')" -eq 0 ] && echo 0 || echo 1)" \
-  '回滚/预演若要「可执行」，就必须引用真实入口 ⇒ 这条判据用来发现「引用了不存在的命令」'
+  '回滚/预演若要「可执行」就得引用真实入口；**锚在代码块**可避免把「订正说明」当成引用（本批踩过）'
 
 # ── Q：现状契约断言（本行三条 AC 的应判部分）──────────────────────────────────────────────
 echo
@@ -171,18 +176,19 @@ check Q4 '缺口 A（回滚**可执行性**）：`deployment.md` 引用的仓内
   "$([ "${REF_MISSING}" -eq 0 ] && echo 0 || echo 1)" \
   "引用 ${REF_TOTAL} 个入口 · 缺失 ${REF_MISSING} 个：${REF_MISSING_LIST:-（无）}"
 
-# 缺口 B：预演是否已有**可复跑的一步**（make 目标或脚本）—— 现在应为 0
-PREFLIGHT_ENTRY=0
-grep -qE '^preflight:|^\s*bash .*upstream-preflight\.sh' "${PRODUCT}/../Makefile" 2>/dev/null && PREFLIGHT_ENTRY=$((PREFLIGHT_ENTRY + 1))
-grep -rqE 'make (preflight|portal-acceptance)' "${DEPLOYMENT}" && PREFLIGHT_ENTRY=$((PREFLIGHT_ENTRY + 1))
-check Q5 '缺口 B（预演的**可复跑性**）：预演已有单一入口（make 目标 + 文档指向它）' \
-  "$([ "${PREFLIGHT_ENTRY}" -ge 2 ] && echo 0 || echo 1)" \
-  "命中 ${PREFLIGHT_ENTRY}/2 —— 现状：要素在文档里，但**没有**「一条命令跑完预演」的入口（施工批交付）"
+# Q5（**落地后契约**，2026-09-27 同批改指）：预演已有**单一入口**（`make release-preflight` 目标）
+# **且** 文档指向它 —— 两半齐备才算（只加目标不指路 = 运维找不到；只指路不加目标 = 命令不存在）。
+PRE_MAKE=0; PRE_DOC=0
+grep -qE '^release-preflight:' "${REPO_MAKEFILE}" 2>/dev/null && PRE_MAKE=1
+grep -qE 'make release-preflight' "${READINESS}" 2>/dev/null && PRE_DOC=1
+check Q5 'AC①「一条命令的预演」：`make release-preflight` 目标在位 **且** 剧本/部署文档指向它' \
+  "$([ "${PRE_MAKE}" -eq 1 ] && [ "${PRE_DOC}" -eq 1 ] && echo 0 || echo 1)" \
+  "Makefile 目标 ${PRE_MAKE} · 文档指向 ${PRE_DOC}（脚本 = scripts/release-preflight.sh）"
 
-# 缺口 C：上线准备包**尚无落点文档**（本行产出物放哪，待拍板）
-check Q6 '缺口 C：上线准备包**尚无独立落点**（`release-readiness` / 上线准备包 相关文档不存在）' \
-  "$([ ! -e "${SPECS}/release-readiness.md" ] && echo 0 || echo 1)" \
-  '不存在 ⇒ 正常（本行要新建或并入 deployment.md 新章节）；这条断言在落点建立后**会翻**为红 ⇒ 届时同批改指'
+# Q6（**落地后契约**，同批改指）：剧本落点在位且**三要素齐备**（预演 / 清单 / 回滚 + 快照覆盖规则）。
+check Q6 'AC③ 剧本落点在位且三要素齐备（预演 · 三份清单 · 回滚步骤，且含「快照覆盖」硬规则与 `#15` 依赖标注）' \
+  "$(has_all "${READINESS}" 'release-preflight' '回滚' '待 `#15` 就绪' && echo 0 || echo 1)" \
+  "落点 ${READINESS#"${PRODUCT}"/}（原断言是「尚无落点」—— 落点建立后**按计划同批改指**）"
 
 # ───────────────────────── 未判项与接口（归生产 / 归他行）─────────────────────────
 echo
