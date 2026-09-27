@@ -48,7 +48,7 @@ bash backup/restore-drill.sh --from-oss --doctor-cmd 'docker exec ai-memory-mcp 
 | 用例 | 结果 |
 |---|---|
 | **A** 快照（4 库：主 + 2 用户 + 门户） | ✓ `rc=30`（外迁未判）· sha256 清单 4 项 + `manifest.txt` |
-| **A′ WAL 安全** | ✓ 夹具中 alice 有 **1 行仅在 WAL、未 checkpoint** ⇒ 快照行数 **4 = 源 4** |
+| **A′ WAL 安全** | ✓ 夹具中 alice 有 **1 行仅在 WAL、未 checkpoint** ⇒ 快照行数 **4 = 源 4**。<br>**⚠️ 更强的证据在探针里**（`../probes/backup-restore-probe/` 的 `S1`）：要复现「**裸 `cp` 会丢数据**」，夹具必须让库处于**被占用**状态（保持连接打开 + `wal_autocheckpoint=0`）—— 否则 SQLite 在最后一个连接关闭时会 checkpoint，`-wal` 被合并 ⇒ 裸 `cp` **也能**拿到完整数据 ⇒ 判据**假通过**（探针首版即如此，被自检抓出）。生产上库**始终被容器占用**，所以 `.backup` 不是「更讲究」，而是**必需**。 |
 | **B** 演练（`--snapshot` 本地） | ✓ 校验 4 项一致 · 恢复 4 库 · 逐库 `integrity_check` ok · **门户库三表**（`users`/`keys`/`audit`）在位 · 输出 **RTO 实测**；`rc=30`（doctor 未判） |
 | **C 失败非零** | ✓ 篡改快照 1 字节 ⇒ **`rc=10` 且拒绝恢复**（快照不可信时不往下走） |
 | **D 可重复执行** | ✓ 同 `--stamp` 重跑 ⇒ `SHA256SUMS` 逐项一致 |
