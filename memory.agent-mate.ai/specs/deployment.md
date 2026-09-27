@@ -35,6 +35,13 @@
 
 **OSS region 已回填（2026-09-26）**：用户确认**按现登记值（香港）**回填四处 —— 本表 §1.1 · §8 · [`product-backlog.md`](./product-backlog.md) #9 · Sprint 5 `#8`。**`ossutil` 机器核查未执行**（如实登记）⇒ 上线前用 `ossutil ls` · `ossutil stat oss://<OSS_BUCKET>` · `ossutil config`（endpoint 形如 `oss-<region>.aliyuncs.com`），或控制台 → OSS → 该桶 → 概览 → 「地域」**一次性复核**即可。`ADR-021` D3 点名的 [`adr/ADR-005`](./adr/ADR-005-upgrade-admission-gate-layering.md) **实测无 region 表述**（仅含「阿里云 OSS」与 `ossutil ls`）⇒ 无回填项。
 
+**填值落点（2026-09-27 明确）**：
+
+- **值**（桶名真值 · RAM 子账号 AK/SK）→ gitignored 的 `memory.agent-mate.ai/secrets.local.hk_vps_4.md` 的**「备份桶」小节**（该小节现标「待定」，2026-09-27 起转正为填值处）—— 体例同该文件既有的 QWEN / Cloudflare 小节：**只在本文件留档**，本表（公开真源）**永不写值**。
+- **AK 的机器可用副本** → 生产机 `~/.ossutilconfig`（`chmod 600`），或按 `ossutil config` 交互式写入 —— [`../backup/`](../backup/) 的脚本按 `ossutil` 既有配置读取，**脚本内零硬编码**。
+- **回填四处**（体例同 2026-09-26 的 region 回填）：本节 §1.1 · §8 · [`product-backlog.md`](./product-backlog.md) #9 · Sprint 5 `#8` 行 —— **只回填「已就绪 / 口径」，不回填值**。
+- **不必告知本 agent 的内容**：`AccessKeySecret` · 桶名真值。**只需确认**下表 ②③⑤⑥⑦ 的口径 + `ossutil` 在生产机可用。
+
 **`#8` 就绪需提供的信息（2026-09-26 登记）**：
 
 | # | 信息 | 取值 / 口径 |
