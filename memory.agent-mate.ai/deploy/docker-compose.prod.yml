@@ -63,6 +63,12 @@ services:
 
 volumes:
   ai_memory_data:
+    # ⚠️ **必须显式固定卷名**（2026-09-27 实机踩到）：compose 默认会把卷名加项目名前缀
+    # （本项目 `name: ai-memory-mcp` ⇒ 实际卷名会变成 `ai-memory-mcp_ai_memory_data`），
+    # 而**门户 stack 以 `external: true` 挂无前缀的 `ai_memory_data`**（两 stack 共享 `/data/users`）
+    # ⇒ 不固定名字就会**对不上、门户起不来**。固定后两 stack 共用同一个卷
+    # （该卷由部署时人工 `docker volume create ai_memory_data` 创建，见 specs/deployment.md §12.6 动作 0）。
+    name: ai_memory_data
 
 networks:
   default:

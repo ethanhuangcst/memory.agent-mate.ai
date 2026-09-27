@@ -8,6 +8,21 @@
 
 ## 2026-09-27
 
+### Sprint 5 `#10` 首个生产部署窗口：主 stack 已起 + 实机修掉两个真 bug
+
+**做了什么**：在野草云4（Debian 13 · Docker 29.7.2 · Compose v5.4.0 · 既有 portainer + NPM）上完成主 stack 首装：`docker volume create ai_memory_data` → `/opt/ai-memory` 放置 6 个制品/模板 → 本机生成 `.env`/`config.toml`（密钥从 `secrets.local.hk_vps_4.md` 搬入，**未入库、未打印**）→ `docker compose up -d`。
+
+**结果**：`ai-memory-mcp` + `ai-memory-mcp-curator` 均 Up 且稳定 · 日志 `loaded config from /data/.config/ai-memory/config.toml` · 卷内 `ai-memory.db` 4KB→768KB · `doctor` 通过（INFO / source=/data/ai-memory.db / permissions_mode=enforce）· portainer 与 NPM **未受影响**。
+
+**实机踩到并修掉的两个真 bug**（已写入 [`deployment.md`](./deployment.md) §12.6 与制品）：
+1. **卷名未固定** ⇒ `deploy/docker-compose.prod.yml` 的 `volumes.ai_memory_data` 无 `name:`/`external:` ⇒ compose 按项目名前缀建成 `ai-memory-mcp_ai_memory_data`，而门户 stack 以 `external: true` 挂无前缀同名卷 ⇒ **对不上、门户必挂**。修：显式 `name: ai_memory_data`。**同时订正我此前写错的判断**（一度以为两边都是 external、是对齐的）。
+2. **`config.toml` 权限** ⇒ bind mount 的上层目录属 `root:root`，容器以 `aimem`(999) 跑 ⇒ 容器**读不到配置**（静默用默认值 ⇒ **私有 MaaS `base_url` 不生效、会打到公网**）、且建不了 `keys/`。修：`chown 999:999 /opt/ai-memory/config.toml` + `chown -R 999:999` 卷内 `.config`。
+
+**另澄清一处「看似告警其实设计」**：启动日志的 `API key NOT configured — daemon bound to loopback "127.0.0.1"` 是 **Sprint 5 `#5` 的落地设计**（`command: ["serve","--host","127.0.0.1","--port","9077"]`）—— 主 stack HTTP 面**不外露**，门户靠**共享卷 `/data`**（+ β′ spawn 子进程）直读用户库，不走 HTTP。
+
+**验证**：`docker compose ps` 两容器 Up · `docker exec ai-memory-mcp ai-memory doctor` 通过 · 卷清单干净（孤儿卷已清）· `make doc-links` / `make deploy-doc-audit` / `make secret-check` / `git diff --check` 全绿。
+**边界**：`#10` **未置 `Done`**（§7.3 冒烟七项依赖 `#7`/`#12` 的 SSH 面与用户库）· DNS 与 NPM Proxy Host 待配（需用户操作）· 门户 stack（`#11`）待 `PORTAL_ACCESS_AUD`。
+
 ### Sprint 5 `#8` / `#15` 收口：云资源就绪 + 备份外迁真跑（两行 `Done`）
 
 **`#8`（阿里云 OSS 私有桶 + RAM 子账号 AK）——「阻塞」→ `Done`**：建 RAM 子账号 `memory-agent-mate` + 自定义策略 `oss-aimem-backup-rw`（**仅该桶 + 前缀 `ai-memory-backup/`**：`PutObject`/`GetObject`/`HeadObject`/`ListObjects`；**不给 `DeleteObject`** —— 过期清理交给桶的生命周期规则）；桶 `memory-agent-mate-bak`（**中国香港**）**私有 + SSE 已开**（OSS 完全托管 / AES256）；AK/SK 仅落 `~/.ossutilconfig`（`chmod 600`）与 gitignored 的 `secrets.local.hk_vps_4.md`，**不入仓**。**实测**（macOS + ossutil **v1.7.19**）：`ls` → `Object Number is: 0` ✓ · 上传 `OK num: 1` ✓ · 回读得 `probe` ✓ ⇒ 原登记的「`ossutil` 机器核查**未执行**」**已销**。

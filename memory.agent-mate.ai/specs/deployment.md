@@ -575,12 +575,28 @@ make pin-update                     # 重新校验上游并回写 upstream.lock�
 > **链路**：**Cloudflare（仅本应用域名，A/CNAME → 生产机 IP）→ NPM（80/443）→ 容器名:容器端口**。
 > **不走 Cloudflare Tunnel** —— `cloudflared` 只存在于开发机，**生产机不需要装**（2026-09-27 订正：生产机实测未装且不需要）。
 > **安全边界**：只新增本应用的一条 DNS 记录与一条 NPM Proxy Host；**不改动** `portainer4` / `nginx4` 及其他应用记录。
+> **主 stack 的 HTTP 面不外露**（Sprint 5 `#5` 的设计）：`docker-compose.prod.yml` 里 `command: ["serve","--host","127.0.0.1","--port","9077"]`
+> ⇒ daemon **只绑容器内 loopback**（启动日志会 WARN「API key NOT configured — bound to loopback」，**这是设计而非故障**）。
+> 门户**不通过 HTTP** 访问上游：它靠**共享卷 `/data`**（+ β′ spawn 上游子进程）直接读写 `/data/users/<handle>/ai-memory.db` —— 这正是两 stack 共享 `ai_memory_data` 卷的原因。
 
 **动作 0（硬前置，缺则两个 stack 都起不来）**：共享卷 `ai_memory_data` 在两个 stack 里都是 `external: true`（**没有任何 stack 会创建它**）⇒ 必须先人工创建：
 
 ```bash
 docker volume create ai_memory_data
 ```
+
+**动作 0 订正（2026-09-27 实机修正）**：主 stack 的卷**不是** `external: true`（我此前写错）—— 它是**显式固定卷名**（`deploy/docker-compose.prod.yml` 的 `volumes.ai_memory_data.name: ai_memory_data`）。因为 compose 默认会给卷名加项目名前缀（本项目 `name: ai-memory-mcp` ⇒ 实际会变成 `ai-memory-mcp_ai_memory_data`），而门户 stack 以 `external: true` 挂**无前缀**的 `ai_memory_data` ⇒ 不固定名字**两 stack 就对不上、门户起不来**（实机已踩）。固定后两个 stack 共用同一个卷。
+
+**动作 0b（同样硬，2026-09-27 实机踩到）**：把 `config.toml` 与卷内 `.config` 目录交给**容器用户**（主 stack 以 `aimem` 运行，uid/gid = **999:999**；而 compose 把 bind mount 的上层目录建成 `root:root`）：
+
+```bash
+chown 999:999 /opt/ai-memory/config.toml                                  # 容器要读它
+chown -R 999:999 /var/lib/docker/volumes/ai_memory_data/_data/.config      # 容器要在其下建 keys/
+```
+
+**不修会怎样（实机日志原文）**：`head: cannot open '/data/.config/ai-memory/config.toml' for reading: Permission denied` ⇒ 容器**读不到配置**、静默用默认值 ⇒ **私有 MaaS `base_url` 不生效、会打到公网**（`config.toml.tmpl` 第 53 行的告警正是这件事）；同时 `identity: keypair auto-gen failed ... keys: Permission denied` ⇒ 身份密钥无法生成。修完日志出现 `ai-memory: loaded config from /data/.config/ai-memory/config.toml`、`keys/daemon.priv` 生成 ✓。
+
+（`.env` 保持 `root:root 600` **不动** —— 它由 **docker compose 在宿主侧**读取做插值，容器不需要读。）
 
 **动作 1：DNS 记录（Cloudflare）** —— **只新增本应用的一条**：A/CNAME → 生产机 IP，**Proxied**（橙云）。
 
