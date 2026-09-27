@@ -18,9 +18,9 @@
 - **订正一处指向漂移**：结束标记原写「`4.3` 转 Sprint 5 **`#1`**」，而承接行实为 **`#17`**（移入登记表明写「新增 `#17`，排 `#1` 之后」）。
 - **三处证据偏自述**（登记改进项，**非阻塞**）：`#1` 设计包（无独立门禁）· `#6` specs 一致性审计（无可复跑数字）· `#5` 的一次性 UI 脚本（脚本不在制品内 ⇒ 复跑入口不在仓）。
 - **澄清一处「疑点」**：`product-backlog.md` 的 Sprint 4 投影 **10 条** vs 排期表 **31 行** = **粒度不同**（产品条目 vs Increment），**非冲突**。
-- 其余核实均通过：收口标记与 Sprint 1–3 同体例 · `### Retrospective` 已定稿（长文在 [`../knowledge/retrospective/sprint-4.md`](../knowledge/retrospective/sprint-4.md)）· `change-log` 交付小节与收口记录齐 · 产物存在性抽查 6 个全部真实。
+- 其余核实均通过：收口标记与 Sprint 1–3 同体例 · `### Retrospective` 已定稿（长文在 [`../knowledge/retrospective/sprint-4.md`](./knowledge/retrospective/sprint-4.md)）· `change-log` 交付小节与收口记录齐 · 产物存在性抽查 6 个全部真实。
 
-**回顾与教训**：[`../knowledge/retrospective/sprint-4.md`](../knowledge/retrospective/sprint-4.md) 的 `## Future actions` 新增 **F32–F35**（转出项追到落地行 · `Done` 分证据等级 · 跨文档先对齐粒度 · 转出登记写稳定 id 不写位置描述）；`sprint-backlog.md` 的 Sprint 4 `### Retrospective` 同步补「收口核对轮」索引 + 更新收口说明。
+**回顾与教训**：[`../knowledge/retrospective/sprint-4.md`](./knowledge/retrospective/sprint-4.md) 的 `## Future actions` 新增 **F32–F35**（转出项追到落地行 · `Done` 分证据等级 · 跨文档先对齐粒度 · 转出登记写稳定 id 不写位置描述）；`sprint-backlog.md` 的 Sprint 4 `### Retrospective` 同步补「收口核对轮」索引 + 更新收口说明。
 
 **验证**：`make doc-links` 零悬空 · `make secret-check` ✓ · `git diff --check` 干净。
 **边界**：**只改记录**（`4.3` 状态 + 结束标记 + 回顾补记 + 变更记录）；**未动任何产品代码与判据** · Sprint 5 的 `Retrospective` 仍待其自身收口时补。
