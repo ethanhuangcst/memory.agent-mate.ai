@@ -8,6 +8,23 @@
 
 ## 2026-09-27
 
+### Sprint 4 结项审计：`4.3` 回填 + 31 行全 `Done`（Sprint 4 正式收口）
+
+**为什么**：Sprint 4 于 2026-09-25 标「已结束」时留了一个 `WIP`（`4.3` 启动自检**实现轮**，按计划转出）。本轮做**结项审计** —— 逐行核对状态与证据，并把**转出项追到落地行**（不假设「转出」等于「未完成」）。
+
+**结论：Sprint 4 31 行全部 `Done`。**
+
+- **`4.3` 回填**：其 AC（**四项 `fail-closed` 落地 + 三项 `deferred` 转正**）已由 Sprint 5 **`#17`**（门户启动自检实现）**逐条实现**，且 `#17` 行**点名 `4.3`** 两处 ⇒ 状态由 `WIP` **回填 `Done`**。**回填不丢信息**：转出这一历史事实由结束标记 + 移出登记承载。
+- **订正一处指向漂移**：结束标记原写「`4.3` 转 Sprint 5 **`#1`**」，而承接行实为 **`#17`**（移入登记表明写「新增 `#17`，排 `#1` 之后」）。
+- **三处证据偏自述**（登记改进项，**非阻塞**）：`#1` 设计包（无独立门禁）· `#6` specs 一致性审计（无可复跑数字）· `#5` 的一次性 UI 脚本（脚本不在制品内 ⇒ 复跑入口不在仓）。
+- **澄清一处「疑点」**：`product-backlog.md` 的 Sprint 4 投影 **10 条** vs 排期表 **31 行** = **粒度不同**（产品条目 vs Increment），**非冲突**。
+- 其余核实均通过：收口标记与 Sprint 1–3 同体例 · `### Retrospective` 已定稿（长文在 [`../knowledge/retrospective/sprint-4.md`](../knowledge/retrospective/sprint-4.md)）· `change-log` 交付小节与收口记录齐 · 产物存在性抽查 6 个全部真实。
+
+**回顾与教训**：[`../knowledge/retrospective/sprint-4.md`](../knowledge/retrospective/sprint-4.md) 的 `## Future actions` 新增 **F32–F35**（转出项追到落地行 · `Done` 分证据等级 · 跨文档先对齐粒度 · 转出登记写稳定 id 不写位置描述）；`sprint-backlog.md` 的 Sprint 4 `### Retrospective` 同步补「收口核对轮」索引 + 更新收口说明。
+
+**验证**：`make doc-links` 零悬空 · `make secret-check` ✓ · `git diff --check` 干净。
+**边界**：**只改记录**（`4.3` 状态 + 结束标记 + 回顾补记 + 变更记录）；**未动任何产品代码与判据** · Sprint 5 的 `Retrospective` 仍待其自身收口时补。
+
 ### Sprint 5 `#9` 本体交付：上线剧本 + `make release-preflight` + 缺口 A/B 闭合（`ToDo` → `Done`）
 
 **拍板（2026-09-27 用户定）**：① 落点 = **新建 `specs/release-readiness.md`**；② 预演入口 = **新增 `make release-preflight` + 脚本**；③ 回滚与 `#15` 的接口 = **引用真实入口 + 显式标注「待 `#15` 就绪」**（不写虚构命令）。
