@@ -11,7 +11,7 @@
 
 | 层 | 要求 |
 |---|---|
-| 服务器 | Ubuntu 22.04+，已装 Docker + Compose，能拉 `ghcr.io` |
+| 服务器 | **Debian 13 (trixie)** —— 2026-09-27 实机核对（此前写「Ubuntu 22.04+」，机器级真源与订正见 [`hk_vps_4_settings.md`](./hk_vps_4_settings.md)）· 已装 **Docker 29.7.2 + Compose v5.4.0** · 能拉 `ghcr.io` |
 | 仓内 | `memory.agent-mate.ai/deploy/` 下**入仓事实文件 5 个**（权威清单见 [`../deploy/README.md`](../deploy/README.md)）：`docker-compose.prod.yml`（compose 契约唯一真相源）· `config.toml.tmpl`（配置模板）· `.env.prod.example`（主 stack `.env` 样例）· `portal.env.example`（门户 stack 样例）· `README.md`。另有 **4 个运行时派生文件不入仓**（`.gitignore` 路径无关规则覆盖）：`config.toml` · `.env` · `portal.env` · `config.local.toml` |
 | 密钥 | qwen MaaS API key（私有 workspace base_url）· 用户 SSH 公钥（Sprint 3+） |
 | 本地 | `docker` CLI；无 compose 插件时脚本自动回退 `docker-compose` |
@@ -31,7 +31,7 @@
 | **Access Service Token** | 供在线链路探针判定「策略已生效」 | Sprint 5 `#6` |
 | **门户专用 MaaS key** | 与主 key 分离，只放 `portal.env` | [`../deploy/portal.env.example`](../deploy/portal.env.example) |
 | **DNS（一个域名 + 两条路径）** | **2026-09-27 用户确认**：管理面 `https://memory.agent-mate.ai`（走 CF Access 浏览器 SSO）· MCP 面 `https://memory.agent-mate.ai/mcp`（**必须绕过 Access** —— 否则客户端拿到 302 登录页而不是 200）。原先登记的「两个域名（`<MCP_HOST>` / `<ADMIN_HOST>` 分别解析）」按此**订正**；两路径同域 ⇒ **Cloudflare Access 应用须按 path 区分** | Sprint 5 `#9` / `#6` |
-| **容器镜像仓库（GHCR）拉取凭据** | 门户镜像推在 `ghcr.io/<owner>/memory-agent-mate-portal:<IMAGE_TAG>`；**包默认私有** ⇒ 服务器侧需 `docker login ghcr.io`（只读 PAT），或把该包设为 public。**拉到之后先验「可用」再部署**：`make portal-image-smoke ARGS="--tag <该镜像>"` —— 真起容器判「起得来 · 答得应 · 坏姿态必拒」（退出码 **0** 全判 · **10** 有失败 · **30** 未判（守护不可用或镜像不在本地 —— **不伪装通过**）· **20** 用法错）；判据真源见 [`web-portal/web-design.md`](./web-portal/web-design.md) §3.4 ⑤ | Sprint 5 `#10`（部署执行；镜像构建见 `#1` 的 CI，运行时判据见 `#1` 的冒烟） |
+| **容器镜像仓库（GHCR）拉取凭据** | 门户镜像推在 `ghcr.io/<owner>/memory-agent-mate-portal:<IMAGE_TAG>`；**包可为 public（则免登录；`hk_vps_4_settings.md` §8 记「当前可匿名 pull」）或保持私有（则服务器侧需 `docker login ghcr.io` + 只读 PAT）** —— 二选一须拍死；**2026-09-27 实机核对：机上当前未登录 GHCR**。**拉到之后先验「可用」再部署**：`make portal-image-smoke ARGS="--tag <该镜像>"` —— 真起容器判「起得来 · 答得应 · 坏姿态必拒」（退出码 **0** 全判 · **10** 有失败 · **30** 未判（守护不可用或镜像不在本地 —— **不伪装通过**）· **20** 用法错）；判据真源见 [`web-portal/web-design.md`](./web-portal/web-design.md) §3.4 ⑤ | Sprint 5 `#10`（部署执行；镜像构建见 `#1` 的 CI，运行时判据见 `#1` 的冒烟） |
 
 **OSS region 已回填（2026-09-26）**：用户确认**按现登记值（香港）**回填四处 —— 本表 §1.1 · §8 · [`product-backlog.md`](./product-backlog.md) #9 · Sprint 5 `#8`。**`ossutil` 机器核查未执行**（如实登记）⇒ 上线前用 `ossutil ls` · `ossutil stat oss://<OSS_BUCKET>` · `ossutil config`（endpoint 形如 `oss-<region>.aliyuncs.com`），或控制台 → OSS → 该桶 → 概览 → 「地域」**一次性复核**即可。`ADR-021` D3 点名的 [`adr/ADR-005`](./adr/ADR-005-upgrade-admission-gate-layering.md) **实测无 region 表述**（仅含「阿里云 OSS」与 `ossutil ls`）⇒ 无回填项。
 
@@ -451,7 +451,7 @@ make pin-update                     # 重新校验上游并回写 upstream.lock�
 | 节点名 | hk_vps_4（香港 VPS） |
 | 面板 | Portainer `https://portainer4.<zone>`；NPM `https://nginx4.<zone>`（zone 托管于 CF，含 DNS + 泛证书 + Access SSO） |
 | 约定 | 一律 **Docker Compose 部署**；所有服务 **NPM 反代**，**不直接暴露端口** |
-| 主机端口段 | 门户管理面 `3100-3109`（建议 `3100`）；MCP 面 `3101`；ai-memory-mcp 内部 `9077`；MCP/RAG 后续 `3200+` |
+| 主机端口段 | **两个 stack 均无 `ports:` 映射**（对外一律经 **NPM 反代**，NPM 独占 80/443 —— 见 [`hk_vps_4_settings.md`](./hk_vps_4_settings.md) §2）。门户监听 `PORTAL_PORT`（默认 `8080`）· 主栈内部 `9077`，均**只在 `portainer_network` 内可见**。原写的 `3100-3109` / `3101` / `3200+` 为**历史预留，当前未使用**（2026-09-27 按制品订正） |
 | MCP 容器端口 | `3200` 预留，**不暴露**（门户 spawn 模式不需要） |
 | 数据库 | 外部共享实例（PG 15.13 / MySQL 8.0.42，私有 IP + 内网 DNS）；本产品当前用 SQLite 命名卷 |
 | 交付纪律 | 交付前 `docker ps` 核对容器状态与端口映射 |
@@ -568,6 +568,33 @@ make pin-update                     # 重新校验上游并回写 upstream.lock�
 | 5 | `make secret-check` | 通过（无密钥 / 无公网 IP / 无私有点） |
 
 ---
+
+### 12.6 生产机上的三条外部动作（卷 · DNS · NPM）
+
+> **口径真源**：机器级事实与平台层约定见 [`hk_vps_4_settings.md`](./hk_vps_4_settings.md) §0.2 / §1 / §2。
+> **链路**：**Cloudflare（仅本应用域名，A/CNAME → 生产机 IP）→ NPM（80/443）→ 容器名:容器端口**。
+> **不走 Cloudflare Tunnel** —— `cloudflared` 只存在于开发机，**生产机不需要装**（2026-09-27 订正：生产机实测未装且不需要）。
+> **安全边界**：只新增本应用的一条 DNS 记录与一条 NPM Proxy Host；**不改动** `portainer4` / `nginx4` 及其他应用记录。
+
+**动作 0（硬前置，缺则两个 stack 都起不来）**：共享卷 `ai_memory_data` 在两个 stack 里都是 `external: true`（**没有任何 stack 会创建它**）⇒ 必须先人工创建：
+
+```bash
+docker volume create ai_memory_data
+```
+
+**动作 1：DNS 记录（Cloudflare）** —— **只新增本应用的一条**：A/CNAME → 生产机 IP，**Proxied**（橙云）。
+
+**动作 2：NPM Proxy Host**（NPM 面板 → Hosts → Proxy Hosts → Add Proxy Host）：
+
+| 字段 | 值 |
+|---|---|
+| Domain Names | `memory.agent-mate.ai`（管理面与 `/mcp` **同域**，靠**路径**区分） |
+| Scheme / Forward Hostname / Port | `http` · **容器名** `memory-agent-mate-portal` · `PORTAL_PORT`（默认 `8080`） |
+| Websockets Support | 开 |
+| SSL | 申请 Let's Encrypt + Force SSL |
+| **路径要点** | `/mcp` **必须绕过 Cloudflare Access**（否则 MCP 客户端拿到 **302 登录页**而非 200）；`/.well-known/acme-challenge` 亦须绕过 Access，否则 ACME 签发会被拦 |
+
+**动作 3（Stack 重建后必做）**：NPM 对该 Host 点一次 **Save**（容器 IP 变化后 NPM 需刷新上游解析）；随后验 `/healthz`。
 
 ## 13. 部署验收清单
 
