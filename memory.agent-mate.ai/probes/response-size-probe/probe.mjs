@@ -305,6 +305,54 @@ async function main() {
     }
   }
 
+  // --------------------------------------- Q4b：intent 矩阵（Sprint 5 `#18` 补测「多条 × 正文」）
+  // `3.18` 的 Q4 只试了**一个** intent（首条标题原文）⇒ `chosen_family` 由 embedder 选出、与所写条目
+  // 不匹配 ⇒ `count:0` ⇒「**多条 × 正文**」的体量**测量面缺失**（当时如实登记为未测）。本相把 intent
+  // 扩成**矩阵**（已写条目的标题 + 阶梯条目标记 + 一句通用中文意图）× k ∈ {5, 20}，**命中即测**：
+  // 回包字节数 · `"content"` 出现次数（= 带正文条数）· 每条约多少字节 —— 这才是
+  // `PORTAL_RESPONSE_MAX_BYTES`（§12.9）取值依据里缺的那一块。
+  const batchCandidates = [
+    ...smallTitles.slice(0, 3).map((t) => ({ label: `标题原文「${t.slice(0, 18)}」`, intent: t })),
+    ...ladderMarkers.slice(0, 2).map((m) => ({ label: `阶梯标记「${m.slice(0, 18)}」`, intent: m })),
+    { label: '通用中文意图', intent: `请载入本次运行（${run}）写入的测试记忆` },
+  ];
+  const batchAttempts = [];
+  for (const k of [5, 20]) {
+    for (const cand of batchCandidates) {
+      let res;
+      try {
+        res = await call({ name: 'memory_smart_load', arguments: { intent: cand.intent, k } });
+      } catch (error) {
+        info(`  Q4b k=${k} ${cand.label}：调用抛错（${String(error.message).slice(0, 80)}）`);
+        continue;
+      }
+      const { text, payload } = record(`memory_smart_load k=${k} ${cand.label}`, '批量读（正文类）', res);
+      const contentCount = (payload.match(/"content"/g) ?? []).length;
+      const markerHits = smallMarkers.filter((m) => payload.includes(m)).length;
+      batchAttempts.push({ k, label: cand.label, bytes: bytes(text), contentCount, markerHits });
+      info(
+        `    ⇒ 带正文条数（"content" 出现次数）=${contentCount} · 本库标记命中 ${markerHits}/${smallMarkers.length} · 回包 ${kib(bytes(text))}`,
+      );
+      if (contentCount > 0) break; // 同一 k 下命中即停
+    }
+  }
+  const measuredBatch = batchAttempts.filter((item) => item.contentCount > 0);
+  if (measuredBatch.length > 0) {
+    const best = measuredBatch.reduce((a, b) => (b.bytes > a.bytes ? b : a));
+    info(
+      `  Q4b **实测（多条 × 正文）**：最大回包 ${kib(best.bytes)} · 带正文 ${best.contentCount} 条 · k=${best.k}` +
+        ` · 每条约 ${Math.round(best.bytes / Math.max(1, best.contentCount))} 字节`,
+    );
+  } else {
+    info('  Q4b 未命中（本次造数下 family 路由仍未选中所写条目）⇒「多条 × 正文」体量**仍未实测**，如实登记');
+  }
+  assert(
+    'Q4b',
+    batchCandidates.length >= 3 && batchAttempts.length >= 2,
+    'Q4b **测量面**已铺开（多候选 intent × k=5/20 实际发起调用 ⇒ 判据非空转；**命中与否取决于上游 family 路由**，故只断言「试过了」而不假装「一定命中」）',
+    `候选 ${batchCandidates.length} 种 × k∈{5,20} · 实际发起 ${batchAttempts.length} 次 · 命中 ${measuredBatch.length} 次`,
+  );
+
   // ---------------------------------------------------------------- Q5：反向对照
   const ghost = await call({
     name: 'memory_get',
