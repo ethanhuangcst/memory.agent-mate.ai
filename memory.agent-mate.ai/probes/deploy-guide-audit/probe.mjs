@@ -107,8 +107,10 @@ const UNEXPLAINED_OK = {
 };
 /** `A2c` 的白名单：部署侧**故意**声明、但代码不读取的键（必须带理由；条目仍被声明才有效）。 */
 const DEPLOY_ONLY_OK = {
-  // 目前为空 —— 2026-09-26 已把唯一的「无读取方的键」（`PORTAL_ROOT`）从 compose 与
-  // `deployment.md` §12.5.4 删除（理由：产品代码三种真读取形态皆不命中）。
+  // 2026-09-27 起 1 条：`portal.env.example` 补上 compose 必填插值变量后，`PORTAL_IMAGE` 成为
+  // 「部署侧声明、代码不读取」的键 —— 这是**设计如此**（它是 compose 的 `${PORTAL_IMAGE:?}` 插值，
+  // 决定拉哪个镜像，只在部署期被 `docker compose` 消费，**不进容器 env**）。
+  PORTAL_IMAGE: 'compose 插值变量：只决定拉哪个镜像，由 docker compose 在部署期消费，不进容器 env ⇒ 产品代码无从读取（设计如此）',
 };
 const unexplainedOf = (tokens, reads, allow = UNEXPLAINED_OK) =>
   [...tokens].filter((key) => !reads.has(key) && !(key in allow)).sort();
