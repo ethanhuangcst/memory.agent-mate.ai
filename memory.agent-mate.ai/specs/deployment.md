@@ -552,7 +552,7 @@ make pin-update                     # 重新校验上游并回写 upstream.lock�
 | **镜像烘入（不在 compose 设）** | `PORTAL_IMAGE_TAG` | 门户**自身**版本，由**构建期**从 [`../upstream.lock`](../upstream.lock) 注入镜像（[`../admin_portal/Dockerfile`](../admin_portal/Dockerfile) 的 `ENV PORTAL_IMAGE_TAG=${IMAGE_TAG}`）。启动自检拿它 vs **挂载的** `upstream.lock` 比对：**不一致 / 读不到锁 / 锁被挂成目录 ⇒ 拒绝启动**（生产；开发姿态缺锁登记为「未判」，不伪装通过）。**不要**在 compose / `portal.env` 里设它 —— 设了等于用手填值掩盖镜像的真实版本。 |
 | **embeddings 判据（直连 MaaS）** | `PORTAL_EMBEDDINGS_MODEL` · `PORTAL_EMBEDDINGS_BASE_URL` | Sprint 5 `#17`：启动自检项 `embeddings_reachable_1024`（§3.4 ④ 已拍板**直连 MaaS**）。**模型名是公开值**（compose 里字面写 `qwen3.7-text-embedding`）；**`base_url` 是环境私有主机名 ⇒ 不入仓**（`make secret-check` 会拦私有主机名）⇒ compose 用 `${PORTAL_EMBEDDINGS_BASE_URL:-}` 从 **`portal.env`** 插值（该文件已 gitignore、`chmod 600`）。**未设时插值成空串**，`config.ts` 把空串当「未配置」⇒ 自检按姿态判（**生产 `fail`** ⇒ 拒绝启动；开发 `deferred` 且**明写**），**不是** config_invalid。 |
 | 会话 | `PORTAL_SESSION_IDLE_TIMEOUT` · `PORTAL_SESSION_MAX_DURATION` | 毫秒；**取值归 `4.1`**，compose 里给的是保守初值 |
-| 身份 | `PORTAL_ACCESS_TEAM_DOMAIN` · `PORTAL_ACCESS_AUD` · `PORTAL_ACCESS_JWKS_URL` | 团队域 + Access 应用的 `aud`；`JWKS_URL` **可选**（默认由团队域推导） |
+| 身份 | `PORTAL_ACCESS_TEAM_DOMAIN` · `PORTAL_ACCESS_AUD` · `PORTAL_ACCESS_JWKS_URL` | 团队域 + Access 应用的 `aud`。**⚠️ 订正（2026-09-27 实机）**：`JWKS_URL` **在生产必须显式填** —— 代码 `config.ts:126` 是 `z.string().min(1).optional()`（**不接受空串**），而 compose 的 `${PORTAL_ACCESS_JWKS_URL:-}` 在「未设」时**插值成空串** ⇒ 启动即 `config_invalid`。生产取值 = `https://<team>.cloudflareaccess.com/cdn-cgi/access/certs`。原文「可选（默认由团队域推导）」只在**完全未设该键**时成立（`config.ts:287` 的推导分支）—— 与「设成空串」不等价，照抄 compose 默认即踩坑。 |
 | 日志 / i18n | `PORTAL_LOG_LEVEL` · `PORTAL_I18N_DEFAULT` | `info` · `zh-CN` |
 | **生产不得设置** | `PORTAL_TEST_JWT_ENABLED` · `PORTAL_TEST_JWT_JWKS` · `PORTAL_TEST_JWT_ISS` · `PORTAL_TEST_JWT_AUD` · `PORTAL_TEST_JWT_EMAIL` | 自签 JWT 通道：仅离线自动化用，且**只允许绑定回环 Host**；写进生产即拒绝启动。该通道**同时**启用**开发登录入口** `/admin/dev-login`（**同源开关**：`enabled` 为真才注册该路由，否则路由不存在）—— 故禁止这套键即彻底关闭该入口。入口边界与身份口径见 [`web-portal/web-design.md`](./web-portal/web-design.md) D15 / [`adr/ADR-015-dev-login-entry-config-gated-registration.md`](./adr/ADR-015-dev-login-entry-config-gated-registration.md) |
 | **仅开发期** | `PORTAL_LAUNCH_OVERRIDE` | 覆盖 launch 模板的「二进制那一段」；生产用 β′（镜像自带上游二进制）⇒ **不设** |
@@ -574,7 +574,7 @@ make pin-update                     # 重新校验上游并回写 upstream.lock�
 > **口径真源**：机器级事实与平台层约定见 [`hk_vps_4_settings.md`](./hk_vps_4_settings.md) §0.2 / §1 / §2。
 > **链路**：**Cloudflare（仅本应用域名，A/CNAME → 生产机 IP）→ NPM（80/443）→ 容器名:容器端口**。
 > **不走 Cloudflare Tunnel** —— `cloudflared` 只存在于开发机，**生产机不需要装**（2026-09-27 订正：生产机实测未装且不需要）。
-> **安全边界**：只新增本应用的一条 DNS 记录与一条 NPM Proxy Host；**不改动** `portainer4` / `nginx4` 及其他应用记录。
+> **安全边界**：只新增**本应用的两条** DNS 记录（管理面 `memory.agent-mate.ai` + MCP 面 `memory-mcp.agent-mate.ai`）与**一条** NPM Proxy Host（**一次带这两个域名**）；**不改动** `portainer4` / `nginx4` 及其他应用记录。**⚠️ 订正（2026-09-27 实机）**：原文写「一条 DNS 记录」—— 因**面隔离要求管理面与 MCP 面是两个不同 Host**（门户 `required_env_keys` 自检：两者相同即 `config_invalid`），故为两条记录 + 一条 Proxy Host 带两域名。
 > **主 stack 的 HTTP 面不外露**（Sprint 5 `#5` 的设计）：`docker-compose.prod.yml` 里 `command: ["serve","--host","127.0.0.1","--port","9077"]`
 > ⇒ daemon **只绑容器内 loopback**（启动日志会 WARN「API key NOT configured — bound to loopback」，**这是设计而非故障**）。
 > 门户**不通过 HTTP** 访问上游：它靠**共享卷 `/data`**（+ β′ spawn 上游子进程）直接读写 `/data/users/<handle>/ai-memory.db` —— 这正是两 stack 共享 `ai_memory_data` 卷的原因。
@@ -598,17 +598,34 @@ chown -R 999:999 /var/lib/docker/volumes/ai_memory_data/_data/.config      # 容
 
 （`.env` 保持 `root:root 600` **不动** —— 它由 **docker compose 在宿主侧**读取做插值，容器不需要读。）
 
-**动作 1：DNS 记录（Cloudflare）** —— **只新增本应用的一条**：A/CNAME → 生产机 IP，**Proxied**（橙云）。
+**动作 1：DNS 记录（Cloudflare）** —— 新增**本应用的两条 A 记录** → 生产机 IP（**Proxied** 橙云）：`memory.agent-mate.ai`（管理面）与 `memory-mcp.agent-mate.ai`（MCP 面）。**⚠️ 订正（2026-09-27 实机）**：原文写「一条」并称两面同域靠路径区分 —— 实为**两个域名**（门户 `required_env_keys` 自检要求两个 Host 必须不同）；且两条都是 **A**（非 CNAME），因为**不走 Tunnel**。
 
 **动作 2：NPM Proxy Host**（NPM 面板 → Hosts → Proxy Hosts → Add Proxy Host）：
 
 | 字段 | 值 |
 |---|---|
-| Domain Names | `memory.agent-mate.ai`（管理面与 `/mcp` **同域**，靠**路径**区分） |
+| Domain Names | **两条都填**：`memory.agent-mate.ai`（管理面）· `memory-mcp.agent-mate.ai`（MCP 面）—— **同一条** Proxy Host 带两个域名，门户按 **Host 头**分流（不是靠路径） |
 | Scheme / Forward Hostname / Port | `http` · **容器名** `memory-agent-mate-portal` · `PORTAL_PORT`（默认 `8080`） |
 | Websockets Support | 开 |
-| SSL | 申请 Let's Encrypt + Force SSL |
-| **路径要点** | `/mcp` **必须绕过 Cloudflare Access**（否则 MCP 客户端拿到 **302 登录页**而非 200）；`/.well-known/acme-challenge` 亦须绕过 Access，否则 ACME 签发会被拦 |
+| SSL | **不申请证书、不勾 Force SSL**（实机取此口径）—— 客户端↔边缘由 CF Universal SSL 覆盖，边缘↔NPM 走 `http`。若要 Full(strict)，用 **CF Origin Certificate** 装到 NPM（15 年，无需 ACME）。**⚠️ 订正**：原文「申请 Let's Encrypt + Force SSL」在 Access 生效后**不可用** —— ACME HTTP-01 的 `/.well-known/acme-challenge` 也落在该应用域名下，会被拦 |
+| **Access 要点** | MCP 面**必须不受 Access 拦截**（否则客户端拿到 **302 登录页**而非门户的 401）。实机做法：**给 MCP 面单独建一个 Access 应用并配 `Bypass`/`Everyone`** —— `Bypass` **不能带 Include 条件**（无 `Path` 选择器），故**不能**在管理面那个应用里按路径绕过；且 **CF 不允许同一域名属于两个应用**（`destination belongs to another application`）⇒ 必须「**先从旧应用移除该域名、再建新应用**」 |
+
+**动作 2b：门户 stack 的专属前置（2026-09-27 实机，缺任一则门户起不来）**：
+
+1. **门户库必须先迁移** —— 否则 `startup_failed: 门户库 schema 落后（待应用迁移：N）`：
+
+```bash
+cd /opt/ai-memory && docker compose -f portal.compose.yml --env-file portal.env run --rm --entrypoint sh portal -c "npm run migrate"
+```
+
+2. **两个目录的属主要先交给容器用户（`999:999`）** —— `portal_data` 卷为 `root:root` 时门户**写不了库**；`/data/users` 不存在时自检 `users_root_writable` **fail**（§4.4 的 setgid 引导必须先做，实机当时尚未做 ⇒ `ENOENT`）：
+
+```bash
+docker run --rm -v portal_data:/p alpine chown 999:999 /p
+docker run --rm -v ai_memory_data:/data alpine sh -c "mkdir -p /data/users && chown 999:999 /data/users && chmod 755 /data/users"
+```
+
+3. **`PORTAL_ACCESS_JWKS_URL` 必须显式填**（口径见 §12.5.4 的订正）—— 否则 `config_invalid`。
 
 **动作 3（Stack 重建后必做）**：NPM 对该 Host 点一次 **Save**（容器 IP 变化后 NPM 需刷新上游解析）；随后验 `/healthz`。
 

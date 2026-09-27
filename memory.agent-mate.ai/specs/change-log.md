@@ -8,6 +8,22 @@
 
 ## 2026-09-27
 
+### Sprint 5 门户上生产并端到端实测通过（`#10` 窗口续 · `#11` 转 `WIP`）
+
+**做了什么**：门户 stack 在野草云4 上线（`memory-agent-mate-portal` · 部署目录 `/opt/ai-memory/`），两个面各自暴露并按 **Host 头**分流，端到端跑通「门户签发 token → 客户端经 `/mcp` 写入记忆」。
+
+**域名与链路（用户 2026-09-27 定）**：管理面 `memory.agent-mate.ai` · MCP 面 `memory-mcp.agent-mate.ai`；两条 CF **A 记录**（Proxied）→ 生产机 → **一条** NPM Proxy Host（域名两行）→ `http://memory-agent-mate-portal:8080`（Cache Assets 关 · Websockets 开 · **不申请证书**）。
+
+**Cloudflare Access**：两个应用 —— `memory`（Allow admins 邮箱 + Service Auth）· `memory-mcp`（`Bypass`/`Everyone`）。踩到两条平台约束：**`Bypass` 不能带 Include 条件**（无 `Path` 选择器 ⇒ 无法在一个应用里按路径绕过）；**同一域名不能属于两个应用**（`destination belongs to another application`）⇒ 必须先移除旧域名、再建新应用。
+
+**实机修掉的三个前置（缺任一门户起不来；已写进 §12.6「动作 2b」）**：① 门户库**必须先迁移**（`npm run migrate`，`0 → 1`），否则 `startup_failed: schema 落后`；② `portal_data` 卷与 `/data/users` 的属主要先给 `999:999`（门户镜像 User=999:999；`/data/users` 缺失 ⇒ 自检 `users_root_writable` fail —— §4.4 的 setgid 引导当时尚未做）；③ `PORTAL_ACCESS_JWKS_URL` **必须显式填**（文档原写「可选」、代码 `config.ts:126` 却是 `min(1)`，compose 把「未设」插值成空串 ⇒ `config_invalid`）。
+
+**验证（实测，非推断）**：容器 Up·healthy · **启动自检 10/10 pass**（含 `embeddings_reachable_1024`：真 MaaS 实调、**向量长度 == 1024**）· 面隔离（内网直打门户）管理面 `/`=200 `/admin`=401 `/mcp`=403 · MCP 面 `/mcp`=401 其余 403 · **未知 Host 全 403** · 外面 `/mcp` 无 token=401 · 管理面 `/`=302 · `npm run migrate` `from 0 → to 1`。
+
+**登记订正**：`#10` 去掉「DNS 与 NPM 待配」的过时表述 · `#11` 补实机进展并置 **`WIP`**（AC「签发 key → 建立会话 → 隔离生效」三条**均达成**；「验收通过 `mcp-design.md` §6.2 与 `web-test.md` §3」的**正式验收脚本尚未跑** ⇒ 不置 `Done`）· `#17` 回填「真 MaaS 1024 维」已实测（原写未判）· `#15` 清掉残留的「状态 = `WIP`」字样 · `deployment.md` §12.6 订正双域名结构与 SSL/ACME 口径 · §12.5.4 订正 `JWKS_URL` 口径。
+
+**边界**：不改产品代码 · SSH 面（`#7`）未做 · `#11` 的正式验收（`mcp-design.md` §6.2 / `web-test.md` §3）未跑 · 备份外迁的 `doctor` 通路归 `#16`。
+
 ### Sprint 5 `#10` 首个生产部署窗口：主 stack 已起 + 实机修掉两个真 bug
 
 **做了什么**：在野草云4（Debian 13 · Docker 29.7.2 · Compose v5.4.0 · 既有 portainer + NPM）上完成主 stack 首装：`docker volume create ai_memory_data` → `/opt/ai-memory` 放置 6 个制品/模板 → 本机生成 `.env`/`config.toml`（密钥从 `secrets.local.hk_vps_4.md` 搬入，**未入库、未打印**）→ `docker compose up -d`。
