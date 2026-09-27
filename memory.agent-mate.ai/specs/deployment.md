@@ -44,7 +44,7 @@
 
 **✅ `#8` 已就绪（2026-09-27 实测）**：RAM 子账号 `memory-agent-mate` · 自定义策略 `oss-aimem-backup-rw`（**仅该桶 + 前缀 `ai-memory-backup/`**：`PutObject`/`GetObject`/`HeadObject`/`ListObjects`；**不含 `DeleteObject`** —— 过期清理交给桶的**生命周期规则**）· 桶 `memory-agent-mate-bak`（**香港，已机器核对**）**私有 + SSE 已开**（OSS 完全托管 / AES256）· AK/SK 仅落服务器侧与本机 `ossutil` 配置（`~/.ossutilconfig`，`chmod 600`），**不入仓**。**实测**（macOS + ossutil **v1.7.19**）：`ossutil ls` ✓ · 上传 ✓ · 回读得 `probe` ✓。**运行期入口**：[`../backup/README.md`](../backup/README.md) 的 `make backup`（外迁 + 回读比对）与 `make restore-drill`（恢复演练）。
 
-**保留策略与门户库口径（2026-09-27 用户拍板）**：**保留 90 天** —— 用桶的**单条生命周期规则**（`expiration = 90d`）自动过期删除（**刻意不给 AK `DeleteObject`**：AK 泄露也删不掉备份）· **不配月备**（没有「每月留一份」）· **门户库与用户库同桶同密钥**（门户库作为快照中的一层 `portal/portal.db` 一并上传；它含 handle / key 哈希 / 审计，**不含记忆正文**）。对应 `secrets.local.hk_vps_4.md` 的 `OSS_RETENTION_DAYS=90` · `OSS_LIFECYCLE_RULE` · `OSS_PORTAL_SAME_BUCKET=yes`。
+**保留策略与门户库口径（2026-09-27 用户拍板）**：**保留 90 天** —— 桶上**已配**生命周期规则 `expire-90d`（**修改时间 90 天 → 数据删除**；OSS 于 24 小时内加载，之后每天执行）（**刻意不给 AK `DeleteObject`**：AK 泄露也删不掉备份）· **不配月备**（没有「每月留一份」）· **门户库与用户库同桶同密钥**（门户库作为快照中的一层 `portal/portal.db` 一并上传；它含 handle / key 哈希 / 审计，**不含记忆正文**）。对应 `secrets.local.hk_vps_4.md` 的 `OSS_RETENTION_DAYS=90` · `OSS_LIFECYCLE_RULE` · `OSS_PORTAL_SAME_BUCKET=yes`。
 
 **`#8` 就绪需提供的信息（2026-09-26 登记）**：
 
