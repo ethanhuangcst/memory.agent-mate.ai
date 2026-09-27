@@ -42,6 +42,8 @@
 - **回填四处**（体例同 2026-09-26 的 region 回填）：本节 §1.1 · §8 · [`product-backlog.md`](./product-backlog.md) #9 · Sprint 5 `#8` 行 —— **只回填「已就绪 / 口径」，不回填值**。
 - **不必告知本 agent 的内容**：`AccessKeySecret` · 桶名真值。**只需确认**下表 ②③⑤⑥⑦ 的口径 + `ossutil` 在生产机可用。
 
+**✅ `#8` 已就绪（2026-09-27 实测）**：RAM 子账号 `memory-agent-mate` · 自定义策略 `oss-aimem-backup-rw`（**仅该桶 + 前缀 `ai-memory-backup/`**：`PutObject`/`GetObject`/`HeadObject`/`ListObjects`；**不含 `DeleteObject`** —— 过期清理交给桶的**生命周期规则**）· 桶 `memory-agent-mate-bak`（**香港，已机器核对**）**私有 + SSE 已开**（OSS 完全托管 / AES256）· AK/SK 仅落服务器侧与本机 `ossutil` 配置（`~/.ossutilconfig`，`chmod 600`），**不入仓**。**实测**（macOS + ossutil **v1.7.19**）：`ossutil ls` ✓ · 上传 ✓ · 回读得 `probe` ✓。**运行期入口**：[`../backup/README.md`](../backup/README.md) 的 `make backup`（外迁 + 回读比对）与 `make restore-drill`（恢复演练）。
+
 **`#8` 就绪需提供的信息（2026-09-26 登记）**：
 
 | # | 信息 | 取值 / 口径 |
